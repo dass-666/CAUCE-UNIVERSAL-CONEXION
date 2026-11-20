@@ -16,13 +16,13 @@ Fecha: 2026-11-20 · Versión 0.1.0
 | Auditoría sin datos personales | `test_audit_log_contains_no_personal_data` | Linux |
 | La interfaz funciona de extremo a extremo | `tests/test_web_app.py::test_ui_end_to_end` + `evidence/ui_revision.png` | Linux, Chromium headless |
 
-Resultado de referencia: **62 pruebas superadas**, demo `DEMO SUPERADA`.
+Resultado de referencia: **62 pruebas superadas**, demo `DEMO SUPERADA`, en Linux local y en GitHub Actions (`ubuntu-latest` y `windows-latest`).
 
 ## 2. No verificado todavía
 
 | Punto | Riesgo | Cómo verificarlo |
 |---|---|---|
-| **Windows** | Medio: rutas, `.bat`, permisos de PowerShell, antivirus | Ejecutar `probar_windows.bat` o el flujo de GitHub Actions con `windows-latest` |
+| **Windows en un PC real** | Bajo-medio: `.bat`, permisos de PowerShell, antivirus. (Pruebas y demo ya pasan en GitHub Actions `windows-latest`) | Ejecutar `instalar_windows.bat` y `probar_windows.bat` |
 | Modo con ventana visible (`headless=False`) | Bajo | `python scripts/demo_lab.py --headed` |
 | Formularios reales de terceros | Alto: cada sitio es distinto | Solo con autorización; empezar con perfiles guardados y revisión campo a campo |
 | Rendimiento con formularios grandes (>100 campos) | Medio: el re-escaneo por pasadas es O(n²) en el peor caso | Medir con un laboratorio grande |
@@ -59,7 +59,7 @@ Analizar y rellenar páginas de terceros por URL es la parte de mayor riesgo del
 
 | Prioridad | Función | Valor | Coste estimado | Recomendación |
 |---|---|---|---|---|
-| Alta | Ejecutar y corregir en Windows (CI `windows-latest` + prueba manual) | Imprescindible para el usuario final | Bajo (horas) | Ahora |
+| Alta | Prueba manual en un PC Windows (CI `windows-latest` ya en verde) | Confirma instalación con `.bat` | Bajo (minutos) | Ahora |
 | Alta | Soporte de iframes del mismo origen | Muchos formularios reales los usan | Medio (1–2 días) | Siguiente iteración |
 | Media | Soporte de shadow DOM abierto | Formularios con componentes web | Medio | Cuando aparezca un caso real |
 | Media | Rellenar varias filas en lote con aprobación por fila | Productividad | Medio | Después de validar con un caso real |

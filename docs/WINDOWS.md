@@ -1,9 +1,9 @@
 # Ejecutar en Windows
 
-> Estado de verificación: estos pasos **no se han ejecutado todavía en un equipo Windows**.
-> El código se probó en Linux con Chromium. El flujo de GitHub Actions
-> (`.github/workflows/tests.yml`) incluye `windows-latest` para verificarlo en cuanto el
-> repositorio tenga el código. Si algo falla, el mensaje de error de cada paso indica qué revisar.
+> Estado de verificación (2026-11-20): en GitHub Actions con `windows-latest` (Python 3.12,
+> Chromium sin ventana) pasan las 62 pruebas y la demo (`DEMO SUPERADA`).
+> **No verificado aún:** los archivos `.bat` y el modo con ventana visible en un PC Windows real.
+> Si algo falla, el mensaje de error de cada paso indica qué revisar.
 
 ## Requisitos
 
