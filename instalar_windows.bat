@@ -2,6 +2,12 @@
 REM Instalación en Windows: crea un entorno virtual, instala dependencias y Chromium para Playwright.
 setlocal
 cd /d "%~dp0"
+REM Navegadores de Playwright dentro del proyecto: evita fallos de Chromium con ventana
+REM cuando la carpeta del perfil de usuario tiene espacios (p. ej. "C:\Users\Nombre Apellido").
+set "PLAYWRIGHT_BROWSERS_PATH=%~dp0.pw-browsers"
+REM Consola en UTF-8 para que los acentos se vean bien
+chcp 65001 >nul
+set PYTHONIOENCODING=utf-8
 where py >nul 2>nul
 if %errorlevel% neq 0 (
   echo No se encontro Python. Instale Python 3.10 o superior desde https://www.python.org/downloads/ y marque "Add python.exe to PATH".

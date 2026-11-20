@@ -19,14 +19,13 @@ Fecha: 2026-11-20 · Versión 0.1.0 · Revisión de seguridad: [SEGURIDAD.md](SE
 | Aislamiento del HTML importado, redirecciones, API frente a otros sitios | `tests/test_security.py` (6 pruebas) | Linux |
 | Ejemplo de integración con Cauce Monitor sin envío ni datos persistidos | `tests/test_ejemplo_cauce_monitor.py` | Linux |
 
-Resultado de referencia: **70 pruebas superadas**, demo `DEMO SUPERADA` y ejemplo `EJEMPLO SUPERADO`, en Linux local y en GitHub Actions (`ubuntu-latest` y `windows-latest`).
+Resultado de referencia: **70 pruebas superadas**, demo `DEMO SUPERADA` y ejemplo `EJEMPLO SUPERADO`, en Linux local, en GitHub Actions (`ubuntu-latest` y `windows-latest`) y en un PC con Windows 11 (recorrido con ventana visible incluido).
 
 ## 2. No verificado todavía
 
 | Punto | Riesgo | Cómo verificarlo |
 |---|---|---|
-| **Windows en un PC real** | Bajo-medio: `.bat`, permisos de PowerShell, antivirus. (Pruebas y demo ya pasan en GitHub Actions `windows-latest`) | Ejecutar `instalar_windows.bat` y `probar_windows.bat` |
-| Modo con ventana visible (`headless=False`) | Bajo | `python scripts/demo_lab.py --headed` |
+| Windows en otros equipos | Bajo: verificado en CI y en un PC Windows 11; otros equipos pueden tener antivirus o políticas que bloqueen Chromium | `instalar_windows.bat`, `probar_windows.bat`, `python scripts\recorrido_ui.py` |
 | Formularios reales de terceros | Alto: cada sitio es distinto | Solo con autorización; empezar con perfiles guardados y revisión campo a campo |
 | Rendimiento con formularios grandes (>100 campos) | Medio: el re-escaneo por pasadas es O(n²) en el peor caso | Medir con un laboratorio grande |
 | Firefox/WebKit | Bajo: no hay CDP, los acentos solo emiten `input` | Probar con `p.firefox` si se necesita |
@@ -62,7 +61,7 @@ Analizar y rellenar páginas de terceros por URL es la parte de mayor riesgo del
 
 | Prioridad | Función | Valor | Coste estimado | Recomendación |
 |---|---|---|---|---|
-| Alta | Prueba manual en un PC Windows (CI `windows-latest` ya en verde) | Confirma instalación con `.bat` | Bajo (minutos) | Ahora |
+| Alta | — | (Prueba física en Windows completada en v0.1) | — | — |
 | Alta | Soporte de iframes del mismo origen | Muchos formularios reales los usan | Medio (1–2 días) | Siguiente iteración |
 | Media | Soporte de shadow DOM abierto | Formularios con componentes web | Medio | Cuando aparezca un caso real |
 | Media | Rellenar varias filas en lote con aprobación por fila | Productividad | Medio | Después de validar con un caso real |

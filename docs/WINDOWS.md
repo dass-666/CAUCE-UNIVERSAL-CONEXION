@@ -3,7 +3,10 @@
 > Estado de verificación (2026-11-20, commit `0c76f54`): en GitHub Actions con `windows-latest`
 > (Python 3.12, Chromium sin ventana) pasan las 70 pruebas, la demo (`DEMO SUPERADA`), el ejemplo
 > de Cauce Monitor (`EJEMPLO SUPERADO`) y el recorrido de la interfaz (`RECORRIDO SUPERADO`).
-> **No verificado aún:** los archivos `.bat` y el modo con ventana visible en un PC Windows real.
+> Prueba física (2026-11-20, Windows 11 Pro 23H2, Python 3.14): instalación, 70 pruebas, demo,
+> ejemplo de Cauce Monitor y recorrido visible de la interfaz superados. Se encontró y corrigió un fallo:
+> Chromium con ventana no arrancaba desde la carpeta por defecto de Playwright en un perfil de usuario
+> con espacios (ver «Problemas frecuentes»).
 > Si algo falla, el mensaje de error de cada paso indica qué revisar.
 
 ## Requisitos
@@ -20,12 +23,14 @@
 2. Haga doble clic en **`instalar_windows.bat`** (o ejecútelo desde `cmd`). Esto:
    - crea el entorno virtual `.venv`,
    - instala las dependencias de `requirements-dev.txt`,
-   - descarga Chromium para Playwright (`python -m playwright install chromium`).
+   - descarga Chromium para Playwright (`python -m playwright install chromium`) dentro del proyecto,
+     en `.pw-browsers` (los tres `.bat` usan esa carpeta mediante `PLAYWRIGHT_BROWSERS_PATH`).
 
 Equivalente manual en PowerShell:
 
 ```powershell
 cd C:\Proyectos\cauce-universal-conexion
+$env:PLAYWRIGHT_BROWSERS_PATH = "$PWD\.pw-browsers"   # igual que los .bat
 py -3 -m venv .venv
 .\.venv\Scripts\Activate.ps1      # si PowerShell lo bloquea: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 python -m pip install -r requirements-dev.txt
@@ -77,7 +82,9 @@ Ejemplo en `cmd`: `set CAUCE_TYPING_DELAY_MS=80` antes de `iniciar_windows.bat`.
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| `Executable doesn't exist ... chromium` | No se descargó Chromium | `python -m playwright install chromium` |
+| `Executable doesn't exist ... chromium` | No se descargó Chromium | Ejecute de nuevo `instalar_windows.bat` |
+| `BrowserType.launch: spawn UNKNOWN` al abrir el navegador con ventana | Windows no puede cargar Chromium desde `%LOCALAPPDATA%\ms-playwright` (visto con un perfil de usuario con espacios; error de configuración en paralelo/SxS) | Use los `.bat` (instalan en `.pw-browsers` del proyecto) y coloque el proyecto en una ruta sin espacios, p. ej. `D:\cauce-ucf`. Alternativa: `set CAUCE_BROWSER_PATH=ruta\a\chrome.exe` |
+| Acentos mal en la consola (`carÃ¡cter`) | Página de códigos de la consola | Los `.bat` ya ponen `chcp 65001`; en otra consola ejecute `chcp 65001` |
 | `py no se reconoce` | Python no está en el PATH | Reinstale Python marcando «Add to PATH» |
 | El puerto 8765 está ocupado | Otra aplicación lo usa | `python -m cauce_form_connector.web.app --port 8800` |
 | Antivirus bloquea Chromium | Política corporativa | Pida a TI permitir `%USERPROFILE%\AppData\Local\ms-playwright` |
