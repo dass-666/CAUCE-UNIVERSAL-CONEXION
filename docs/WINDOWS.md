@@ -1,7 +1,8 @@
 # Ejecutar en Windows
 
-> Estado de verificación (2026-11-20): en GitHub Actions con `windows-latest` (Python 3.12,
-> Chromium sin ventana) pasan las 62 pruebas y la demo (`DEMO SUPERADA`).
+> Estado de verificación (2026-11-20, commit `0c76f54`): en GitHub Actions con `windows-latest`
+> (Python 3.12, Chromium sin ventana) pasan las 70 pruebas, la demo (`DEMO SUPERADA`), el ejemplo
+> de Cauce Monitor (`EJEMPLO SUPERADO`) y el recorrido de la interfaz (`RECORRIDO SUPERADO`).
 > **No verificado aún:** los archivos `.bat` y el modo con ventana visible en un PC Windows real.
 > Si algo falla, el mensaje de error de cada paso indica qué revisar.
 
