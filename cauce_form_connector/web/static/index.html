@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conector de formularios</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header>
+  <h1>Cauce · Conector universal de formularios</h1>
+  <p>Analiza un formulario, propone correspondencias con sus datos, escribe carácter por carácter
+     y <strong>se detiene antes de enviar</strong>. Use solo formularios autorizados y datos de prueba.</p>
+</header>
+
+<main>
+  <!-- 1. Fuente -->
+  <section id="paso-fuente">
+    <h2><span class="num">1</span> Formulario</h2>
+    <div class="tabs" role="tablist">
+      <button class="tab activo" data-tab="lab" role="tab">Laboratorio</button>
+      <button class="tab" data-tab="html" role="tab">Pegar o cargar HTML</button>
+      <button class="tab" data-tab="url" role="tab">URL autorizada</button>
+    </div>
+    <div class="panel" data-panel="lab">
+      <label for="lab-sel">Formulario de laboratorio</label>
+      <select id="lab-sel"></select>
+    </div>
+    <div class="panel" data-panel="html" hidden>
+      <label for="html-in">Código HTML</label>
+      <textarea id="html-in" rows="8" placeholder="&lt;form&gt;…&lt;/form&gt;"></textarea>
+      <div class="linea">
+        <input type="file" id="html-file" accept=".html,.htm">
+        <label class="inline"><input type="checkbox" id="html-static"> Análisis estático (sin ejecutar JavaScript; no permite rellenar)</label>
+      </div>
+      <p class="ayuda">Con navegador, el HTML se abre sin acceso a red: sus scripts se ejecutan, pero no puede descargar nada.</p>
+    </div>
+    <div class="panel" data-panel="url" hidden>
+      <label for="url-in">URL</label>
+      <input id="url-in" type="url" placeholder="http://127.0.0.1:8000/mi-formulario">
+      <label class="inline"><input type="checkbox" id="url-auth"> Declaro que tengo autorización para automatizar esta página</label>
+      <p class="ayuda">Solo se admiten direcciones locales y los dominios de <code>config/allowed_hosts.json</code>.
+        <span id="hosts-info"></span></p>
+    </div>
+    <button id="btn-analizar" class="primario">Analizar formulario</button>
+    <div id="analisis-msg" class="msg" role="status"></div>
+    <div id="campos"></div>
+  </section>
+
+  <!-- 2. Datos -->
+  <section id="paso-datos">
+    <h2><span class="num">2</span> Datos (JSON, CSV o Excel)</h2>
+    <input type="file" id="data-file" accept=".json,.csv,.xlsx">
+    <div id="datos-msg" class="msg" role="status"></div>
+    <div class="linea">
+      <label for="row-sel">Fila a usar</label>
+      <select id="row-sel"></select>
+    </div>
+    <div id="datos-preview"></div>
+  </section>
+
+  <!-- 3. Correspondencias -->
+  <section id="paso-map">
+    <h2><span class="num">3</span> Revisión de correspondencias</h2>
+    <p class="ayuda">Revise cada fila. «auto» = confianza alta; «revisar» = confirme o corrija; «sin datos» = no se rellenará.</p>
+    <div id="map-tabla"></div>
+    <div class="linea">
+      <input id="perfil-nombre" placeholder="Nombre de la configuración">
+      <button id="btn-guardar">Guardar configuración</button>
+      <select id="perfil-sel"><option value="">— Configuraciones guardadas —</option></select>
+      <button id="btn-cargar">Cargar</button>
+    </div>
+    <div id="perfil-msg" class="msg" role="status"></div>
+  </section>
+
+  <!-- 4. Ejecución -->
+  <section id="paso-fill">
+    <h2><span class="num">4</span> Autocompletar</h2>
+    <div class="linea">
+      <label for="delay">Pausa entre teclas (ms)</label>
+      <input id="delay" type="number" min="0" max="500" value="35">
+      <button id="btn-fill" class="primario">Rellenar carácter por carácter</button>
+    </div>
+    <div id="fill-msg" class="msg" role="status"></div>
+    <div id="resultados"></div>
+    <div id="captura"></div>
+  </section>
+
+  <!-- 5. Confirmación humana -->
+  <section id="paso-envio">
+    <h2><span class="num">5</span> Confirmación humana</h2>
+    <p>El conector <strong>no envía</strong>. Revise la ventana del navegador y envíe usted mismo, o
+       escriba <code>ENVIAR</code> para que pulse el botón de envío en su nombre.</p>
+    <div class="linea">
+      <input id="frase" placeholder="Escriba ENVIAR para confirmar" autocomplete="off">
+      <button id="btn-enviar" class="peligro">Confirmo el envío</button>
+    </div>
+    <div id="envio-msg" class="msg" role="status"></div>
+    <button id="btn-cerrar">Terminar: cerrar navegador y borrar datos de la memoria</button>
+    <div id="cerrar-msg" class="msg" role="status"></div>
+  </section>
+
+  <section id="paso-audit">
+    <details>
+      <summary>Registro de auditoría (sin datos personales)</summary>
+      <button id="btn-audit">Actualizar</button>
+      <pre id="audit"></pre>
+    </details>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>
