@@ -22,7 +22,7 @@ cauce-forms = "cauce_form_connector.cli:main"
 include = ["cauce_form_connector*"]
 
 [tool.setuptools.package-data]
-cauce_form_connector = ["detector.js", "web/static/*"]
+cauce_form_connector = ["detector.js", "web/static/*", "contrato_v1/*.json", "contrato_v1/PIN.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

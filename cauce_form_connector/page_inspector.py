@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import concurrent.futures as cf
 import re
+import time
 from pathlib import Path
 from typing import Any, Callable, Optional, TypeVar
 
@@ -34,6 +35,12 @@ SETTLE_JS = """
   };
   setTimeout(tick, 50);
 })
+"""
+
+# Observa eventos `submit` (fase de captura). Se registra con `expose_function`, que sobrevive a navegaciones.
+SUBMIT_OBSERVER_JS = """
+(() => { if (window.__cauceObs) return; window.__cauceObs = true;
+  document.addEventListener('submit', (e) => { try { window.__cauceSubmitSeen(!!e.isTrusted && !!(navigator.userActivation && navigator.userActivation.isActive)); } catch (_) {} }, true); })()
 """
 
 T = TypeVar("T")
@@ -69,6 +76,23 @@ class BrowserSession:
         self._init_scripts: list[str] = []
         self._nav_guard: Optional[Callable[[str], bool]] = None
         self.blocked_requests = 0
+        # --- H1: el envío no es una capacidad permanente de la sesión ---
+        self.integration_mode = False      # True: no existe envío programático (modo `preparar`)
+        self.submit_armed = False          # solo tras un relleno completado en ESTA página; un solo uso
+        self.submit_events: list[tuple[bool, float]] = []  # (¿con gesto de usuario activo?, instante monotónico)
+        self._observed_page = None
+
+    def observe_submits(self) -> None:
+        """Empieza a registrar eventos `submit` de la página actual (idempotente por página)."""
+        if self.page is None or self._observed_page is self.page:
+            return
+        self.page.expose_function("__cauceSubmitSeen", lambda gesto: self.submit_events.append((bool(gesto), time.monotonic())))
+        self.page.add_init_script(SUBMIT_OBSERVER_JS)
+        try:
+            self.page.evaluate(SUBMIT_OBSERVER_JS)
+        except Exception:
+            pass
+        self._observed_page = self.page
 
     # ---------------------------------------------------------------- ciclo de vida
     def start(self) -> "BrowserSession":
@@ -97,6 +121,7 @@ class BrowserSession:
         if self._context is not None:
             self._context.close()
         self.blocked_requests = 0
+        self.submit_armed, self.submit_events, self._observed_page = False, [], None
         # offline=True emula "sin conexión" en el propio Chromium: cubre lo que el enrutado de
         # Playwright no intercepta (p. ej. navigator.sendBeacon), además de abortar con route.
         self._context = self._browser.new_context(locale="es-ES", service_workers="block",

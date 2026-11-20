@@ -35,6 +35,7 @@ def fill_form(session: BrowserSession, mapping: dict[str, Optional[str]], row: d
 
     analysis = session.inspect()
     report = FillReport(ok=False, stopped_before_submit=True)
+    session.submit_armed = False        # un envío posterior exige ESTE relleno revisado (H1)
     if analysis.safety.blocked:
         report.blocked, report.blocked_reasons = True, analysis.safety.reasons
         audit.log("fill_blocked", reasons=analysis.safety.reasons, source_label=analysis.source_label)
@@ -126,6 +127,8 @@ def fill_form(session: BrowserSession, mapping: dict[str, Optional[str]], row: d
     report.ok = bool(filled) and all(r.status in ("ok", "ok_normalizado") for r in filled) \
         and all(c["match"] for c in report.confirmations) and not (late_keys - set(done))
     report.duration_ms = int((time.monotonic() - t0) * 1000)
+    session.observe_submits()
+    session.submit_armed = True
     if screenshot_path:
         report.screenshot = session.screenshot(screenshot_path)
     audit.log("fill_done", ok=report.ok, count=len(filled), duration_ms=report.duration_ms,
@@ -134,16 +137,48 @@ def fill_form(session: BrowserSession, mapping: dict[str, Optional[str]], row: d
     return report
 
 
+def safe_cli_mapping(proposals: list[Any], explicit: dict[str, Optional[str]], *,
+                     use_proposals: bool = True) -> tuple[dict[str, Optional[str]], list[str]]:
+    """H2: correspondencias que el CLI puede aplicar sin revisión humana nueva.
+
+    - Solo propuestas con estado `auto` (si `use_proposals`) más las aprobadas expresamente (`explicit`).
+    - Una propuesta `revisar` con columna que no esté aprobada expresamente es AMBIGUA: se devuelve en
+      `pendientes` y el llamador debe detenerse antes de escribir nada.
+    """
+    mapping: dict[str, Optional[str]] = {}
+    pendientes: list[str] = []
+    if use_proposals:
+        for m in proposals:
+            if not m.column:
+                continue
+            if m.status == "auto":
+                mapping[m.field_key] = m.column
+            elif m.status == "revisar" and m.field_key not in explicit:
+                pendientes.append(m.field_key)
+    mapping.update(explicit)
+    return mapping, sorted(pendientes)
+
+
 def submit_with_human_confirmation(session: BrowserSession, confirmation_phrase: str,
                                    audit: Optional[AuditLog] = None, button_text: str = "") -> dict[str, Any]:
-    """Pulsa el botón de envío SOLO si una persona escribió la frase "ENVIAR".
+    """Pulsa el botón de envío SOLO si una persona escribió exactamente "ENVIAR" (interfaz local, no integración).
 
-    Pensado para la interfaz local: la persona revisa la página rellenada y
-    confirma explícitamente. No se usa en ningún flujo automático.
+    Cambios respecto de v0.1.0 (H1):
+    - La frase debe ser exacta (antes se aceptaba `" ENVIAR\n"` por usar `strip()`).
+    - Exige un relleno completado en esta página y es de UN SOLO USO: tras el clic hay que volver a rellenar.
+    - No existe en modo de integración (`session.integration_mode`).
+    - Distingue tres hechos: `clic_solicitado` (siempre True si llegó a pulsar), `envio_observado` (el navegador
+      disparó el evento `submit`; si la validación HTML5 lo bloqueó, es False) y `confirmado_recepcion`
+      (SIEMPRE False: el conector no puede saber si el sitio recibió el formulario; eso exige un folio del portal).
+    - `submitted` se conserva por compatibilidad, pero ahora significa «envío observado», no «se hizo clic».
     """
     audit = audit or AuditLog(None)
-    if confirmation_phrase.strip() != "ENVIAR":
+    if confirmation_phrase != "ENVIAR":
         raise PermissionError("Para enviar, una persona debe escribir exactamente ENVIAR.")
+    if session.integration_mode:
+        raise PermissionError("Modo de integración: el conector no envía formularios.")
+    if not session.submit_armed:
+        raise PermissionError("No hay un relleno revisado pendiente de envío (aprobación de un solo uso).")
     analysis = session.inspect()
     if analysis.safety.blocked:
         raise PermissionError("La página requiere intervención humana directa: envíe desde el navegador.")
@@ -152,7 +187,13 @@ def submit_with_human_confirmation(session: BrowserSession, confirmation_phrase:
         loc = loc.filter(has_text=button_text)
     if loc.count() == 0:
         raise LookupError("No se encontró un botón de envío.")
+    session.observe_submits()
+    session.submit_armed = False        # se consume antes del clic: ni un fallo permite reintentar con la misma aprobación
+    before = len(session.submit_events)
     loc.first.click()
     session.settle()
-    audit.log("human_submit", ok=True, source_label=analysis.source_label)
-    return {"submitted": True, "url_after": session.page.url.split("?")[0]}
+    observed = len(session.submit_events) > before
+    audit.log("human_submit", ok=observed, submit_observed=observed, source_label=analysis.source_label)
+    return {"clic_solicitado": True, "envio_observado": observed, "confirmado_recepcion": False,
+            "submitted": observed, "url_after": session.page.url.split("?")[0],
+            "nota": "El conector no confirma la recepción: eso requiere el comprobante del portal."}
