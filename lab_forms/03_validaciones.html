@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 3 · Validaciones y confirmaciones</title>
+<link rel="stylesheet" href="lab.css">
+</head>
+<body>
+<main>
+  <h1>Laboratorio 3 · Validaciones y confirmaciones</h1>
+  <p class="nota">Los campos de confirmación bloquean el pegado y cuentan las pulsaciones de teclado:
+    si un valor aparece sin haberse tecleado, se marca como error. El botón de envío solo se
+    habilita cuando todo es válido.</p>
+
+  <form id="alta" action="#enviado" method="post" novalidate>
+    <div class="fila">
+      <label for="nombre_completo">Nombre completo</label>
+      <input id="nombre_completo" name="nombre_completo" type="text" required minlength="5"
+             aria-describedby="err_nombre_completo">
+      <small class="error" id="err_nombre_completo" hidden>Escriba nombre y apellidos (mínimo 5 caracteres).</small>
+    </div>
+
+    <div class="fila">
+      <label for="email">Correo electrónico</label>
+      <input id="email" name="email" type="email" required autocomplete="email" aria-describedby="err_email">
+      <small class="error" id="err_email" hidden>Correo no válido.</small>
+    </div>
+    <div class="fila">
+      <label for="email_confirmacion">Confirme su correo electrónico</label>
+      <input id="email_confirmacion" name="email_confirmacion" type="email" required data-confirm="email"
+             onpaste="return false" autocomplete="off" aria-describedby="err_email_confirmacion">
+      <small class="error" id="err_email_confirmacion" hidden></small>
+      <small class="contador" id="cnt_email_confirmacion">Pulsaciones: 0</small>
+    </div>
+
+    <div class="fila">
+      <label for="telefono">Teléfono móvil (10 dígitos)</label>
+      <input id="telefono" name="telefono" type="tel" required inputmode="tel" maxlength="12"
+             placeholder="55 1234 5678" aria-describedby="err_telefono">
+      <small class="error" id="err_telefono" hidden>Deben ser 10 dígitos.</small>
+    </div>
+    <div class="fila">
+      <label for="telefono_confirmacion">Repita el teléfono</label>
+      <input id="telefono_confirmacion" name="telefono_confirmacion" type="tel" required inputmode="tel"
+             maxlength="12" data-confirm="telefono" onpaste="return false" aria-describedby="err_telefono_confirmacion">
+      <small class="error" id="err_telefono_confirmacion" hidden></small>
+      <small class="contador" id="cnt_telefono_confirmacion">Pulsaciones: 0</small>
+    </div>
+
+    <div class="fila">
+      <label for="codigo_postal">Código postal</label>
+      <input id="codigo_postal" name="codigo_postal" type="text" required pattern="\d{5}" maxlength="5"
+             inputmode="numeric" aria-describedby="err_codigo_postal">
+      <small class="error" id="err_codigo_postal" hidden>Deben ser 5 dígitos.</small>
+    </div>
+
+    <div class="fila">
+      <label for="ciudad">Ciudad</label>
+      <input id="ciudad" name="ciudad" type="text" required aria-describedby="err_ciudad">
+      <small class="error" id="err_ciudad" hidden>Campo obligatorio.</small>
+    </div>
+
+    <div class="fila">
+      <label><input type="checkbox" id="acepta_privacidad" name="acepta_privacidad" required>
+        He leído el aviso de privacidad</label>
+    </div>
+
+    <button type="submit" id="enviar" disabled>Dar de alta</button>
+    <p id="estado" aria-live="polite"></p>
+  </form>
+</main>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const keydowns = { email_confirmacion: 0, telefono_confirmacion: 0 };
+
+  // Máscara de teléfono: 5512345678 -> "55 1234 5678" mientras se escribe
+  function mask(el) {
+    const d = el.value.replace(/\D/g, '').slice(0, 10);
+    const parts = [d.slice(0, 2), d.slice(2, 6), d.slice(6, 10)].filter(Boolean);
+    el.value = parts.join(' ');
+  }
+  ['telefono', 'telefono_confirmacion'].forEach((id) => $(id).addEventListener('input', () => mask($(id))));
+
+  // Contador de pulsaciones y detección de pegado en los campos de confirmación
+  Object.keys(keydowns).forEach((id) => {
+    const el = $(id);
+    el.addEventListener('keydown', (e) => {
+      if (e.key.length === 1) keydowns[id]++;
+      $('cnt_' + id).textContent = 'Pulsaciones: ' + keydowns[id];
+    });
+    el.addEventListener('input', (e) => { if (e.inputType === 'insertFromPaste') el.dataset.pegado = 'si'; });
+  });
+
+  const rules = {
+    nombre_completo: (v) => v.trim().length >= 5,
+    email: (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+    email_confirmacion: (v) => v === $('email').value,
+    telefono: (v) => v.replace(/\D/g, '').length === 10,
+    telefono_confirmacion: (v) => v === $('telefono').value,
+    codigo_postal: (v) => /^\d{5}$/.test(v),
+    ciudad: (v) => v.trim().length > 0,
+  };
+
+  function check(id, show) {
+    const el = $(id), err = $('err_' + id);
+    let ok = rules[id](el.value);
+    let msg = err.dataset.base || err.textContent;
+    err.dataset.base = msg;
+    if (id in keydowns) {
+      const typed = el.value.replace(/\D/g, '').length && id.startsWith('telefono')
+        ? el.value.replace(/\D/g, '').length : el.value.length;
+      if (!rules[id](el.value)) msg = 'No coincide con el campo original.';
+      if (el.dataset.pegado === 'si' || keydowns[id] < typed) { ok = false; msg = 'El valor no se escribió con el teclado (¿pegado?).'; }
+    }
+    el.setAttribute('aria-invalid', ok ? 'false' : 'true');
+    el.setCustomValidity(ok ? '' : msg || 'No válido');
+    if (show) { err.textContent = msg; err.hidden = ok; }
+    return ok;
+  }
+
+  function refresh() {
+    const all = Object.keys(rules).every((id) => check(id, false)) && $('acepta_privacidad').checked;
+    $('enviar').disabled = !all;
+    $('estado').textContent = all ? 'Todo correcto: puede enviar.' : '';
+  }
+
+  Object.keys(rules).forEach((id) => {
+    $(id).addEventListener('blur', () => { check(id, true); refresh(); });
+    $(id).addEventListener('input', refresh);
+  });
+  $('acepta_privacidad').addEventListener('change', refresh);
+  $('alta').addEventListener('submit', (e) => {
+    e.preventDefault();
+    document.body.dataset.enviado = 'si';
+    $('estado').textContent = 'Alta enviada (laboratorio). Los datos no salieron de este equipo.';
+  });
+})();
+</script>
+</body>
+</html>

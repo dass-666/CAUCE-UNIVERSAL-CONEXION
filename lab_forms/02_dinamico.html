@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 2 · Formulario dinámico</title>
+<link rel="stylesheet" href="lab.css">
+</head>
+<body>
+<main>
+  <h1>Laboratorio 2 · Formulario generado con JavaScript</h1>
+  <p class="nota">En el HTML original no hay ningún campo: todo se crea con JavaScript
+    tras una espera, y algunos campos aparecen solo según lo elegido.</p>
+  <div id="app"><p id="cargando">Cargando formulario…</p></div>
+</main>
+<script>
+(function () {
+  // Estado al estilo de los frameworks (React/Vue): el valor "real" vive en `state`
+  // y la vista se re-renderiza desde él. Si alguien asigna element.value sin
+  // eventos de teclado/input, el estado no cambia y el valor se pierde al salir.
+  const state = { tipo: '', email: '', nombre: '', apellidos: '', documento: '', empresa: '', cargo: '', comentarios: '' };
+
+  function campo(id, etiqueta, tipo, extra) {
+    const div = document.createElement('div');
+    div.className = 'fila';
+    const lab = document.createElement('label');
+    lab.htmlFor = id; lab.textContent = etiqueta;
+    const inp = tipo === 'textarea' ? document.createElement('textarea') : document.createElement('input');
+    if (tipo !== 'textarea') inp.type = tipo;
+    inp.id = id; inp.name = id;
+    Object.assign(inp, extra || {});
+    inp.value = state[id] || '';
+    inp.addEventListener('input', (e) => { state[id] = e.target.value; });
+    // Al perder el foco se re-renderiza desde el estado (como un componente controlado)
+    inp.addEventListener('blur', (e) => { e.target.value = state[id]; });
+    div.append(lab, inp);
+    return div;
+  }
+
+  function render() {
+    const app = document.getElementById('app');
+    app.innerHTML = '';
+    const form = document.createElement('form');
+    form.id = 'solicitud';
+    form.noValidate = false;
+
+    const sel = document.createElement('div');
+    sel.className = 'fila';
+    sel.innerHTML = '<label for="tipo_solicitante">Tipo de solicitante</label>' +
+      '<select id="tipo_solicitante" name="tipo_solicitante" required>' +
+      '<option value="">— Seleccione —</option><option value="persona">Persona física</option>' +
+      '<option value="empresa">Empresa</option></select>';
+    form.append(sel);
+    form.append(campo('email', 'Correo de contacto', 'email', { required: true, autocomplete: 'email' }));
+
+    const bloque = document.createElement('div');
+    bloque.id = 'bloque_variable';
+    form.append(bloque);
+    form.append(campo('comentarios', 'Comentarios', 'textarea'));
+
+    const btn = document.createElement('button');
+    btn.type = 'submit'; btn.textContent = 'Enviar solicitud';
+    form.append(btn);
+    form.addEventListener('submit', (e) => { e.preventDefault(); document.body.dataset.enviado = 'si';
+      document.getElementById('app').insertAdjacentHTML('beforeend', '<p id="ok">Solicitud enviada (laboratorio).</p>'); });
+    app.append(form);
+
+    const select = form.querySelector('#tipo_solicitante');
+    select.value = state.tipo;
+    select.addEventListener('change', (e) => {
+      state.tipo = e.target.value;
+      // Simula una petición al servidor antes de mostrar los campos dependientes
+      setTimeout(() => pintarBloque(bloque), 250);
+    });
+    pintarBloque(bloque);
+  }
+
+  function pintarBloque(bloque) {
+    bloque.innerHTML = '';
+    if (state.tipo === 'persona') {
+      bloque.append(campo('nombre', 'Nombre', 'text', { required: true }));
+      bloque.append(campo('apellidos', 'Apellidos', 'text', { required: true }));
+      bloque.append(campo('documento', 'CURP (documento de identidad)', 'text', { required: true, maxLength: 18 }));
+    } else if (state.tipo === 'empresa') {
+      bloque.append(campo('empresa', 'Razón social', 'text', { required: true }));
+      bloque.append(campo('cargo', 'Cargo del contacto', 'text'));
+    }
+  }
+
+  setTimeout(render, 600);   // el formulario aparece 600 ms después de cargar
+})();
+</script>
+</body>
+</html>

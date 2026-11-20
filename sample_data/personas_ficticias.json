@@ -1,0 +1,42 @@
+[
+  {
+    "Nombre": "José Ángel",
+    "Apellidos": "Muñoz Ibáñez",
+    "Nombre completo": "José Ángel Muñoz Ibáñez",
+    "Correo electrónico": "jose.munoz@example.com",
+    "Teléfono": "5512345678",
+    "Fecha de nacimiento": "14/03/1988",
+    "País": "México",
+    "Género": "Masculino",
+    "Tipo de solicitante": "persona",
+    "CURP": "MUIJ880314HDFXXX09",
+    "Empresa": "",
+    "Cargo": "",
+    "Código postal": "06700",
+    "Ciudad": "Ciudad de México",
+    "Mensaje": "Solicitud de prueba con datos ficticios.\nSegunda línea del mensaje.",
+    "Comentarios": "Prueba de laboratorio: ¿se registran acentos y la eñe?",
+    "Acepta términos": "sí",
+    "Acepta privacidad": "sí"
+  },
+  {
+    "Nombre": "Lucía",
+    "Apellidos": "Fernández Peña",
+    "Nombre completo": "Lucía Fernández Peña",
+    "Correo electrónico": "lucia.fernandez@example.org",
+    "Teléfono": "3398765432",
+    "Fecha de nacimiento": "1992-11-02",
+    "País": "ES",
+    "Género": "F",
+    "Tipo de solicitante": "empresa",
+    "CURP": "",
+    "Empresa": "Tostadores Ficticios S.A. de C.V.",
+    "Cargo": "Directora de compras",
+    "Código postal": "44100",
+    "Ciudad": "Guadalajara",
+    "Mensaje": "Segundo registro ficticio.",
+    "Comentarios": "Empresa inventada para pruebas.",
+    "Acepta términos": "1",
+    "Acepta privacidad": "true"
+  }
+]

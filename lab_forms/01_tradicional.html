@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 1 · Formulario tradicional</title>
+<link rel="stylesheet" href="lab.css">
+</head>
+<body>
+<main>
+  <h1>Laboratorio 1 · Formulario HTML tradicional</h1>
+  <p class="nota">Formulario de prueba propio. Use solo datos ficticios. El envío no sale de este equipo.</p>
+
+  <form id="registro" action="#enviado" method="post">
+    <div class="fila">
+      <label for="nombre">Nombre</label>
+      <input id="nombre" name="nombre" type="text" required autocomplete="given-name" maxlength="60">
+    </div>
+    <div class="fila">
+      <label for="apellidos">Apellidos</label>
+      <input id="apellidos" name="apellidos" type="text" required autocomplete="family-name">
+    </div>
+    <div class="fila">
+      <label for="email">Correo electrónico</label>
+      <input id="email" name="email" type="email" required autocomplete="email">
+    </div>
+    <div class="fila">
+      <label for="telefono">Teléfono</label>
+      <input id="telefono" name="telefono" type="tel" pattern="[0-9 +]{8,16}" autocomplete="tel">
+    </div>
+    <div class="fila">
+      <label for="fecha_nacimiento">Fecha de nacimiento</label>
+      <input id="fecha_nacimiento" name="fecha_nacimiento" type="date" min="1900-01-01" max="2010-12-31">
+    </div>
+    <div class="fila">
+      <label for="pais">País</label>
+      <select id="pais" name="pais" required>
+        <option value="">— Seleccione —</option>
+        <option value="MX">México</option>
+        <option value="ES">España</option>
+        <option value="CO">Colombia</option>
+        <option value="AR">Argentina</option>
+      </select>
+    </div>
+    <fieldset>
+      <legend>Género</legend>
+      <label><input type="radio" name="genero" value="F"> Femenino</label>
+      <label><input type="radio" name="genero" value="M"> Masculino</label>
+      <label><input type="radio" name="genero" value="X"> Prefiero no decirlo</label>
+    </fieldset>
+    <div class="fila">
+      <label for="mensaje">Mensaje</label>
+      <textarea id="mensaje" name="mensaje" rows="3" maxlength="500"></textarea>
+    </div>
+    <div class="fila">
+      <label><input type="checkbox" id="acepta_terminos" name="acepta_terminos" required> Acepto los términos de uso</label>
+    </div>
+    <input type="hidden" name="token_interno" value="lab-1">
+    <button type="submit">Enviar registro</button>
+  </form>
+  <section id="resultado" hidden>
+    <h2>Formulario enviado (laboratorio)</h2>
+    <p>Los datos no salieron de este equipo.</p>
+  </section>
+</main>
+<script>
+  // Solo para la demostración: el envío no navega ni transmite nada.
+  document.getElementById('registro').addEventListener('submit', (e) => {
+    e.preventDefault();
+    document.getElementById('resultado').hidden = false;
+    document.body.dataset.enviado = 'si';
+  });
+</script>
+</body>
+</html>

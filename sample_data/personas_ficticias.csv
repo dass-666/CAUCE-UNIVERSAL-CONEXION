@@ -1,0 +1,4 @@
+Nombre;Apellidos;Nombre completo;Correo electrónico;Teléfono;Fecha de nacimiento;País;Género;Tipo de solicitante;CURP;Empresa;Cargo;Código postal;Ciudad;Mensaje;Comentarios;Acepta términos;Acepta privacidad
+José Ángel;Muñoz Ibáñez;José Ángel Muñoz Ibáñez;jose.munoz@example.com;5512345678;14/03/1988;México;Masculino;persona;MUIJ880314HDFXXX09;;;06700;Ciudad de México;"Solicitud de prueba con datos ficticios.
+Segunda línea del mensaje.";Prueba de laboratorio: ¿se registran acentos y la eñe?;sí;sí
+Lucía;Fernández Peña;Lucía Fernández Peña;lucia.fernandez@example.org;3398765432;1992-11-02;ES;F;empresa;;Tostadores Ficticios S.A. de C.V.;Directora de compras;44100;Guadalajara;Segundo registro ficticio.;Empresa inventada para pruebas.;1;true

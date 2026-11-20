@@ -1,0 +1,4 @@
+{
+  "_comentario": "Dominios externos que se pueden analizar/rellenar. Añada solo sitios sobre los que tenga autorización por escrito. localhost y 127.0.0.1 siempre están permitidos.",
+  "allowed_hosts": []
+}
