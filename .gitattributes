@@ -1,2 +1,2 @@
-*.bat text eol=crlf
-*.py text eol=lf
+cauce_form_connector/contrato_v1/*.json -text
+cauce_form_connector/contrato_v1/PIN.txt -text
