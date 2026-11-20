@@ -52,6 +52,13 @@ Para ver la demo escribiendo en pantalla:
 python scripts\demo_lab.py --headed
 ```
 
+Recorrido completo de la interfaz (abre, analiza, importa Excel, revisa, rellena, comprueba
+confirmaciones y campos dinámicos, y verifica que no se envía), con capturas en `evidence\out\recorrido`:
+
+```powershell
+python scripts\recorrido_ui.py
+```
+
 ## Variables de entorno opcionales
 
 | Variable | Valor por defecto | Para qué |

@@ -35,6 +35,7 @@ python -m pytest -q                 # 70 pruebas (unitarias, navegador, interfaz
 python scripts/demo_lab.py          # genera evidence/out/informe_demo.md y capturas
 python scripts/demo_lab.py --headed # lo mismo viendo el navegador escribir
 python scripts/ejemplo_cauce_monitor.py --no-interactivo  # ejemplo de integración con Cauce Monitor
+python scripts/recorrido_ui.py      # recorrido de la interfaz paso a paso, con capturas
 ```
 
 `evidence/` contiene un informe y capturas de una ejecución de referencia.
