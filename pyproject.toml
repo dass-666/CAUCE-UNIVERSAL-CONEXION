@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Conector universal de formularios: análisis, correspondencia, escritura carácter por carácter y verificación, con parada antes del envío."
 requires-python = ">=3.10"
 dependencies = [
-  "playwright>=1.45,<2", "fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9",
+  "playwright>=1.48,<2", "fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9",
   "beautifulsoup4>=4.12", "lxml>=5.0", "openpyxl>=3.1",
 ]
 

@@ -31,9 +31,10 @@ revise las correspondencias y pulse «Rellenar carácter por carácter».
 ## Pruebas y demostración
 
 ```bash
-python -m pytest -q                 # 62 pruebas (unitarias + navegador + interfaz)
+python -m pytest -q                 # 70 pruebas (unitarias, navegador, interfaz, seguridad)
 python scripts/demo_lab.py          # genera evidence/out/informe_demo.md y capturas
 python scripts/demo_lab.py --headed # lo mismo viendo el navegador escribir
+python scripts/ejemplo_cauce_monitor.py --no-interactivo  # ejemplo de integración con Cauce Monitor
 ```
 
 `evidence/` contiene un informe y capturas de una ejecución de referencia.
@@ -67,7 +68,8 @@ Salida en JSON por stdout. Códigos de salida: `0` correcto, `2` terminado con i
 
 Más detalle: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) ·
 Contrato de integración: [docs/CONTRATO_CAUCE_MONITOR.md](docs/CONTRATO_CAUCE_MONITOR.md) ·
-Limitaciones y pendientes: [docs/LIMITACIONES.md](docs/LIMITACIONES.md)
+Limitaciones y pendientes: [docs/LIMITACIONES.md](docs/LIMITACIONES.md) ·
+Seguridad: [docs/SEGURIDAD.md](docs/SEGURIDAD.md)
 
 ## Uso responsable
 

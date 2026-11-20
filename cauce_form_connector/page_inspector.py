@@ -8,6 +8,7 @@ llamar desde cualquier hilo sin romper nada, también en Windows.
 from __future__ import annotations
 
 import concurrent.futures as cf
+import re
 from pathlib import Path
 from typing import Any, Callable, Optional, TypeVar
 
@@ -66,6 +67,8 @@ class BrowserSession:
         self._html: Optional[str] = None
         self._url: Optional[str] = None
         self._init_scripts: list[str] = []
+        self._nav_guard: Optional[Callable[[str], bool]] = None
+        self.blocked_requests = 0
 
     # ---------------------------------------------------------------- ciclo de vida
     def start(self) -> "BrowserSession":
@@ -81,14 +84,46 @@ class BrowserSession:
         self._new_context()
         return self
 
-    def _new_context(self) -> None:
+    def _new_context(self, offline: bool = False,
+                     nav_guard: Optional[Callable[[str], bool]] = None) -> None:
+        """Contexto nuevo y aislado (sin cookies ni almacenamiento previos).
+
+        - `offline=True` (HTML pegado): se aborta TODA petición HTTP y WebSocket a nivel
+          de contexto, de modo que tampoco escapan ventanas emergentes.
+        - `nav_guard`: comprueba cada navegación del marco principal (incluidas
+          redirecciones) contra la política de URLs.
+        - Service workers bloqueados y ventanas emergentes cerradas en ambos casos.
+        """
         if self._context is not None:
             self._context.close()
-        self._context = self._browser.new_context(locale="es-ES")
+        self.blocked_requests = 0
+        # offline=True emula "sin conexión" en el propio Chromium: cubre lo que el enrutado de
+        # Playwright no intercepta (p. ej. navigator.sendBeacon), además de abortar con route.
+        self._context = self._browser.new_context(locale="es-ES", service_workers="block",
+                                                  accept_downloads=False, offline=offline)
         for js in self._init_scripts:
             self._context.add_init_script(js)
         self._context.set_default_timeout(self.settings.nav_timeout_ms)
+
+        def on_route(route: Any) -> None:
+            req = route.request
+            if offline:
+                self.blocked_requests += 1
+                route.abort()
+                return
+            if nav_guard is not None and req.is_navigation_request() and req.frame.parent_frame is None:
+                if not nav_guard(req.url):
+                    self.blocked_requests += 1
+                    route.abort()
+                    return
+            route.continue_()
+
+        self._context.route("**/*", on_route)
+        if offline:
+            self._context.route_web_socket(re.compile(".*"), lambda ws: ws.close())
         self.page = self._context.new_page()
+        main = self.page
+        self._context.on("page", lambda p: p.close() if p is not main else None)
 
     def add_init_script(self, js: str) -> None:
         """Script que se inyecta antes de cargar cada página (se usa en pruebas para
@@ -120,17 +155,18 @@ class BrowserSession:
         HTML puede ejecutar sus scripts en línea, pero no descargar recursos ni
         comunicarse con servidores externos."""
         self.start()
-        self._new_context()
-        self.page.route("**/*", lambda route: route.abort())
+        self._new_context(offline=True)
         self.page.set_content(html, wait_until="load")
         self.source, self.source_label = "html", html_fingerprint(html)
         self._html, self._url = html, None
         self.settle()
 
-    def open_url(self, url: str) -> None:
-        """Abre una URL. La autorización debe comprobarse ANTES con `UrlPolicy`."""
+    def open_url(self, url: str, nav_guard: Optional[Callable[[str], bool]] = None) -> None:
+        """Abre una URL. La autorización debe comprobarse ANTES con `UrlPolicy`;
+        `nav_guard` impide además que la página redirija a destinos no autorizados."""
         self.start()
-        self._new_context()
+        self._nav_guard = nav_guard
+        self._new_context(nav_guard=nav_guard)
         self.page.goto(url, wait_until="domcontentloaded")
         try:
             self.page.wait_for_load_state("networkidle", timeout=5000)
@@ -145,7 +181,7 @@ class BrowserSession:
         if self._html is not None:
             self.open_html(self._html)
         elif self._url is not None:
-            self.open_url(self._url)
+            self.open_url(self._url, self._nav_guard)
         else:
             raise RuntimeError("No hay ninguna página cargada.")
 

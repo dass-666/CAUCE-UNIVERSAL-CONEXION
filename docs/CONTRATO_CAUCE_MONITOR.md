@@ -1,6 +1,6 @@
 # Contrato de integración futura con Cauce Monitor
 
-Versión del contrato: **1** (borrador). Estado: **propuesta**. Cauce Monitor no se ha modificado y esta
+Versión del contrato: **1** (borrador). Estado: **propuesta**, revisada contra el código de v0.1 (2026-11-20). Cauce Monitor no se ha modificado y esta
 integración no está implementada en su lado. Lo que sí existe hoy en el conector está marcado como
 «disponible»; lo que falta, como «pendiente».
 
@@ -26,7 +26,7 @@ Cauce Monitor lanza un subproceso y lee JSON de stdout. Es el acoplamiento más 
 ni dependencias.
 
 ```
-python -m cauce_form_connector analyze --url <URL> [--authorized]          → AnalysisResult
+python -m cauce_form_connector analyze (--url <URL> [--authorized] | --html <archivo.html> [--static])  → AnalysisResult
 python -m cauce_form_connector propose --url <URL> --data <archivo>         → Mapping[]
 python -m cauce_form_connector fill    --url <URL> --data <archivo> --row N
         [--profile <nombre>] [--mapping mapping.json] [--screenshot out.png] [--headed]  → FillReport
@@ -40,7 +40,8 @@ desde esa ventana. Para el paso de envío humano use el modo 2.2 (o `--headed` y
 
 ### 2.2 API HTTP local (disponible, sin versión en la ruta)
 
-Servidor en `127.0.0.1:8765`, una sola sesión de navegador. Rechaza `Host`/`Origin` no locales.
+Servidor en `127.0.0.1:8765` (`python -m cauce_form_connector.web.app --no-open --port N`), una sola sesión de navegador.
+Rechaza peticiones con `Host` u `Origin` no locales y con `Sec-Fetch-Site: cross-site|same-site`.
 
 | Método y ruta | Entrada | Salida |
 |---|---|---|
@@ -49,7 +50,10 @@ Servidor en `127.0.0.1:8765`, una sola sesión de navegador. Rechaza `Host`/`Ori
 | `POST /api/mapping/propose` | — | `{"proposals": Mapping[]}` |
 | `POST /api/fill` | `{"mapping": {field_key: columna\|null}, "row_index", "delay_ms"?, "reload_first"?}` | `{"report": FillReport}` |
 | `POST /api/submit` | `{"phrase": "ENVIAR"}` | `{"submitted": true}` · 403 sin frase o con CAPTCHA |
-| `GET /api/screenshot` | — | PNG de la página actual |
+| `GET /api/screenshot` | — | PNG de la página actual (en memoria, no se guarda en disco) |
+| `GET /api/status` | — | `{"loaded", "rows", "headless", "typing_delay_ms", "allowed_hosts"}` |
+| `GET /api/lab` | — | formularios de laboratorio disponibles |
+| `POST /api/close` | — | cierra el navegador y descarta de memoria filas y propuestas |
 | `GET/POST /api/profiles`, `GET /api/profiles/{nombre}` | perfil | ver §3.4 |
 | `GET /api/audit?limit=N` | — | eventos de auditoría |
 
@@ -144,7 +148,28 @@ archivo y correlacionar por `run_id`.
 - Cambios que quitan o renombran campos: nueva versión de contrato y de `profile.version`.
 - El conector se distribuirá como paquete (`pip install` desde el repositorio) con versión semántica.
 
-## 6. Pendiente para activar la integración
+## 6. Ejemplo reproducible (disponible)
+
+`scripts/ejemplo_cauce_monitor.py` simula a Cauce Monitor con una fila ficticia y solo endpoints existentes:
+
+1. arranca el conector como proceso aparte;
+2. entrega la fila por `POST /api/data` (en memoria);
+3. `POST /api/analyze` sobre `lab_forms/03_validaciones.html` y preaprueba solo correspondencias `auto`
+   (si hay alguna `revisar`, se detiene con código 5);
+4. `POST /api/fill` y recibe el `FillReport`;
+5. guarda su registro **sin valores** (campo, método, estado, nº de caracteres, confirmaciones) con estado
+   `pendiente_confirmacion_humana`;
+6. solo si una persona escribe `ENVIAR` en la consola llama a `POST /api/submit`;
+7. `POST /api/close` para descartar los datos.
+
+```bash
+python scripts/ejemplo_cauce_monitor.py                  # interactivo, con ventana
+python scripts/ejemplo_cauce_monitor.py --no-interactivo # automático: verifica relleno y que NO hubo envío
+```
+
+Registro resultante: `evidence/ejemplo_monitor_registro.json`. Prueba: `tests/test_ejemplo_cauce_monitor.py`.
+
+## 7. Pendiente para activar la integración
 
 1. Decidir modo (CLI o HTTP) según cómo esté construido Cauce Monitor (no verificado: no se ha revisado su código).
 2. Definir dónde vive la aprobación humana (interfaz del conector o de Cauce Monitor).

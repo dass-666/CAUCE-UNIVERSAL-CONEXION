@@ -12,7 +12,7 @@ from typing import Any, Optional
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -107,6 +107,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         host = (request.headers.get("host") or "").split(":")[0].strip("[]")
         if host not in ("127.0.0.1", "localhost", "::1"):
             return JSONResponse({"detail": "Host no permitido"}, status_code=403)
+        # Los navegadores actuales envían Sec-Fetch-Site: una petición desde otra web es "cross-site"
+        if request.headers.get("sec-fetch-site") in ("cross-site", "same-site") and request.url.path.startswith("/api/"):
+            return JSONResponse({"detail": "Petición desde otro sitio rechazada"}, status_code=403)
         origin = request.headers.get("origin")
         if origin and request.url.path.startswith("/api/"):
             o = urlsplit(origin)
@@ -154,15 +157,17 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                     if body.lab not in lab_list():
                         raise HTTPException(404, "Formulario de laboratorio inexistente.")
                     url = str(request.base_url).rstrip("/") + "/lab/" + body.lab
+                    guard = UrlPolicy(allow_file=False).guard(False)   # el laboratorio es local
                 else:
                     try:
                         url = ws.policy.check(body.url, body.authorized)
+                        guard = ws.policy.guard(body.authorized)
                     except UrlNotAllowed as exc:
                         ws.audit.log("url_rejected", detail=str(exc))
                         raise HTTPException(403, str(exc))
                 s = ws.browser()
                 try:
-                    ws.analysis = ws.worker.run(lambda: (s.open_url(url), s.inspect())[1])
+                    ws.analysis = ws.worker.run(lambda: (s.open_url(url, guard), s.inspect())[1])
                 except Exception as exc:
                     raise HTTPException(502, f"No se pudo abrir la página: {str(exc).splitlines()[0][:200]}")
             else:
@@ -247,9 +252,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     def screenshot() -> FileResponse:
         if ws.session is None or not ws.session.loaded:
             raise HTTPException(400, "No hay página cargada.")
-        path = Path("logs") / "captura_actual.png"
-        ws.worker.run(ws.session.screenshot, path)
-        return FileResponse(path, media_type="image/png")
+        # Se devuelve en memoria: la captura contiene datos personales y no se guarda en disco
+        png = ws.worker.run(lambda: ws.session.page.screenshot(full_page=True))
+        return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     # ------------------------------------------------------------- perfiles
     @app.get("/api/profiles")
@@ -290,6 +295,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         with ws.lock:
             ws.close()
             ws.analysis = None
+            ws.rows = []          # los datos personales solo viven en memoria: se descartan
+            ws.proposals = []
         return {"closed": True}
 
     return app

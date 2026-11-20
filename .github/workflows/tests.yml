@@ -23,6 +23,7 @@ jobs:
         env:
           CAUCE_EVIDENCE_DIR: evidence/out
       - run: python scripts/demo_lab.py
+      - run: python scripts/ejemplo_cauce_monitor.py --no-interactivo
       - uses: actions/upload-artifact@v4
         if: always()
         with:

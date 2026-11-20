@@ -122,3 +122,23 @@ def test_cross_origin_and_foreign_host_rejected(live):
     r = c.get("/api/status", headers={"Host": "atacante.example"})
     assert r.status_code == 403
     assert c.get("/api/status").status_code == 200
+
+
+def test_ui_escapes_labels_from_imported_html(live):
+    """Una etiqueta maliciosa en el HTML importado no se ejecuta en la interfaz."""
+    import os
+    from playwright.sync_api import sync_playwright
+    base = live["base"]
+    evil = '<form><label for=x>&lt;img src=z onerror="window.top.__xss=1"&gt;</label><input id=x name=x></form>'
+    with sync_playwright() as p:
+        kw = {"executable_path": os.environ["CAUCE_BROWSER_PATH"]} if os.environ.get("CAUCE_BROWSER_PATH") else {}
+        b = p.chromium.launch(**kw)
+        pg = b.new_page()
+        pg.goto(base + "/")
+        pg.click('[data-tab="html"]')
+        pg.fill("#html-in", evil)
+        pg.click("#btn-analizar")
+        pg.wait_for_selector("#analisis-msg.ok")
+        assert "<img src=z" in pg.text_content("#campos")
+        assert pg.evaluate("window.__xss") is None
+        b.close()

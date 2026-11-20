@@ -12,6 +12,7 @@ import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urlsplit
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -44,6 +45,9 @@ class UrlPolicy:
         if scheme == "file":
             if not self.allow_file:
                 raise UrlNotAllowed("Las URLs file:// están desactivadas.")
+            # Solo documentos HTML: evita usar el navegador para abrir otros archivos locales
+            if not parts.path.lower().endswith((".html", ".htm")):
+                raise UrlNotAllowed("Solo se pueden abrir archivos locales .html o .htm.")
             return url
         if scheme not in ("http", "https"):
             raise UrlNotAllowed(f"Esquema no admitido: {scheme or '(vacío)'}. Use http, https o file.")
@@ -59,6 +63,20 @@ class UrlPolicy:
                 f"El dominio '{host}' no está en la lista de permitidos (config/allowed_hosts.json)."
             )
         return url
+
+
+    def guard(self, user_declares_authorization: bool) -> "Callable[[str], bool]":
+        """Función para `BrowserSession.open_url`: ¿se permite navegar a esta URL?
+        Bloquea redirecciones o enlaces de una página autorizada hacia destinos no autorizados."""
+        def _ok(url: str) -> bool:
+            if url.startswith(("about:", "data:", "blob:")):
+                return True
+            try:
+                self.check(url, user_declares_authorization)
+                return True
+            except UrlNotAllowed:
+                return False
+        return _ok
 
 
 def safe_url_label(url: str) -> str:

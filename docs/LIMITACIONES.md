@@ -1,6 +1,6 @@
 # Informe de limitaciones y funciones pendientes
 
-Fecha: 2026-11-20 · Versión 0.1.0
+Fecha: 2026-11-20 · Versión 0.1.0 · Revisión de seguridad: [SEGURIDAD.md](SEGURIDAD.md)
 
 ## 1. Qué está verificado y cómo
 
@@ -16,7 +16,10 @@ Fecha: 2026-11-20 · Versión 0.1.0
 | Auditoría sin datos personales | `test_audit_log_contains_no_personal_data` | Linux |
 | La interfaz funciona de extremo a extremo | `tests/test_web_app.py::test_ui_end_to_end` + `evidence/ui_revision.png` | Linux, Chromium headless |
 
-Resultado de referencia: **62 pruebas superadas**, demo `DEMO SUPERADA`, en Linux local y en GitHub Actions (`ubuntu-latest` y `windows-latest`).
+| Aislamiento del HTML importado, redirecciones, API frente a otros sitios | `tests/test_security.py` (6 pruebas) | Linux |
+| Ejemplo de integración con Cauce Monitor sin envío ni datos persistidos | `tests/test_ejemplo_cauce_monitor.py` | Linux |
+
+Resultado de referencia: **70 pruebas superadas**, demo `DEMO SUPERADA` y ejemplo `EJEMPLO SUPERADO`, en Linux local y en GitHub Actions (`ubuntu-latest` y `windows-latest`).
 
 ## 2. No verificado todavía
 

@@ -1,10 +1,10 @@
-# Demostración del conector · 2026-11-20 04:12
+# Demostración del conector · 2026-11-20 04:33
 
 Datos 100 % ficticios (`sample_data/personas_ficticias.json`). Formularios propios servidos en 127.0.0.1. La columna **Eventos recibidos** la mide la propia página con un script de instrumentación: cuenta keydown/keyup por carácter y asignaciones directas de `.value`.
 
 ## 1. Formulario HTML tradicional
 
-Archivo: `lab_forms/01_tradicional.html` · fila 1 · resultado global: **OK** · enviado: **no** · 2124 ms
+Archivo: `lab_forms/01_tradicional.html` · fila 1 · resultado global: **OK** · enviado: **no** · 2251 ms
 
 | Campo | Método | Esperado | Registrado | Estado | Caracteres enviados | Eventos recibidos por la página |
 |---|---|---|---|---|---|---|
@@ -24,7 +24,7 @@ Captura: `evidence/out/01_01_tradicional_fila1.png`
 
 ## 2. Formulario dinámico (persona física)
 
-Archivo: `lab_forms/02_dinamico.html` · fila 1 · resultado global: **OK** · enviado: **no** · 1392 ms
+Archivo: `lab_forms/02_dinamico.html` · fila 1 · resultado global: **OK** · enviado: **no** · 1549 ms
 
 | Campo | Método | Esperado | Registrado | Estado | Caracteres enviados | Eventos recibidos por la página |
 |---|---|---|---|---|---|---|
@@ -41,7 +41,7 @@ Captura: `evidence/out/02_02_dinamico_fila1.png`
 
 ## 3. Formulario dinámico (empresa)
 
-Archivo: `lab_forms/02_dinamico.html` · fila 2 · resultado global: **OK** · enviado: **no** · 1345 ms
+Archivo: `lab_forms/02_dinamico.html` · fila 2 · resultado global: **OK** · enviado: **no** · 1367 ms
 
 | Campo | Método | Esperado | Registrado | Estado | Caracteres enviados | Eventos recibidos por la página |
 |---|---|---|---|---|---|---|
@@ -57,7 +57,7 @@ Captura: `evidence/out/03_02_dinamico_fila2.png`
 
 ## 4. Validaciones y confirmaciones de correo y teléfono
 
-Archivo: `lab_forms/03_validaciones.html` · fila 1 · resultado global: **OK** · enviado: **no** · 1303 ms
+Archivo: `lab_forms/03_validaciones.html` · fila 1 · resultado global: **OK** · enviado: **no** · 1493 ms
 
 | Campo | Método | Esperado | Registrado | Estado | Caracteres enviados | Eventos recibidos por la página |
 |---|---|---|---|---|---|---|

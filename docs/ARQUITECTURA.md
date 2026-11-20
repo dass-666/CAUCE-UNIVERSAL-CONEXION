@@ -15,7 +15,8 @@ Fuente (HTML pegado / archivo / URL autorizada)
    │            └─ url_policy: solo localhost, file:// o dominios permitidos + declaración
    ▼
 Inspector (Playwright)  ── espera red + estabilidad del DOM (MutationObserver)
-   │      └─ HTML pegado: sin red (todas las peticiones abortadas)
+   │      ├─ HTML pegado: contexto sin red (route + WebSocket + offline), sin emergentes ni service workers
+   │      └─ URL: cada navegación del marco principal se valida contra url_policy
    ▼
 detector.js (en la página) → form_detector.py → AnalysisResult
    │      └─ SafetyReport: CAPTCHA / meta automation / data-human-only ⇒ bloqueado

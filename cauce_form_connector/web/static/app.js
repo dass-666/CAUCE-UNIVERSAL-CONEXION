@@ -172,6 +172,17 @@ $("#btn-enviar").addEventListener("click", async () => {
   } catch (e) { msg($("#envio-msg"), e.message, "error"); }
 });
 
+$("#btn-cerrar").addEventListener("click", async () => {
+  try {
+    await postJSON("/api/close", {});
+    state.analysis = null; state.proposals = []; state.columns = []; state.mapping = {};
+    ["#campos", "#datos-preview", "#resultados", "#captura"].forEach((s) => ($(s).innerHTML = ""));
+    $("#row-sel").innerHTML = ""; $("#data-file").value = "";
+    renderMapping();
+    msg($("#cerrar-msg"), "Navegador cerrado y datos descartados de la memoria.", "ok");
+  } catch (e) { msg($("#cerrar-msg"), e.message, "error"); }
+});
+
 $("#btn-audit").addEventListener("click", async () => {
   const ev = await api("/api/audit");
   $("#audit").textContent = ev.map((e) => JSON.stringify(e)).join("\n");

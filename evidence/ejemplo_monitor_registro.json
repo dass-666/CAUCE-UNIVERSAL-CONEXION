@@ -1,0 +1,70 @@
+{
+  "caso": "demo-0001",
+  "fecha": "2026-11-20T04:33:23+00:00",
+  "formulario": "http://127.0.0.1/lab/03_validaciones.html",
+  "resultado_conector": "ok",
+  "detenido_antes_de_enviar": true,
+  "campos": [
+    {
+      "campo": "alta::nombre_completo",
+      "metodo": "teclado_secuencial",
+      "estado": "ok",
+      "caracteres": 22
+    },
+    {
+      "campo": "alta::email",
+      "metodo": "teclado_secuencial",
+      "estado": "ok",
+      "caracteres": 26
+    },
+    {
+      "campo": "alta::email_confirmacion",
+      "metodo": "teclado_secuencial",
+      "estado": "ok",
+      "caracteres": 26
+    },
+    {
+      "campo": "alta::telefono",
+      "metodo": "teclado_secuencial",
+      "estado": "ok_normalizado",
+      "caracteres": 10
+    },
+    {
+      "campo": "alta::telefono_confirmacion",
+      "metodo": "teclado_secuencial",
+      "estado": "ok_normalizado",
+      "caracteres": 10
+    },
+    {
+      "campo": "alta::codigo_postal",
+      "metodo": "teclado_secuencial",
+      "estado": "ok",
+      "caracteres": 5
+    },
+    {
+      "campo": "alta::ciudad",
+      "metodo": "teclado_secuencial",
+      "estado": "ok",
+      "caracteres": 16
+    },
+    {
+      "campo": "alta::acepta_privacidad",
+      "metodo": "check",
+      "estado": "ok",
+      "caracteres": 0
+    }
+  ],
+  "confirmaciones": [
+    {
+      "campo": "alta::email_confirmacion",
+      "coinciden": true
+    },
+    {
+      "campo": "alta::telefono_confirmacion",
+      "coinciden": true
+    }
+  ],
+  "estado": "pendiente_confirmacion_humana",
+  "confirmado_por_humano": false,
+  "envio_en_auditoria": false
+}

@@ -7,6 +7,7 @@ tests/test_data_adapter.py::test_json_wrapper_object PASSED
 tests/test_data_adapter.py::test_invalid_inputs[a.json-[]] PASSED
 tests/test_data_adapter.py::test_invalid_inputs[a.csv-a,b\n] PASSED
 tests/test_data_adapter.py::test_invalid_inputs[a.pdf-x] PASSED
+tests/test_ejemplo_cauce_monitor.py::test_example_runs_without_submit_and_without_personal_data PASSED
 tests/test_html_analyzer.py::test_traditional_form_fields_types_labels_and_validations PASSED
 tests/test_html_analyzer.py::test_confirmation_pairs_are_detected PASSED
 tests/test_html_analyzer.py::test_confirmation_heuristic_without_hints PASSED
@@ -37,6 +38,12 @@ tests/test_matcher.py::test_confirmation_field_reuses_original_column PASSED
 tests/test_matcher.py::test_manual_override PASSED
 tests/test_matcher.py::test_optional_resolver_is_only_a_suggestion PASSED
 tests/test_matcher.py::test_lab_forms_map_with_sample_columns PASSED
+tests/test_security.py::test_imported_html_cannot_reach_local_services PASSED
+tests/test_security.py::test_imported_html_cannot_navigate_away PASSED
+tests/test_security.py::test_authorized_page_cannot_redirect_to_unauthorized_host PASSED
+tests/test_security.py::test_file_urls_limited_to_html PASSED
+tests/test_security.py::test_cross_site_fetch_metadata_rejected PASSED
+tests/test_security.py::test_screenshot_not_persisted_and_close_discards_data PASSED
 tests/test_sequential_typing.py::test_every_character_produces_keydown_input_keyup PASSED
 tests/test_sequential_typing.py::test_existing_content_is_cleared_with_keyboard PASSED
 tests/test_sequential_typing.py::test_newlines_never_press_enter_in_single_line_inputs PASSED
@@ -60,4 +67,5 @@ tests/test_web_app.py::test_api_static_html_and_bad_data PASSED
 tests/test_web_app.py::test_audit_log_contains_no_personal_data PASSED
 tests/test_web_app.py::test_ui_end_to_end PASSED
 tests/test_web_app.py::test_cross_origin_and_foreign_host_rejected PASSED
-============================= 62 passed in 43.00s ==============================
+tests/test_web_app.py::test_ui_escapes_labels_from_imported_html PASSED
+============================= 70 passed in 59.54s ==============================

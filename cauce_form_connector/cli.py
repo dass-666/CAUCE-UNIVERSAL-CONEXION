@@ -31,9 +31,10 @@ from .url_policy import UrlNotAllowed, UrlPolicy
 def _open(session: BrowserSession, args: argparse.Namespace, policy: UrlPolicy) -> None:
     if args.html:
         # Un archivo local se abre por file:// para que carguen sus CSS/JS relativos
-        session.open_url(Path(args.html).resolve().as_uri())
+        uri = policy.check(Path(args.html).resolve().as_uri(), False)
+        session.open_url(uri, policy.guard(False))
     else:
-        session.open_url(policy.check(args.url, args.authorized))
+        session.open_url(policy.check(args.url, args.authorized), policy.guard(args.authorized))
 
 
 def _emit(obj: Any) -> None:
