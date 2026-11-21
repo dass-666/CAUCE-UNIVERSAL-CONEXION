@@ -1,5 +1,7 @@
 # Contrato de integración futura con Cauce Monitor
 
+> **Obsoleto para la integración con Monitor.** Ver [`CONTRATO_CAUCE_CONECTOR_V1.md`](CONTRATO_CAUCE_CONECTOR_V1.md), que implementa el contrato `cauce.conector.v1` de Monitor. Este borrador se conserva por historia y describe la API HTTP/CLI de v0.1.0.
+
 Versión del contrato: **1** (borrador). Estado: **propuesta**, revisada contra el código de v0.1 (2026-11-20). Cauce Monitor no se ha modificado y esta
 integración no está implementada en su lado. Lo que sí existe hoy en el conector está marcado como
 «disponible»; lo que falta, como «pendiente».

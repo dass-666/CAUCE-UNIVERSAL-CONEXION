@@ -1,0 +1,6 @@
+origen: https://github.com/dass-666/Cauce-monitor-engine
+rama: claude/lab-puerto-estable
+commit: 9e7f88d
+sha256 contrato.py: d8aa00ae8a3dbb92a78e0588154d4f50865a3df38699a4ce07f761de437adb46
+sha256 respuesta.schema.json: 6af7137f4555b950f3d731e68436c7adccd26b06408cf35b223d1b69fcc7a9ef
+sha256 solicitud.schema.json: 4a7921cce21cf882ab71063345d89d2c0156b1b3b42d425966fe7f0676ed3775

@@ -29,6 +29,7 @@ ALLOWED_KEYS = {
     "reasons", "field_key", "type", "method", "status", "chars", "column", "confidence",
     "mapping_status", "ok", "duration_ms", "count", "profile", "detail", "warnings",
     "rows", "columns", "format", "stopped_before_submit", "submit_buttons", "confirmations_ok",
+    "submit_observed", "solicitud_id", "codigo", "estado",
 }
 
 

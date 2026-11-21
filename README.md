@@ -34,7 +34,8 @@ revise las correspondencias y pulse «Rellenar carácter por carácter».
 python -m pytest -q                 # 70 pruebas (unitarias, navegador, interfaz, seguridad)
 python scripts/demo_lab.py          # genera evidence/out/informe_demo.md y capturas
 python scripts/demo_lab.py --headed # lo mismo viendo el navegador escribir
-python scripts/ejemplo_cauce_monitor.py --no-interactivo  # ejemplo de integración con Cauce Monitor
+python scripts/ejemplo_cauce_monitor.py --no-interactivo  # ejemplo de integración con Cauce Monitor (API local, v0.1.0)
+python -m cauce_form_connector preparar < solicitud.json   # contrato cauce.conector.v1: docs/CONTRATO_CAUCE_CONECTOR_V1.md
 python scripts/recorrido_ui.py      # recorrido de la interfaz paso a paso, con capturas
 ```
 

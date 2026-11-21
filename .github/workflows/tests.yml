@@ -11,6 +11,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # Copia de SOLO LECTURA del contrato de Cauce Monitor (commit fijado) para la prueba cruzada
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/Cauce-monitor-engine
+          ref: 9e7f88dd19f3e3bbf5c0c1e4476afbd2ca3bf76a
+          path: monitor-contrato
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -22,6 +28,7 @@ jobs:
       - run: python -m pytest -q
         env:
           CAUCE_EVIDENCE_DIR: evidence/out
+          MONITOR_REPO: ${{ github.workspace }}/monitor-contrato
       - run: python scripts/demo_lab.py
       - run: python scripts/ejemplo_cauce_monitor.py --no-interactivo
       - run: python scripts/recorrido_ui.py --headless

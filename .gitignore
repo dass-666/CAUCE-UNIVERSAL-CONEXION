@@ -8,3 +8,4 @@ evidence/out/
 *.egg-info/
 .pytest_cache/
 .pw-browsers/
+state/
