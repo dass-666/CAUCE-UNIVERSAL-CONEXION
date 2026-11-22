@@ -1,0 +1,8 @@
+{
+  "expediente_ref": "exp_demo_0001",
+  "titular": {"nombre_completo": "Mariana Zzejemplo Prueba", "curp": "NO-SE-USA-AUNQUE-ESTE-EN-EL-EXPEDIENTE"},
+  "contacto": {"correo": "mariana.zz@example.com", "telefono": "5587654321"},
+  "domicilio": {"cp": "06700", "ciudad": "Ciudad de México", "calle": "Calle Falsa 123"},
+  "consentimientos": {"privacidad": true},
+  "notas_internas": "Este texto jamás debe llegar al formulario."
+}

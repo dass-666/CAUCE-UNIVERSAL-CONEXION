@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "formulario_id": "frm_lab_validaciones",
+  "nombre": "Laboratorio 03 - alta con validaciones (ficticio)",
+  "url": "http://127.0.0.1:{puerto}/03_validaciones.html",
+  "perfil": "perfil_lab_validaciones",
+  "campos_formulario": {
+    "nombre": "alta::nombre_completo",
+    "email": "alta::email",
+    "email_confirmacion": "alta::email_confirmacion",
+    "telefono": "alta::telefono",
+    "telefono_confirmacion": "alta::telefono_confirmacion",
+    "codigo_postal": "alta::codigo_postal",
+    "ciudad": "alta::ciudad",
+    "acepta_privacidad": "alta::acepta_privacidad"
+  },
+  "campos_expediente": {
+    "nombre": "titular.nombre_completo",
+    "email": "contacto.correo",
+    "email_confirmacion": "contacto.correo",
+    "telefono": "contacto.telefono",
+    "telefono_confirmacion": "contacto.telefono",
+    "codigo_postal": "domicilio.cp",
+    "ciudad": "domicilio.ciudad",
+    "acepta_privacidad": "consentimientos.privacidad"
+  }
+}

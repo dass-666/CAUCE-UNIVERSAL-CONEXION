@@ -78,6 +78,17 @@ def main(argv: list[str] | None = None) -> int:
     p_ap.add_argument("--aprobado-por", required=True, help="rev_... (referencia opaca de quien revisó)")
     p_ap.add_argument("--campos", required=True,
                       help="archivo JSON {nombre_logico: clave_de_campo} revisado por una persona")
+    p_au = sub.add_parser("autorrellenar", help="Monitor -> conector: expediente + perfil de formulario -> ventana visible "
+                                                "rellenada y verificada, sin enviar")
+    p_au.add_argument("--formulario", required=True, help="perfil de formulario configurable (config/formularios/*.json)")
+    p_au.add_argument("--expediente", required=True, help="JSON del expediente (el conector solo lee los campos del perfil)")
+    p_au.add_argument("--url", help="URL del formulario (sustituye a la del perfil)")
+    p_au.add_argument("--puerto", type=int, help="puerto local para formularios de laboratorio ({puerto})")
+    p_au.add_argument("--aprobar-perfil", metavar="REV_ID", help="paso humano: aprobar/actualizar el perfil (rev_xxx) "
+                                                                 "tras revisar los campos del perfil de formulario")
+    p_au.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
+    p_au.add_argument("--espera-s", type=int, default=300, help="segundos que se mantiene la ventana para la revisión")
+    p_au.add_argument("--json", action="store_true", help="salida JSON (respuesta del contrato + informe) en vez de texto")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")
     source(p_fi)
     p_fi.add_argument("--data", required=True)
@@ -94,6 +105,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "preparar":
         from .integracion import principal
         return principal()
+
+    if args.cmd == "autorrellenar":
+        return _autorrellenar(args, settings)
 
     if args.cmd == "ui":
         from .web.app import main as ui_main
@@ -155,6 +169,28 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if "session" in locals() and session is not None:
             session.close()
+
+
+def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
+    from . import puente_monitor as P
+    try:
+        cfg = P.cargar_formulario(args.formulario, url=args.url, puerto=args.puerto)
+        expediente = json.loads(Path(args.expediente).read_text(encoding="utf-8"))
+        if args.aprobar_perfil:
+            info = P.aprobar_perfil(cfg, settings, aprobado_por=args.aprobar_perfil, autorizado=args.authorized)
+            print(f"Perfil aprobado: {info['perfil']} (sha256 {info['perfil_sha256'][:12]}…, firma {info['firma']})", file=sys.stderr)
+        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s)
+    except (P.ConfigInvalida, OSError, ValueError) as exc:
+        print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)
+        return 6
+    except UrlNotAllowed as exc:
+        print(f"URL no autorizada: {exc}", file=sys.stderr)
+        return 3
+    if args.json:
+        _emit({"salida": r["salida"], "respuesta": r["respuesta"], "informe": r["informe"]})
+    else:
+        print(P.texto_informe(r["informe"]))
+    return r["salida"]
 
 
 def _aprobar_perfil(args: argparse.Namespace, settings: Any, policy: UrlPolicy) -> int:
