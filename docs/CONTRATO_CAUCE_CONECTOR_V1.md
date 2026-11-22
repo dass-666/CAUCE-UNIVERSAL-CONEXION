@@ -102,3 +102,14 @@ No verificado o con límites **[P]**:
 2. **Prueba automática** (ya incluida): `MONITOR_REPO=<ruta a Cauce-monitor-engine> python -m pytest tests/test_integracion_contrato.py -k monitor`. Usa el `Registro` real de Monitor: crea → autoriza → lanza → `recibir(respuesta, código de salida)` y comprueba que el estado final es `CADUCADA`, `CON_INCIDENCIAS` y `RECHAZADA` según el caso. La CI del conector lo ejecuta con el commit fijado.
 3. **Prueba manual con ventana visible** (laboratorio, datos ficticios): sirva `lab_forms/` en `127.0.0.1`, ejecute `aprobar-perfil`, construya una solicitud con `perfil_sha256` y firma impresos, lance `preparar` con `espera_revision_max_s: 120` **sin** `CAUCE_HEADLESS`, revise la ventana, ciérrela y compruebe `preparado_revisado_sin_envio`. Con el lanzador de Monitor (`puede_lanzar()` sigue en `False` por diseño) esto aún no es posible: hoy se lanza a mano o con un script.
 4. Para comparar con el simulador de Monitor: `python -m monitoreo.conector.simulador < solicitud.json` produce el mismo esquema de respuesta; las diferencias esperables son `duracion_ms` y la asignación de estados de §2.
+
+## 8. Autorrellenado desde un expediente (puente Monitor → conector)
+
+Capa fina sobre `preparar` (no duplica el motor): `cauce_form_connector/puente_monitor.py`, subcomando `autorrellenar` y `scripts/recorrido_monitor.py`.
+
+- **Perfil de formulario configurable** (`config/formularios/<id>.json`): `url`, `formulario_id`, `perfil`, `campos_formulario` (nombre lógico → clave de campo del formulario) y `campos_expediente` (nombre lógico → ruta con puntos en el expediente, p. ej. `contacto.correo`). Añadir un formulario nuevo = un JSON nuevo, sin tocar código.
+- **Minimización:** solo se leen del expediente las rutas declaradas; lo demás nunca se toca [V: `test_solo_se_extraen_campos_declarados`]. Un dato vacío o ausente no se inventa: el campo queda para la persona y se informa como «sin dato» [V].
+- **Aprobación humana del perfil:** `autorrellenar` no corre si no hay perfil aprobado (salida 6). Aprobar es explícito: `--aprobar-perfil rev_xxx` tras revisar `campos_formulario` frente al formulario real [V].
+- **Informe sin valores:** etiqueta del campo, estado (`ok`, `ok_normalizado`, `diferente`, `invalido`), nº de caracteres y confirmaciones (correo/teléfono repetido). Los errores de validación del propio sitio se reflejan como `invalido` solo cuando la página los expone al conector.
+- **Uso:** `python -m cauce_form_connector autorrellenar --formulario config/formularios/lab_validaciones.json --expediente sample_data/expediente_ficticio.json --puerto <p> [--aprobar-perfil rev_xxx] [--espera-s 300] [--json]`. Ventana visible; no envía; la persona revisa y cierra.
+- **Pendiente [P]:** el formato real de expediente de Monitor (aquí es un JSON de ejemplo), el lanzador de Monitor (`puede_lanzar()` sigue en `False`), y validación física en Windows.

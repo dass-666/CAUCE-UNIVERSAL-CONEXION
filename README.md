@@ -51,6 +51,16 @@ python -m cauce_form_connector fill --html lab_forms/03_validaciones.html --data
 
 Salida en JSON por stdout. Códigos de salida: `0` correcto, `2` terminado con incidencias, `3` URL no autorizada, `1` error.
 
+## Autorrellenado desde un expediente (Cauce Monitor)
+
+```bash
+python scripts/recorrido_monitor.py          # demo visible con datos ficticios; no envía
+python -m cauce_form_connector autorrellenar --formulario config/formularios/lab_validaciones.json \
+    --expediente sample_data/expediente_ficticio.json --puerto 8765 --aprobar-perfil rev_demo
+```
+
+Detalle y límites en [docs/CONTRATO_CAUCE_CONECTOR_V1.md](docs/CONTRATO_CAUCE_CONECTOR_V1.md) §8.
+
 ## Estructura
 
 | Componente | Archivo |
