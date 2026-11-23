@@ -55,6 +55,11 @@ El dominio debe estar antes en `config\allowed_hosts.json`. Resultados en `infor
 `instalar_windows.bat` usa el lanzador `py` si existe y, si no, `python` (3.10 o superior). Esto se prueba en
 GitHub Actions en un Windows sin `py`.
 
+## Recorrido Monitor → Forms (datos sintéticos)
+
+Doble clic en **`recorrido_monitor_windows.bat`**: sirve los formularios de laboratorio, aprueba el perfil del lab 06
+(con tablas de equivalencias) y abre una ventana rellenada y verificada. No envía nada; ciérrela al terminar.
+
 ## Pruebas y demostración
 
 Doble clic en **`probar_windows.bat`**: ejecuta `pytest` y `scripts\demo_lab.py`.
