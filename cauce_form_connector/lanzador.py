@@ -293,8 +293,9 @@ class App:
                 self.ultimo_analisis = salida
                 self.escribir("Pulse «Revisar perfil» para revisar y descargar el perfil.")
                 if (salida / "diagnostico_controles.json").exists():
-                    self.escribir("Si algún desplegable no se reconoció, envíe «diagnostico_controles.json» de esa carpeta: "
-                                  "describe la estructura de los controles, sin datos personales.")
+                    self.escribir("«diagnostico_controles.md» de esa carpeta explica por qué cada control se reconoció o "
+                                  "se descartó. Para compartirlo use «diagnostico_controles_anonimo.json»: no lleva URL, "
+                                  "rótulos ni textos de opciones.")
 
         previo = perfil_previo_de(url, [(self.datos / "formularios", "*.json"), (Path.home() / "Downloads", "perfil_*.json")])
         if previo:

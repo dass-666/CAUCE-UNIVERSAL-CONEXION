@@ -76,6 +76,8 @@ class BrowserSession:
         self._init_scripts: list[str] = []
         self._nav_guard: Optional[Callable[[str], bool]] = None
         self.blocked_requests = 0
+        # clave -> opciones de los cuadros de texto que se comprobó (o se aprobó) que abren una lista
+        self.listas_texto: dict[str, list] = {}
         # Solo informativo (analizador): HTML tal como lo sirvió el sitio, antes de ejecutar JavaScript
         self.initial_html: Optional[str] = None
         self.last_settle_changes = 0
@@ -237,6 +239,12 @@ class BrowserSession:
 
     def inspect(self) -> AnalysisResult:
         result = build_analysis(self.raw_scan(), self.source or "url", self.source_label, engine="browser")
+        conocidas = getattr(self, "listas_texto", None)
+        if conocidas:                 # cuadros de texto ya comprobados (o aprobados en el perfil) como listas
+            from .listas import TIPOS_TEXTO, promover
+            for f in result.all_fields:
+                if f.key in conocidas and f.tag == "input" and f.type in TIPOS_TEXTO:
+                    promover(f, conocidas[f.key])
         if len(self.page.frames) > 1:
             result.warnings.append(
                 f"La página contiene {len(self.page.frames) - 1} iframe(s); los campos dentro de iframes "

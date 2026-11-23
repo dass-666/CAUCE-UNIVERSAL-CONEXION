@@ -102,6 +102,22 @@
       const v = el.getAttribute(a);
       if (v) out.push(v);
     }
+    // Formato configurado en el componente de calendario del propio campo (lectura de su configuración, sin tocarlo)
+    try {
+      const $ = window.jQuery;
+      if ($ && $.fn && $.fn.datepicker && /hasDatepicker/.test(el.className)) {       // jQuery UI: «yy» es el año de 4 cifras
+        const f = $(el).datepicker("option", "dateFormat");
+        if (typeof f === "string" && !/(^|[^y])y([^y]|$)/.test(f)) out.push(f.replace(/yy/g, "yyyy").replace(/\bd\b/g, "dd").replace(/\bm\b/g, "mm"));
+      } else if ($ && $.fn) {
+        const d = $(el).data("datepicker") || $(el).data("DateTimePicker");
+        const f = d && ((d.o && d.o.format) || (typeof d.format === "function" ? d.format() : d.format));
+        if (typeof f === "string") out.push(f);
+      }
+      if (el._flatpickr && el._flatpickr.config && typeof el._flatpickr.config.dateFormat === "string") out.push(el._flatpickr.config.dateFormat);
+      const M = window.M;
+      const mi = M && M.Datepicker && M.Datepicker.getInstance && M.Datepicker.getInstance(el);
+      if (mi && mi.options && typeof mi.options.format === "string") out.push(mi.options.format);
+    } catch (e) {}
     const ids = (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
     for (const id of ids) { const t = textOf(document.getElementById(id)); if (t) out.push(t); }
     const nx = el.nextElementSibling;
@@ -222,6 +238,10 @@
       if (t) return t;
     }
     if (el.getAttribute("aria-label")) return clean(el.getAttribute("aria-label"));
+    if (root.nextElementSibling && root.nextElementSibling.tagName === "LABEL" && !root.nextElementSibling.getAttribute("for")) {
+      t = textOf(root.nextElementSibling);      // etiqueta flotante colocada después del control
+      if (t && t.length < 120) return t;
+    }
     for (let n = root, k = 0; n && k < 3 && n.tagName !== "FORM" && n !== document.body; n = n.parentElement, k++) {
       t = porFor(n);
       if (t) return t;
@@ -293,6 +313,9 @@
     Array.from(raiz.querySelectorAll("input[type=hidden][name]")).forEach((h) => {
       const c = h.parentElement;
       if (!c || !libre(c) || c.querySelector("select") || !visibleReal(c)) return;
+      // Si lo que la persona usa es un cuadro de texto con nombre, el control es ese cuadro: se comprueba aparte si
+      // abre una lista (sondeo de cuadros de texto), en vez de darlo por lista solo por la clase de su envoltorio.
+      if (Array.from(c.querySelectorAll("input:not([type=hidden])")).some((x) => visibleReal(x) && x.getAttribute("name") && /^(text|search|)$/i.test(x.getAttribute("type") || ""))) return;
       const t = Array.from(c.querySelectorAll("[class*=toggle i],[class*=trigger i],[class*=selected i],[class*=display i],[class*=current i],button")).filter(visibleReal)[0]
         || Array.from(c.children).find((x) => x !== h && !/^(UL|OL|INPUT|LABEL)$/.test(x.tagName) && visibleReal(x));
       if (!t || !(DROP_RE.test(cls(c)) || DROP_RE.test(cls(t)))) return;

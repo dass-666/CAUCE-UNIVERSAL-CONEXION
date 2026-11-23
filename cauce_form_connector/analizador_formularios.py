@@ -199,12 +199,14 @@ def analizar_url(url: str, *, autorizado: bool, settings: Optional[Settings] = N
         extra = s.page.evaluate(EXTRA_JS, [f.selector for f in analisis.all_fields])
         extra["pagina"]["mutaciones_al_cargar"] = s.last_settle_changes
         extra["pagina"]["navegaciones_bloqueadas"] = s.blocked_requests
+        explicaciones: list = []
         if not analisis.safety.blocked:   # listas JavaScript que solo muestran sus opciones al abrirlas (clic normal)
-            from .listas import completar_opciones
+            from .listas import completar_opciones, sondear_textos
+            explicaciones = sondear_textos(s, analisis.all_fields)   # cuadros de texto que en realidad abren una lista
             completar_opciones(s.page, analisis.all_fields)
         try:                              # evidencia de cómo están hechos los controles (lo último: puede abrir listas)
             from . import diagnostico_controles as DC
-            diagnostico = DC.recoger(s, analisis)
+            diagnostico = DC.recoger(s, analisis, explicaciones)
         except Exception as exc:
             diagnostico = {"formato": "cauce.diagnostico_controles.v1", "errores": [type(exc).__name__]}
         inicial = s.initial_html
@@ -531,6 +533,8 @@ def guardar(inf: dict, carpeta: str | Path) -> dict[str, str]:
         rutas["diagnostico_md"] = d / "diagnostico_controles.md"
         rutas["diagnostico_json"].write_bytes(b(json.dumps(diag, ensure_ascii=False, indent=2) + "\n"))
         rutas["diagnostico_md"].write_bytes(b(DC.resumen_markdown(diag)))
+        rutas["diagnostico_anonimo"] = d / "diagnostico_controles_anonimo.json"
+        rutas["diagnostico_anonimo"].write_bytes(b(json.dumps(DC.anonimizar(diag), ensure_ascii=False, indent=2) + "\n"))
     rutas["informe_json"].write_bytes(b(json.dumps(inf, ensure_ascii=False, indent=2) + "\n"))
     rutas["informe_md"].write_bytes(b(informe_markdown(inf)))
     rutas["perfil"].write_bytes(b(json.dumps(inf["perfil_borrador"], ensure_ascii=False, indent=2) + "\n"))
@@ -619,12 +623,16 @@ $("#filas").innerHTML = filas.map((c, i) => {
     const ant = usaPv && pv.eq && pv.eq.campo_monitor === eq.campo_monitor ? (pv.eq.valores || {}) : {};
     const existe = new Set(eq.opciones_formulario.map((o) => String(o.valor)));
     const opsF = (sel) => ['<option value="">— sin fila —</option>'].concat(eq.opciones_formulario.map((o) => `<option value="${esc(o.valor)}" ${sel !== undefined && String(o.valor) === String(sel) ? "selected" : ""}>${esc(o.etiqueta)} (${esc(o.valor)})</option>`)).join("");
+    const sinOps = eq.opciones_formulario.length === 0;   // lista que solo responde al escribir: se anota el texto exacto
+    const celda = (k, cd) => sinOps
+      ? `<input type="text" size="28" placeholder="texto exacto de la opción en el formulario" data-eqv="${i}-${k}" data-cod="${esc(cd)}" value="${esc(cd !== "" && ant[cd] !== undefined ? ant[cd] : "")}">`
+      : `<select data-eqv="${i}-${k}" data-cod="${esc(cd)}">${opsF(cd !== "" ? ant[cd] : undefined)}</select>`;
     const fijos = Array.isArray(eq.codigos_monitor);
     const cods = fijos ? eq.codigos_monitor : Object.keys(ant).concat(["", "", ""]);
-    const perdidas = Object.keys(ant).filter((k) => !existe.has(String(ant[k]))).length;
+    const perdidas = sinOps ? 0 : Object.keys(ant).filter((k) => !existe.has(String(ant[k]))).length;
     tabla = `<tr class="eq"><td></td><td colspan="7"><b>Tabla de equivalencias</b> (${esc(eq.campo_monitor)} de Monitor → opción del formulario). Solo las filas llenas se usan; un código sin fila lo completa la persona.` +
       (Object.keys(ant).length ? ` <span class="mut">Se conservaron ${Object.keys(ant).length - perdidas} equivalencias del perfil aprobado${perdidas ? `; ${perdidas} ya no tienen su opción en el formulario y quedan sin fila` : ""}.</span>` : "") + `<br>` +
-      cods.map((cd, k) => `<div>${fijos ? `<code>${esc(cd)}</code>` : `<input type="text" placeholder="código de Monitor" data-eqc="${i}-${k}" value="${esc(cd)}">`} → <select data-eqv="${i}-${k}" data-cod="${esc(cd)}">${opsF(cd !== "" ? ant[cd] : undefined)}</select></div>`).join("") + `</td></tr>`;
+      cods.map((cd, k) => `<div>${fijos ? `<code>${esc(cd)}</code>` : `<input type="text" placeholder="código de Monitor" data-eqc="${i}-${k}" value="${esc(cd)}">`} → ${celda(k, cd)}</div>`).join("") + (sinOps ? `<div class="mut">Esta lista solo muestra sus opciones al escribir. Anote el texto tal como aparece en el formulario: al rellenar solo se acepta una opción idéntica, y si no existe el campo queda para la persona.</div>` : "") + `</td></tr>`;
   }
   const marcado = c.decision === "automatico" || (usaPv && c.decision !== "ignorado" && !bloqueado);
   const motivo = usaPv ? "configuración conservada del perfil aprobado para esta URL · " + c.motivo : c.motivo;
@@ -659,7 +667,7 @@ function perfil() {
         const k = sel.dataset.eqv.split("-")[1];
         const inp = document.querySelector(`[data-eqc="${i}-${k}"]`);
         const cod = (inp ? inp.value : sel.dataset.cod).trim();
-        if (cod && sel.value) valores[cod] = sel.value;
+        if (cod && sel.value.trim()) valores[cod] = sel.value.trim();
       });
       if (!Object.keys(valores).length) return;
       base.equivalencias[c.nombre_logico] = {campo_monitor: ruta, valores};

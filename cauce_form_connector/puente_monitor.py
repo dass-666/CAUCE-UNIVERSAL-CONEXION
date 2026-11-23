@@ -215,7 +215,8 @@ def aprobar_perfil(cfg: dict, settings: Settings, *, aprobado_por: str, autoriza
         s.open_url(policy.check(cfg["url"], autorizado), policy.guard(autorizado))
         analisis = s.inspect()
         if not analisis.safety.blocked:
-            from .listas import completar_opciones
+            from .listas import completar_opciones, sondear_textos
+            sondear_textos(s, analisis.all_fields)       # cuadros de texto que en realidad abren una lista
             completar_opciones(s.page, analisis.all_fields)
     if analisis.safety.blocked:
         raise ConfigInvalida("La página exige intervención humana; no se aprueba un perfil sobre ella.")
@@ -224,7 +225,10 @@ def aprobar_perfil(cfg: dict, settings: Settings, *, aprobado_por: str, autoriza
     for logico, t in equiv.items():
         campo = por_clave.get(cfg["campos_formulario"][logico])
         opciones = {o.value for o in campo.options} if campo else set()
-        if not campo or set(t["valores"].values()) - opciones:
+        # Una lista que solo muestra opciones al escribir no se puede comprobar aquí: su texto se verifica al rellenar
+        # (solo se acepta una opción idéntica).
+        al_escribir = bool(campo) and campo.type == "custom-select" and campo.tag == "input" and not campo.options
+        if not campo or (not al_escribir and set(t["valores"].values()) - opciones):
             raise ConfigInvalida(f"La tabla de «{logico}» usa valores que no son opciones del formulario actual.")
     ruta, sha = ProfileStore(settings.profiles_dir).save_integration(
         cfg["perfil"], analisis, cfg["campos_formulario"], formulario_id=cfg["formulario_id"],

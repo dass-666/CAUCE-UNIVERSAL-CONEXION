@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import re
+
 from . import listas as LJ
 
 FORMATO = "cauce.diagnostico_controles.v1"
@@ -128,13 +130,25 @@ NUEVOS_JS = "(el) => {" + LJ.COMUN_JS + r"""
 }"""
 
 
-def recoger(sesion: Any, analisis: Any) -> dict:
+def recoger(sesion: Any, analisis: Any, explicaciones: Any = None) -> dict:
     """Devuelve el diagnóstico. No lanza: si algo falla, lo anota en `errores`."""
     page = sesion.page
     out: dict[str, Any] = {"formato": FORMATO, "errores": [], "nota": (
         "Solo estructura de la página; sin datos de personas, cookies ni parámetros de URL. Los textos son rótulos y "
         "opciones de la propia página.")}
     campos = analisis.all_fields
+    # Por qué cada control quedó como quedó: los cuadros de texto traen la explicación de su sondeo; el resto, su vía.
+    por_clave = {e["clave"]: e for e in (explicaciones or [])}
+    out["explicaciones"] = []
+    for f in campos:
+        e = dict(por_clave.get(f.key) or {"clave": f.key, "tipo_detectado": f.type, "pasos": []})
+        e["tipo_final"] = f.type
+        if "motivo" not in e:
+            e["decision"] = "lista" if f.type == "custom-select" else f.type
+            e["motivo"] = ("reconocida por su estructura en la página (select sustituido, ARIA, campo oculto o clase de "
+                           f"lista); {len(f.options)} opciones" if f.type == "custom-select" else
+                           f"control nativo de tipo «{f.type}»: no necesita sondeo")
+        out["explicaciones"].append(e)
     out["campos_reconocidos"] = [{"clave": f.key, "tipo": f.type, "etiqueta": f.label[:60], "visible": f.visible,
                                   "editable": f.fillable, "opciones": len(f.options)} for f in campos]
     try:
@@ -185,6 +199,18 @@ def resumen_markdown(d: dict) -> str:
         for c in d["candidatos"]:
             L += [f"### {c['n']}. {c['elemento']} — {c['motivo']}", f"- antes: {c['anterior']} · ancestros: {' < '.join(c['ancestros'])}",
                   "```html", c["esqueleto"], "```"]
+    if d.get("explicaciones"):
+        L += ["## Por qué cada control se reconoció o se descartó", ""]
+        for e in d["explicaciones"]:
+            pasos = "; ".join(f"{p.get('accion')}: {p.get('opciones', 0)} opciones, {p.get('elementos_nuevos', 0)} elementos nuevos"
+                              + (" (calendario)" if p.get("calendario") else "") for p in e.get("pasos", []) if p.get("accion") != "error")
+            sen = e.get("senales") or {}
+            indicios = ", ".join(sen.get("fuertes", [])) or "ninguno"
+            L.append(f"- **{e['clave']}** — detectado «{e.get('tipo_detectado')}», queda como «{e.get('tipo_final')}». {e.get('motivo', '')}"
+                     + (f" · sondeo: {pasos}" if pasos else "") + (f" · indicios: {indicios}" if sen else "")
+                     + (f" · eventos: {', '.join(sen.get('eventos', [])[:8])}" if sen.get("eventos") else "")
+                     + (" · AVISO: el sondeo cambió el contenido del campo" if e.get("valor_alterado_por_el_sondeo") else ""))
+        L.append("")
     if d.get("sondeos"):
         L.append("## Sondeos (qué aparece al hacer clic)")
         for s in d["sondeos"]:
@@ -192,3 +218,47 @@ def resumen_markdown(d: dict) -> str:
                      f"{s.get('nuevos_visibles')} elementos nuevos, {s.get('opciones_reconocidas')} reconocidos como opciones; "
                      f"foco en {s.get('foco') or '—'}"))
     return "\n".join(L) + "\n"
+
+
+_TEXTOS = {"etiqueta", "texto", "anterior", "titulo", "titulo_documento", "siguiente_texto"}
+_QUITAR = {"url", "host"}
+_ATRIBUTOS_SEGUROS = ("role", "type", "tabindex", "readonly", "disabled", "inputmode", "maxlength", "contenteditable",
+                      "aria-expanded", "aria-haspopup", "aria-autocomplete", "aria-hidden", "aria-disabled")
+
+
+def _sin_texto(html: str) -> str:
+    """Quita del esqueleto HTML los textos visibles y los valores de atributos que podrían nombrar a alguien."""
+    html = re.sub(r">([^<>]+)<", lambda m: ">" + ("…" if m.group(1).strip() else "") + "<", html)
+    def attr(m: "re.Match") -> str:
+        return m.group(0) if m.group(1) in _ATRIBUTOS_SEGUROS else f' {m.group(1)}="…"'
+    return re.sub(r' ([a-zA-Z_:][-a-zA-Z0-9_:.]*)="[^"]*"', attr, html)
+
+
+def anonimizar(d: Any, clave: str = "") -> Any:
+    """Copia del diagnóstico para compartir: sin URL ni dominios, sin título, sin rótulos ni textos de opciones y sin
+    valores de atributos libres. Se conservan etiquetas HTML, clases, roles, tipos, recuentos y decisiones, que es lo
+    que hace falta para corregir el detector. Los nombres de clase e id son técnicos, pero conviene repasarlos antes
+    de enviar el archivo."""
+    if isinstance(d, dict):
+        out = {}
+        for k, v in d.items():
+            if k in _QUITAR:
+                continue
+            if k in _TEXTOS and isinstance(v, str):
+                out[k] = f"«texto de {len(v)} caracteres»" if v else ""
+            elif k == "esqueleto" and isinstance(v, str):
+                out[k] = _sin_texto(v)
+            elif k == "atributos" and isinstance(v, dict):
+                out[k] = {a: (x if a in _ATRIBUTOS_SEGUROS else "…") for a, x in v.items()}
+            elif k == "aria" and isinstance(v, dict):
+                out[k] = {a: (x if a in _ATRIBUTOS_SEGUROS else "…") for a, x in v.items()}
+            else:
+                out[k] = anonimizar(v, k)
+        if "nota" in out:
+            out["nota"] = "Versión anonimizada: sin URL, título, rótulos ni textos de opciones. Solo estructura técnica."
+        if "formato" in out:
+            out["anonimizado"] = True
+        return out
+    if isinstance(d, list):
+        return [anonimizar(x, clave) for x in d]
+    return d

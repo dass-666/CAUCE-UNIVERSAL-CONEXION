@@ -124,6 +124,12 @@ class SequentialTyper:
             value = re.sub(r"[\r\n]+", " ", value)
         loc.scroll_into_view_if_needed()
         loc.click()
+        if not loc.evaluate("(el) => document.activeElement === el"):
+            # El clic abrió un selector propio (calendario en ventana, por ejemplo) que se quedó con el foco: se cierra
+            # con Escape para no tapar el resto del formulario y el campo queda para la persona.
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_timeout(400)
+            raise FillError("El campo abre su propio selector al pulsarlo y no admite escritura directa")
         # Limpiar contenido previo con teclado (seleccionar todo + borrar), no con .value = ""
         if loc.input_value() != "":
             loc.press("ControlOrMeta+a")
@@ -153,24 +159,57 @@ class SequentialTyper:
             # Lista hecha con JavaScript: se abre con un clic y se elige la opción con otro clic, como una persona.
             from . import listas as LJ
             loc = self.locator(f)
-            visibles = LJ.abrir(self.page, loc)
+            es_texto = f.tag == "input"          # cuadro de texto que abre una lista (autocompletar y similares)
+            visibles = LJ.abrir(self.page, loc, 750 if es_texto else 1500)
+            if not visibles and es_texto:        # algunas solo se abren con el teclado
+                self.page.keyboard.press("ArrowDown")
+                visibles = LJ.esperar_opciones(self.page, loc, 450)
             opciones = LJ.opciones_conocidas(self.page, f) or visibles
-            LJ.recordar(self.page, f.key, opciones)
             opt = next((o for o in opciones if o.value == value), None) or choose_option(opciones, value)
+            escribible = self.page.evaluate(LJ.FOCO_ESCRIBIBLE_JS)
+            if opt is None and not opciones and es_texto and escribible:
+                # Lista que solo responde al escribir y cuyas opciones no se conocen de antemano: se teclea el texto
+                # aprobado y solo vale si la lista ofrece una opción EXACTAMENTE igual (nunca la más parecida).
+                opt = FieldOption(value=value.strip(), label=value.strip(), selected=False)
+                tecleado = True
+            else:
+                tecleado = False
             if opt is None:
                 LJ.cerrar(self.page, loc)
                 raise FillError("Ninguna opción de la lista coincide con el dato" if opciones
                                 else "La lista no mostró opciones al abrirla")
-            el = LJ.buscar_opcion(self.page, loc, opt)
-            if el is None and self.page.evaluate(LJ.FOCO_ESCRIBIBLE_JS):
-                # lista con buscador (o virtualizada): se teclea el texto de la opción para que aparezca
-                for ch in opt.label:
+            el = None if tecleado else LJ.buscar_opcion(self.page, loc, opt)
+            if el is None and escribible:
+                # lista con buscador, virtualizada o que solo se abre al escribir: se teclea el texto de la opción
+                # Como una persona: se va tecleando y se pulsa la opción en cuanto la lista la ofrece. Antes de la
+                # última letra se espera, porque algunas listas se cierran solas cuando el texto ya es idéntico.
+                def esperar(ms: int):
+                    t, hallada = 0, None
+                    while hallada is None and t < ms:
+                        self.page.wait_for_timeout(150)
+                        t += 150
+                        hallada = LJ.buscar_opcion(self.page, loc, opt)
+                    return hallada
+                letras = list(opt.label)
+                for i, ch in enumerate(letras):
                     self._press_char(ch)
-                self.page.wait_for_timeout(600)
-                el = LJ.buscar_opcion(self.page, loc, opt)
+                    if i == len(letras) - 1:
+                        el = esperar(2400)
+                    elif i >= 1:
+                        el = esperar(900 if i == len(letras) - 2 else 150)
+                    if el is not None:
+                        break
             if el is None:
-                LJ.cerrar(self.page, loc)
-                raise FillError("La lista no muestra la opción esperada al abrirla")
+                if not tecleado:
+                    LJ.cerrar(self.page, loc)
+                raise FillError("La lista no ofrece ninguna opción igual al texto aprobado" if tecleado
+                                else "La lista no muestra la opción esperada al abrirla")
+            if tecleado:                         # la opción real, con su valor, es la que muestra la lista
+                real = el.evaluate("(o) => ({ value: o.getAttribute('data-value') || (o.innerText || o.textContent || '').replace(/\\s+/g, ' ').trim(), "
+                                   "label: (o.innerText || o.textContent || '').replace(/\\s+/g, ' ').trim() })")
+                opt = FieldOption(value=real["value"], label=real["label"], selected=False)
+                opciones = [opt]
+            LJ.recordar(self.page, f.key, opciones)
             el.scroll_into_view_if_needed()
             LJ.clic(self.page, el)
             self.page.wait_for_timeout(150)

@@ -155,3 +155,41 @@ en la vista previa. Las fechas de solo lectura que se eligen en un calendario qu
 Si ya existe un perfil revisado para la misma URL, «Analizar formulario» lo usa como punto de partida: la vista previa
 aparece con las mismas rutas, formatos de fecha y tablas de equivalencias. Una equivalencia cuya opción ya no existe en el
 formulario queda sin fila (no se sustituye por otra). En consola: `analizar-formulario --perfil-previo <perfil.json>`.
+
+### Cuadros de texto que abren una lista (autocompletar de jQuery y similares)
+
+Para la página son simples `input type="text"`, así que el detector no puede distinguirlos mirando el HTML. Durante
+«Analizar formulario» (y al aprobar el perfil) el conector los comprueba uno a uno con interacción ordinaria: un clic y,
+si no aparece nada, la tecla flecha abajo; después Escape. No escribe nada. Según lo que ocurra:
+
+- **Aparecen opciones** → el campo pasa a ser una lista con esas opciones (misma clave de campo).
+- **No aparece nada pero hay indicios de autocompletar** (componente de jQuery asociado al campo, `aria-autocomplete`,
+  clase de lista) → lista que «solo responde al escribir». Si el componente tiene sus opciones en la propia página se
+  leen de ahí; si las pide al servidor, en la tabla de equivalencias se anota el **texto exacto** de cada opción.
+- **Abre un calendario** o parece una fecha → se trata como fecha.
+- **Sugiere valores pero es un dato libre** (nombre, correo, teléfono…) sin valor interno asociado → sigue siendo texto.
+- **Nada de lo anterior** → campo de texto normal.
+
+Al rellenar, el conector abre la lista o va tecleando el texto y pulsa la opción en cuanto la lista la ofrece. Solo vale
+una opción idéntica (sin distinguir mayúsculas ni acentos); nunca la más parecida. Después comprueba lo que registró el
+formulario: el texto del cuadro y, si existe, el campo oculto que guarda el código (si queda vacío, es una incidencia
+aunque el texto se vea bien). El perfil aprobado recuerda qué cuadros son listas, así que al rellenar no se vuelve a
+sondear y los perfiles anteriores siguen funcionando igual.
+
+Comprobado en local con componentes reales: jQuery UI Autocomplete (al enfocar, al escribir, con campo oculto y el
+«combobox» de su demo), EasyAutocomplete, typeahead.js, jquery-editable-select, devbridge Autocomplete y Materialize
+(select y autocomplete).
+
+### Diagnóstico: por qué cada control se reconoció o se descartó
+
+`diagnostico_controles.md` incluye la sección «Por qué cada control se reconoció o se descartó»: para cada campo, el tipo
+detectado, el tipo final, el motivo, qué pasó en cada paso del sondeo, los indicios encontrados y los eventos de jQuery
+asociados. `diagnostico_controles_anonimo.json` es la misma información sin URL, dominios, título, rótulos ni textos de
+opciones: es el archivo pensado para compartir. Conserva nombres de clases e identificadores HTML, que son técnicos;
+conviene repasarlos antes de enviarlo.
+
+### Fechas con calendario
+
+Además de las pistas del propio campo, se lee el formato configurado en el calendario (jQuery UI Datepicker,
+bootstrap-datepicker, flatpickr, Materialize). Si al pulsar el campo se abre un selector que se queda con el foco y no
+deja escribir, el conector lo cierra con Escape, marca el campo como incidencia y sigue con los demás.

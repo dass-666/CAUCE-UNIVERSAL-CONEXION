@@ -88,6 +88,16 @@ def _consumir_id(state_dir: Path, solicitud_id: str, ahora: datetime) -> None:
         fh.write(ahora.isoformat(timespec="seconds"))
 
 
+def _listas_texto_aprobadas(perfil: dict) -> dict:
+    from .models import FieldOption
+    out: dict = {}
+    for f in perfil.get("fields", []):
+        if isinstance(f, dict) and f.get("type") == "custom-select" and f.get("tag") == "input" and f.get("key"):
+            out[f["key"]] = [FieldOption(value=str(o.get("value", "")), label=str(o.get("label", "")), selected=False)
+                             for o in f.get("options", []) if isinstance(o, dict) and o.get("value")]
+    return out
+
+
 def _cargar_perfil(sol: dict, settings: Settings) -> dict:
     """Perfil aprobado, con huella verificada sobre los MISMOS bytes que se interpretan (sin carrera)."""
     form = sol["formulario"]
@@ -252,6 +262,8 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
             pagina_ok = False
         if not pagina_ok:                   # navegación bloqueada, error de red o redirección inesperada
             raise _Parar("error_interno", "PAGINA_NO_DISPONIBLE")
+        # Cuadros de texto que el perfil aprobado registró como listas: se tratan igual que cuando se aprobaron
+        sesion.listas_texto = _listas_texto_aprobadas(perfil)
         analisis = sesion.inspect()
         actual = structure_signature_v2(analisis.all_fields)
         if analisis.safety.blocked:         # CAPTCHA o página «solo humanos»: no se escribe nada ni se intenta superar
