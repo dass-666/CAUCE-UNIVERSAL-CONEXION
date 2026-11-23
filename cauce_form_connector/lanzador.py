@@ -155,7 +155,21 @@ def args_autorrellenar(perfil: str, expediente: str, url: str, revisor: str, aut
 
 SALIDAS = {0: "Terminado.", 2: "Hubo campos por revisar (vea [REVISAR] arriba). Nada se envió.", 3: "URL no autorizada: no se abrió la página.", 4: "La página pide CAPTCHA: no se continúa.",
            6: "Configuración o expediente no válido (vea el detalle arriba).",
-           7: "Ventana cerrada sin revisión dentro del plazo. Nada se envió."}
+           7: "Ventana cerrada sin revisión dentro del plazo. Nada se envió.",
+           8: "AUTORRELLENADO INCOMPLETO: vea arriba cuántos campos se verificaron y cuáles quedan pendientes. Nada se envió."}
+
+
+def linea_resultado(texto: str, rc: int) -> str:
+    """Frase final de un autorrellenado, tomada del informe del conector (cuenta de campos y pendientes)."""
+    lineas = texto.splitlines()
+    i = next((k for k, l in enumerate(lineas) if l.startswith("RESULTADO:")), None)
+    if i is None:
+        return ""
+    pend = [l.strip().removeprefix("PENDIENTE ").split(":")[0] for l in lineas[i + 1:] if l.startswith("  PENDIENTE ")]
+    base = lineas[i].removeprefix("RESULTADO: ").rstrip(":")
+    if "INCOMPLETO" not in base:
+        return "✔ " + base + ("" if rc == 0 else " (la revisión no se cerró a tiempo o terminó con avisos)")
+    return "✘ " + base + ": " + ", ".join(pend) + "."
 
 
 class App:
@@ -345,6 +359,9 @@ class App:
 
         def fin(rc):
             texto = "".join(self.salida)
+            resumen = linea_resultado(texto, rc)
+            if resumen:
+                self.escribir(resumen)
             if aprobar and "Perfil aprobado:" in texto:          # se guarda para las siguientes ejecuciones
                 destino = self.datos / "formularios" / Path(perfil).name
                 if Path(perfil).resolve() != destino.resolve():

@@ -72,6 +72,28 @@ En las listas con cuadro de texto el conector borra primero lo que hubiera, escr
 sugerencias, pulsa la opción cuyo texto coincide exactamente y comprueba el valor que quedó registrado (también el
 código oculto). Si la opción no existe, se detiene y lo dice; nunca elige «la más parecida».
 
+**Laboratorio con Ext JS real** (laboratorio 13): la biblioteca Ext JS 6.2 (edición GPL) no está en el repositorio;
+se descarga una sola vez (~120 MB, se comprueba su huella y se guardan solo 5 archivos en `lab_forms\vendor\extjs`):
+
+```
+.venv\Scripts\python.exe scripts\preparar_lab_extjs.py
+recorrido_monitor_windows.bat config\formularios\lab_extjs_ocho_campos.json
+.venv\Scripts\python.exe -m pytest -q tests\test_extjs_ocho_campos.py tests\test_resultado_inequivoco.py
+```
+
+## Cómo saber si el autorrellenado quedó completo
+
+Al terminar, el conector escribe una línea `RESULTADO:` y la ventana la repite al final:
+
+- `✔ COMPLETO. 8 de 8 campos rellenados y verificados.` — código de salida **0**.
+- `✘ INCOMPLETO. 6 de 8 …: campo, campo.` con una línea `PENDIENTE` por campo y su motivo (falta el dato, falta la
+  fila en la tabla de equivalencias, falta el identificador en la fuente, o se intentó y no quedó verificado).
+
+Códigos de salida de `autorrellenar`: **0** solo si todos los campos del perfil quedaron verificados; **8** si el
+proceso terminó bien pero quedó algún campo pendiente (antes era 0); **2** si algún campo se intentó y no se verificó;
+3 a 7 como antes. Con `--json`, `salida_contrato` conserva el código del contrato con Monitor, que no cambia, e
+`informe.resultado` trae `total`, `verificados`, `pendientes` y `completo`. El comando `preparar` no cambia.
+
 ## Pruebas y demostración
 
 Doble clic en **`probar_windows.bat`**: ejecuta `pytest` y `scripts\demo_lab.py`.

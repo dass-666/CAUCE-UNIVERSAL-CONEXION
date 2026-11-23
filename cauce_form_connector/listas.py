@@ -93,6 +93,17 @@ const candidatos = (el) => {
 """
 
 # Indicios de que un cuadro de texto abre una lista (solo lectura de la página; ningún valor escrito por la persona).
+# ¿Es un botón de acción (enviar, guardar, continuar…) y no el disparador de una lista? Un botón o enlace solo se pulsa
+# durante el análisis si declara que despliega algo; los de envío, nunca. Devuelve el motivo o "".
+BOTON_DE_ACCION_JS = r"""(el) => {
+  const b = el.closest("button,[role=button],a,input[type=submit],input[type=button],input[type=image],input[type=reset]");
+  if (!b) return "";
+  const tipo = (b.getAttribute("type") || "").toLowerCase();
+  if (tipo === "submit" || tipo === "image" || tipo === "reset") return "es un botón de envío o de borrado del formulario";
+  const despliega = ["aria-haspopup", "aria-expanded", "aria-controls", "aria-owns", "data-toggle", "data-bs-toggle"]
+    .some((a) => { const v = b.getAttribute(a); return v !== null && v !== "false"; });
+  return despliega ? "" : "es un botón o enlace que no declara desplegar una lista"; }"""
+
 SENALES_JS = "(el) => {" + COMUN_JS + r"""
   const LISTA = /autocomplete|typeahead|combo|select|dropdown|suggest|tt-input|awesomplete|es-input|chosen|lookup/i;
   const FECHA = /date|fecha|calend|flatpickr|picker__|hasDatepicker/i;
@@ -508,6 +519,16 @@ def descubrir(sesion: Any, campos: list, modo: str = "clic", solo_claves: Option
         libre = (not es_lista) and concepto in DATO_LIBRE and not (sen.get("solo_lectura") or sen.get("oculto_pareja"))
         permitido = activa and not (vig and vig.alterados) and (solo_claves is None or f.key in solo_claves)
         opciones, via = [], ""
+        if permitido:
+            try:
+                accion = page.locator(f.selector).first.evaluate(BOTON_DE_ACCION_JS)
+            except Exception:
+                accion = "no se pudo comprobar qué tipo de control es"
+            if accion:                               # nunca se pulsa algo que pueda enviar o ejecutar una operación
+                e["motivo"] = f"no se pulsa: {accion}; queda sin comprobar"
+                if es_lista:
+                    e["opciones"] = len(f.options)
+                continue
         if permitido:
             e["fase"] = "activa"
             loc = page.locator(f.selector).first

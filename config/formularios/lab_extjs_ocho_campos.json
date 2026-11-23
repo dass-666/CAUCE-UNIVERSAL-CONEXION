@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "formulario_id": "frm_lab_extjs_ocho_campos",
+  "nombre": "Laboratorio 13 - ocho campos con componentes Ext JS reales (ficticio)",
+  "url": "http://127.0.0.1:{puerto}/13_extjs_ocho_campos.html",
+  "perfil": "perfil_lab_extjs_ocho_campos",
+  "sondeo": "clic",
+  "_nota": "Ejemplo SINTÉTICO. Requiere scripts/preparar_lab_extjs.py. num_cliente sale de la fuente local «identificadores» (sample_data/fuente_identificadores_sintetica.json). Las equivalencias son las del propio formulario de laboratorio.",
+  "campos_formulario": {
+    "operacion": "alta::lista_operacion",
+    "num_cliente": "alta::num_cliente",
+    "fecha_nacimiento": "alta::f_nac",
+    "tipo_tramite": "alta::lista_tramite",
+    "telefono": "alta::tel",
+    "telefono_confirmacion": "alta::tel2",
+    "correo": "alta::mail",
+    "correo_confirmacion": "alta::mail2"
+  },
+  "campos_expediente": {
+    "operacion": "operacion",
+    "num_cliente": "@fuente:identificadores",
+    "fecha_nacimiento": "fecha_nacimiento",
+    "tipo_tramite": "tipo_tramite",
+    "telefono": "telefono",
+    "telefono_confirmacion": "telefono",
+    "correo": "correo",
+    "correo_confirmacion": "correo"
+  },
+  "formatos_fecha": {
+    "fecha_nacimiento": "DD/MM/AAAA"
+  },
+  "equivalencias": {
+    "operacion": {
+      "campo_monitor": "operacion",
+      "valores": {
+        "nueva": "Nueva cita",
+        "reprogramar": "Reprogramar cita"
+      }
+    },
+    "tipo_tramite": {
+      "campo_monitor": "tipo_tramite",
+      "valores": {
+        "alta": "Alta",
+        "renovacion": "Renovación",
+        "constancia": "Constancia"
+      }
+    }
+  }
+}

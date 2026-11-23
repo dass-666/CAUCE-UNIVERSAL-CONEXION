@@ -25,6 +25,8 @@ jobs:
         if: runner.os == 'Linux'
       - run: python -m playwright install chromium
         if: runner.os == 'Windows'
+      # Ext JS 6.2 (GPL) para el laboratorio 13: se descarga con huella comprobada; no forma parte del repositorio
+      - run: python scripts/preparar_lab_extjs.py
       - run: python -m pytest -q
         env:
           CAUCE_EVIDENCE_DIR: evidence/out

@@ -280,29 +280,72 @@ def construir_solicitud(cfg: dict, info: dict, valores: dict[str, str], *, autor
     }
 
 
+SALIDA_PARCIAL = 8      # propio de `autorrellenar`: el contrato terminó en 0 pero no todos los campos del perfil quedaron verificados
+
+
+def resumir_resultado(cfg: dict, inf: dict) -> dict:
+    """Cuenta inequívoca: campos del perfil, cuántos quedaron rellenados Y verificados, y cuáles quedan pendientes con
+    su motivo. Un campo solo cuenta si el conector lo verificó (y su confirmación, si la tiene, coincide). Sin valores."""
+    por_campo = {c["campo"]: c for c in inf.get("campos", [])}
+    conf_mal = {c["campo"] for c in inf.get("confirmaciones", []) if not c["coinciden"]}
+    motivos = inf.get("motivos", {})
+    pendientes = []
+    for logico in cfg["campos_formulario"]:
+        c = por_campo.get(logico)
+        if c and c["correcto"] and logico not in conf_mal:
+            continue
+        if logico in inf.get("sin_equivalencia", []):
+            motivo = "el código de Monitor no está en la tabla de equivalencias aprobada"
+        elif logico in inf.get("manual_sin_dato", []):
+            motivo = "captura manual sin dato"
+        elif logico in inf.get("sin_dato", []):
+            motivo = motivos.get(logico, "el expediente no trae dato")
+        elif c and not c["correcto"]:
+            motivo = f"se intentó pero no quedó verificado ({c['estado']})"
+        elif c:
+            motivo = "su confirmación no coincide"
+        else:
+            motivo = "no se rellenó: el proceso se detuvo antes (vea el estado)"
+        pendientes.append({"campo": logico, "etiqueta": str((c or {}).get("etiqueta", logico)).rstrip(": "), "motivo": motivo})
+    total = len(cfg["campos_formulario"])
+    return {"total": total, "verificados": total - len(pendientes), "pendientes": pendientes,
+            "completo": total > 0 and not pendientes}
+
+
+def _cerrar_resultado(cfg: dict, r: dict) -> dict:
+    """Añade el resumen y distingue con el código 8 el caso «el contrato dijo 0 pero falta algún campo». El código del
+    contrato se conserva en `salida_contrato`; los demás códigos (2…7) no cambian."""
+    r["informe"]["resultado"] = resumir_resultado(cfg, r["informe"])
+    r["salida_contrato"] = r["salida"]
+    if r["salida"] == 0 and not r["informe"]["resultado"]["completo"]:
+        r["salida"] = SALIDA_PARCIAL
+    return r
+
+
 def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = None, *, autorizacion_ref: str = "aut_demo",
                   otorgada_por: str = "rev_demo", espera_revision_s: int = 300, pausa_tecla_ms: int = 40,
                   state_dir: Optional[str | Path] = None, manuales: Optional[dict[str, str]] = None, **kw: Any) -> dict:
-    """Ejecuta el recorrido completo. Devuelve {"salida", "respuesta", "informe"}; el informe NO contiene valores."""
+    """Ejecuta el recorrido completo. Devuelve {"salida", "salida_contrato", "respuesta", "informe"}; el informe NO contiene valores.
+    `salida` es 0 solo si TODOS los campos del perfil quedaron verificados; 8 si el contrato terminó bien pero falta alguno."""
     settings = settings or get_settings()
     info = info_perfil(cfg, settings)
     if info is None:
-        return {"salida": 6, "respuesta": None, "informe": {"estado": "perfil_no_aprobado", "campos": [], "sin_dato": [],
-                "nota": "No hay perfil aprobado: una persona debe revisar y aprobar el perfil primero."}}
+        return _cerrar_resultado(cfg, {"salida": 6, "respuesta": None, "informe": {"estado": "perfil_no_aprobado", "campos": [], "sin_dato": [],
+                "nota": "No hay perfil aprobado: una persona debe revisar y aprobar el perfil primero."}})
     if (cfg.get("equivalencias") or {}) != info["equivalencias"]:
-        return {"salida": 6, "respuesta": None, "informe": {"estado": "equivalencias_no_aprobadas", "campos": [],
+        return _cerrar_resultado(cfg, {"salida": 6, "respuesta": None, "informe": {"estado": "equivalencias_no_aprobadas", "campos": [],
                 "sin_dato": [], "nota": "Las tablas de equivalencias del perfil de formulario no son las aprobadas: "
-                                        "una persona debe revisarlas y volver a aprobar el perfil."}}
+                                        "una persona debe revisarlas y volver a aprobar el perfil."}})
     if (cfg.get("formatos_fecha") or {}) != info.get("formatos_fecha", {}):
-        return {"salida": 6, "respuesta": None, "informe": {"estado": "formatos_no_aprobados", "campos": [],
+        return _cerrar_resultado(cfg, {"salida": 6, "respuesta": None, "informe": {"estado": "formatos_no_aprobados", "campos": [],
                 "sin_dato": [], "nota": "Los formatos de fecha del perfil de formulario no son los aprobados: "
-                                        "una persona debe revisarlos y volver a aprobar el perfil."}}
+                                        "una persona debe revisarlos y volver a aprobar el perfil."}})
     motivos: dict[str, str] = {}
     valores, faltan = extraer_campos(expediente, cfg, manuales, motivos)
     sin_equiv = codigos_sin_equivalencia(expediente, cfg)
     if not valores:
-        return {"salida": 6, "respuesta": None, "informe": {"estado": "expediente_sin_datos_utiles", "campos": [],
-                "sin_dato": faltan, "nota": "El expediente no trae ninguno de los campos del perfil."}}
+        return _cerrar_resultado(cfg, {"salida": 6, "respuesta": None, "informe": {"estado": "expediente_sin_datos_utiles", "campos": [],
+                "sin_dato": faltan, "nota": "El expediente no trae ninguno de los campos del perfil."}})
     sol = construir_solicitud(cfg, info, valores, autorizacion_ref=autorizacion_ref, otorgada_por=otorgada_por,
                               espera_revision_s=espera_revision_s, pausa_tecla_ms=pausa_tecla_ms)
     resp, salida = ejecutar(json.dumps(sol), settings=settings, state_dir=state_dir, **kw)
@@ -311,7 +354,7 @@ def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = No
     inf["sin_equivalencia"] = sin_equiv
     inf["manual_sin_dato"] = [f for f in faltan if f in manual]
     inf["motivos"] = motivos
-    return {"salida": salida, "respuesta": resp, "informe": inf}
+    return _cerrar_resultado(cfg, {"salida": salida, "respuesta": resp, "informe": inf})
 
 
 def informe_legible(resp: Optional[dict], cfg: dict, settings: Settings, sin_dato: list[str]) -> dict:
@@ -352,4 +395,12 @@ def texto_informe(inf: dict) -> str:
                  f"{inf['envio_realizado_por_conector']}).")
     if inf.get("nota"):
         L.append(inf["nota"])
+    res = inf.get("resultado")
+    if res:
+        if res["completo"]:
+            L.append(f"RESULTADO: COMPLETO. {res['verificados']} de {res['total']} campos rellenados y verificados.")
+        else:
+            L.append(f"RESULTADO: INCOMPLETO. {res['verificados']} de {res['total']} campos rellenados y verificados; "
+                     + ("queda 1 pendiente:" if len(res["pendientes"]) == 1 else f"quedan {len(res['pendientes'])} pendientes:"))
+            L += [f"  PENDIENTE {p['etiqueta']}: {p['motivo']}" for p in res["pendientes"]]
     return "\n".join(L)

@@ -253,6 +253,10 @@ class BrowserSession:
             for f in result.all_fields:
                 if f.key in conocidas and f.tag == "input" and f.type in TIPOS_TEXTO:
                     promover(f, conocidas[f.key])
+                elif f.key in conocidas and f.tag == "input" and f.type == "custom-select" and not f.options:
+                    # Combo que la página ya marca como lista pero cuyas opciones solo se leyeron al aprobar el perfil
+                    # (p. ej. del almacén de datos del componente): se usan las aprobadas, no lo que flote en pantalla.
+                    f.options = list(conocidas[f.key])
         if len(self.page.frames) > 1:
             result.warnings.append(
                 f"La página contiene {len(self.page.frames) - 1} iframe(s); los campos dentro de iframes "

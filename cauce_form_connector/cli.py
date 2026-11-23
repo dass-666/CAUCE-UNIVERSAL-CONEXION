@@ -239,7 +239,8 @@ def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
         print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)
         return 6
     if args.json:
-        _emit({"salida": r["salida"], "respuesta": r["respuesta"], "informe": r["informe"]})
+        _emit({"salida": r["salida"], "salida_contrato": r["salida_contrato"], "respuesta": r["respuesta"],
+               "informe": r["informe"]})
     else:
         print(P.texto_informe(r["informe"]))
     return r["salida"]
