@@ -60,8 +60,8 @@ jobs:
           set "CAUCE_NO_ABRIR=1"
           call analizar_formulario_windows.bat "file:///%CD:\=/%/lab_forms/06_cita_monitor.html"
           if errorlevel 1 (echo ERROR: el analisis fallo & exit /b 1)
-          dir /s /b informes\analisis_*\vista_previa.html || exit /b 1
-          dir /s /b informes\analisis_*\perfil_borrador.json || exit /b 1
+          dir /s /b informes\vista_previa.html || exit /b 1
+          dir /s /b informes\perfil_borrador.json || exit /b 1
           call analizar_formulario_windows.bat "https://tramites.ejemplo.invalid/reserva"
           if not errorlevel 3 (echo ERROR: una URL externa no autorizada debia rechazarse & exit /b 1)
           echo OK: URL externa rechazada sin abrir el navegador
