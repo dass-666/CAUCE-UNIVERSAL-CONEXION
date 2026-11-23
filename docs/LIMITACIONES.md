@@ -46,6 +46,28 @@ Resultado de referencia: **70 pruebas superadas**, demo `DEMO SUPERADA` y ejempl
 12. **Velocidad:** con 35 ms por tecla, 100 caracteres tardan ~3,5 s. Es deliberado y configurable; no se añaden pausas aleatorias porque eso sería técnica de evasión.
 13. **HTML pegado:** se ejecutan sus scripts en línea dentro de Chromium, pero sin acceso a red. Si el HTML depende de recursos externos (CSS/JS de un CDN) no cargarán: use la URL autorizada o el análisis estático.
 
+## 3 bis. Analizador de formularios externos (`analizar-formulario`)
+
+Verificado (pruebas `tests/test_analizador_formularios.py`, solo con páginas de laboratorio locales y datos ficticios):
+detección de texto, numéricos, selectores, listas y opciones, fechas nativas y en texto, confirmaciones, validaciones
+visibles, campos creados por JavaScript y bloques condicionales; solo una petición GET a la página y ningún POST;
+el perfil borrador lo acepta `cargar_formulario` y, tras aprobarlo, `autorrellenar` rellena 7 de 7 campos del lab 03.
+
+Límites:
+1. **Expediente de ejemplo:** la comparación usa un expediente FICTICIO (`sample_data/expediente_ficticio*.json`). El formato
+   real de los expedientes de Cauce Monitor no está confirmado; con otro formato cambian las rutas propuestas.
+2. **Solo lo que se ve al cargar:** campos que aparecen tras elegir una opción, pasar de página (asistentes por pasos) o
+   iniciar sesión no se ven, porque el analizador no interactúa. Un bloque oculto ya presente se marca «oculto condicional».
+3. **«Creado por JavaScript»** compara con el HTML que sirvió el servidor; si no se pudo leer, se avisa y no se marca.
+4. **Mensajes de validación:** solo los textos asociados por `aria-describedby`, `title` y atributos HTML (`pattern`,
+   `min/max`, `maxlength`…). Las reglas que viven solo en JavaScript no se ven hasta que la página muestra el error.
+5. **Decisiones conservadoras:** documento de identidad, consentimientos, campos condicionales, listas cuyo valor no encaja,
+   fechas en texto y datos que no cumplen el `pattern` van a «revisar»; archivos, contraseñas y CAPTCHA, a «humano».
+6. **Sitios que bloquean robots o exigen sesión:** no se intenta eludir nada. Si el sitio responde con un bloqueo o pide
+   iniciar sesión, el informe saldrá vacío o con el formulario de acceso.
+7. **Windows:** verificado solo en GitHub Actions (`windows-latest`); `analizar_formulario_windows.bat` no se ha probado aún
+   en el PC de Windows 11.
+
 ## 4. Riesgos legales y de uso (cuestionamiento del requisito de URL)
 
 Analizar y rellenar páginas de terceros por URL es la parte de mayor riesgo del proyecto:

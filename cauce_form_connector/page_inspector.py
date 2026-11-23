@@ -76,6 +76,9 @@ class BrowserSession:
         self._init_scripts: list[str] = []
         self._nav_guard: Optional[Callable[[str], bool]] = None
         self.blocked_requests = 0
+        # Solo informativo (analizador): HTML tal como lo sirvió el sitio, antes de ejecutar JavaScript
+        self.initial_html: Optional[str] = None
+        self.last_settle_changes = 0
         # --- H1: el envío no es una capacidad permanente de la sesión ---
         self.integration_mode = False      # True: no existe envío programático (modo `preparar`)
         self.submit_armed = False          # solo tras un relleno completado en ESTA página; un solo uso
@@ -192,14 +195,19 @@ class BrowserSession:
         self.start()
         self._nav_guard = nav_guard
         self._new_context(nav_guard=nav_guard)
-        self.page.goto(url, wait_until="domcontentloaded")
+        resp = self.page.goto(url, wait_until="domcontentloaded")
+        self.initial_html = None
+        try:
+            self.initial_html = resp.text() if resp is not None else None
+        except Exception:
+            pass  # algunos esquemas (file://) o respuestas no exponen el cuerpo
         try:
             self.page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
             pass  # páginas con conexiones persistentes nunca llegan a "networkidle"
         self.source, self.source_label = "url", safe_url_label(url)
         self._url, self._html = url, None
-        self.settle()
+        self.last_settle_changes = self.settle()
 
     def reload_source(self) -> None:
         """Vuelve a cargar la fuente original (para empezar un relleno limpio)."""

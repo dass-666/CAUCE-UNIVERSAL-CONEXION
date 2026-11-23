@@ -32,6 +32,8 @@ jobs:
       - run: python scripts/demo_lab.py
       - run: python scripts/ejemplo_cauce_monitor.py --no-interactivo
       - run: python scripts/recorrido_ui.py --headless
+      # Analizador de formularios externos sobre un formulario de laboratorio local (solo lectura)
+      - run: python -m cauce_form_connector analizar-formulario --html lab_forms/05_reserva_externa.html --expediente sample_data/expediente_ficticio_reserva.json --salida evidence/out/analisis_lab05
       - uses: actions/upload-artifact@v4
         if: always()
         with:

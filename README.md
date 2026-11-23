@@ -61,10 +61,32 @@ python -m cauce_form_connector autorrellenar --formulario config/formularios/lab
 
 Detalle y límites en [docs/CONTRATO_CAUCE_CONECTOR_V1.md](docs/CONTRATO_CAUCE_CONECTOR_V1.md) §8.
 
+## Analizar un formulario externo (solo lectura)
+
+```bash
+python -m cauce_form_connector analizar-formulario --url https://sitio-autorizado.example/reserva --authorized \
+    --expediente sample_data/expediente_ficticio.json
+```
+
+En Windows: doble clic en `analizar_formulario_windows.bat` (pide la URL y abre la vista previa).
+El dominio debe estar en `config/allowed_hosts.json` y hay que declarar la autorización. Abre la página una vez,
+sin ventana, y **no escribe, no hace clic ni envía**. Deja en `informes/analisis_<formulario>_<fecha>/`:
+
+| Archivo | Para qué |
+|---|---|
+| `informe.md` / `informe.json` | Campos, selectores, tipos, opciones, fechas, confirmaciones, validaciones, elementos dinámicos y decisión por campo (automático / revisar / humano / ignorado) |
+| `perfil_borrador.json` | Perfil en el formato de `config/formularios/*.json`, solo con los campos automáticos; los dudosos van en `_borrador.pendientes_revision` |
+| `vista_previa.html` | Página local para marcar qué campos incluir, corregir la ruta del expediente y descargar el perfil revisado |
+
+El perfil sigue siendo un borrador: `autorrellenar --formulario <perfil> --expediente <exp> --aprobar-perfil rev_xxx`
+es el paso humano que lo aprueba. Códigos de salida: `0` informe generado, `3` URL no autorizada (no se abre),
+`4` la página exige intervención humana (CAPTCHA), `6` expediente ilegible.
+
 ## Estructura
 
 | Componente | Archivo |
 |---|---|
+| Analizador de formularios externos (informe + perfil borrador) | `cauce_form_connector/analizador_formularios.py` |
 | Analizador HTML (estático, sin navegador) | `cauce_form_connector/html_analyzer.py` |
 | Inspector de páginas dinámicas (Playwright) | `cauce_form_connector/page_inspector.py` |
 | Detector de formularios | `cauce_form_connector/detector.js` + `form_detector.py` |

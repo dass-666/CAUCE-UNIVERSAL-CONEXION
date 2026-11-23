@@ -89,6 +89,16 @@ def main(argv: list[str] | None = None) -> int:
     p_au.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
     p_au.add_argument("--espera-s", type=int, default=300, help="segundos que se mantiene la ventana para la revisión")
     p_au.add_argument("--json", action="store_true", help="salida JSON (respuesta del contrato + informe) en vez de texto")
+    p_az = sub.add_parser("analizar-formulario", help="SOLO LECTURA: analiza un formulario autorizado y genera informe "
+                                                      "técnico, perfil borrador y vista previa para revisión humana")
+    g_az = p_az.add_mutually_exclusive_group(required=True)
+    g_az.add_argument("--url", help="URL autorizada del formulario")
+    g_az.add_argument("--html", help="archivo .html local (pruebas)")
+    p_az.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
+    p_az.add_argument("--expediente", default="sample_data/expediente_ficticio.json",
+                      help="expediente de EJEMPLO para comparar (solo se mira si hay dato, nunca se muestra)")
+    p_az.add_argument("--salida", help="carpeta de resultados (por defecto informes/analisis_<formulario>_<fecha>)")
+    p_az.add_argument("--nombre", default="", help="nombre legible del formulario")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")
     source(p_fi)
     p_fi.add_argument("--data", required=True)
@@ -108,6 +118,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "autorrellenar":
         return _autorrellenar(args, settings)
+
+    if args.cmd == "analizar-formulario":
+        return _analizar_formulario(args, settings)
 
     if args.cmd == "ui":
         from .web.app import main as ui_main
@@ -191,6 +204,41 @@ def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
     else:
         print(P.texto_informe(r["informe"]))
     return r["salida"]
+
+
+def _analizar_formulario(args: argparse.Namespace, settings: Any) -> int:
+    """Códigos: 0 informe generado, 3 URL no autorizada, 4 informe generado pero la página exige intervención
+    humana (CAPTCHA/uso humano), 6 error de entrada."""
+    from datetime import datetime
+    from . import analizador_formularios as A
+    url = Path(args.html).resolve().as_uri() if args.html else args.url
+    expediente = None
+    if args.expediente:
+        try:
+            expediente = json.loads(Path(args.expediente).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"No se pudo leer el expediente: {type(exc).__name__}", file=sys.stderr)
+            return 6
+    try:
+        inf = A.analizar_url(url, autorizado=args.authorized, settings=settings, expediente=expediente, nombre=args.nombre)
+    except UrlNotAllowed as exc:
+        print(f"URL no autorizada: {exc}", file=sys.stderr)
+        return 3
+    carpeta = args.salida or str(Path("informes") / ("analisis_" + inf["perfil_borrador"]["perfil"].removeprefix("perfil_")
+                                                     + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")))
+    rutas = A.guardar(inf, carpeta)
+    r = inf["resumen"]
+    print(f"Formulario: {inf['url']}")
+    print(f"Campos: {r['campos']} · automáticos: {r['automatico']} · revisar: {r['revisar']} · humano: {r['humano']} · "
+          f"ignorados: {r['ignorado']}")
+    if inf["bloqueo_humano"]["blocked"]:
+        print("ATENCIÓN: la página exige intervención humana; el perfil no se podrá aprobar.")
+    for a in inf["advertencias"]:
+        print(f"Aviso: {a}")
+    print("Resultados (no se envió nada):")
+    for k, v in rutas.items():
+        print(f"  {k}: {v}")
+    return 4 if inf["bloqueo_humano"]["blocked"] else 0
 
 
 def _aprobar_perfil(args: argparse.Namespace, settings: Any, policy: UrlPolicy) -> int:

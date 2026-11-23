@@ -46,6 +46,12 @@ usted mismo, o escriba `ENVIAR` en el paso 5 de la interfaz.
 
 Para cerrar: `Ctrl + C` en la ventana negra de la terminal.
 
+## Analizar un formulario externo
+
+Doble clic en **`analizar_formulario_windows.bat`** (o `analizar_formulario_windows.bat https://sitio/reserva`).
+Pide la URL, pregunta si tiene autorización y abre `vista_previa.html` en su navegador. Solo lectura: no rellena ni envía.
+El dominio debe estar antes en `config\allowed_hosts.json`. Resultados en `informes\analisis_<fecha>\`.
+
 ## Pruebas y demostración
 
 Doble clic en **`probar_windows.bat`**: ejecuta `pytest` y `scripts\demo_lab.py`.
