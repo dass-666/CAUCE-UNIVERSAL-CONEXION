@@ -193,3 +193,44 @@ conviene repasarlos antes de enviarlo.
 Además de las pistas del propio campo, se lee el formato configurado en el calendario (jQuery UI Datepicker,
 bootstrap-datepicker, flatpickr, Materialize). Si al pulsar el campo se abre un selector que se queda con el foco y no
 deja escribir, el conector lo cierra con Escape, marca el campo como incidencia y sigue con los demás.
+
+### Análisis no destructivo: fase pasiva y fase de clic
+
+Qué pasó en la versión anterior: para saber si un cuadro de texto abría una lista, el análisis pulsaba la tecla flecha
+abajo. En muchos componentes esa tecla no «abre», sino que **cambia el valor**: un campo numérico con botones de
+subir/bajar (por ejemplo los de Ext JS) resta una unidad, y un combo con una opción resaltada la selecciona. Reproducido
+en laboratorio con Ext JS 6.2: el campo pasaba de 5 a 4. Esa tecla ya no se usa en ningún punto del programa.
+
+El análisis tiene ahora dos fases separadas:
+
+1. **Pasiva (por defecto).** Solo lee la página y la configuración de sus componentes (opciones de jQuery UI
+   Autocomplete, almacén de un combo de Ext JS, formato de un calendario). Ni clics, ni teclas, ni foco. No puede
+   cambiar nada.
+2. **Comprobación con clic (opcional).** Casilla de la ventana, o `--sondeo clic`. Solo para los controles que la lectura
+   no resolvió: un clic de ratón en el control y, si no despliega, en su flecha. Nunca teclas de selección ni escritura;
+   la única tecla es Escape para cerrar. Nunca se pulsan campos numéricos ni de fecha. Mientras dura:
+   - se bloquean las peticiones de escritura (POST, PUT, DELETE…) hacia el servidor;
+   - se vigilan todos los valores del formulario y, **si uno cambia, la fase se interrumpe en ese instante**, el análisis
+     queda marcado como alterado y un perfil no se puede aprobar sobre esa comprobación.
+
+`diagnostico_controles.md` empieza con la sección «Seguridad del análisis»: modo, número de interacciones, valores
+alterados, escrituras bloqueadas y controles sin comprobar. El diagnóstico ya no hace clics propios: sus cifras son las
+del análisis. Al aprobar un perfil se usa el mismo modo con que se analizó, y la fase de clic se limita a los campos del
+perfil.
+
+### Diagnóstico anonimizado: lista blanca y bloqueo
+
+`diagnostico_controles_anonimo.json` se construye por lista blanca: en él solo pueden quedar palabras de un vocabulario
+técnico fijo (etiquetas HTML, roles, prefijos de librerías) y los textos que genera el propio programa. Cualquier otra
+palabra de una clase, un identificador, un nombre de campo o un atributo se sustituye por un seudónimo estable (`t1`,
+`t2`…; los campos, `campo1`…), de modo que se conserva la estructura sin revelar nombres. Se eliminan URL, dominios y
+título, y los textos de la página quedan como su longitud. Antes de escribir el archivo se verifica entero con la misma
+lista: si queda una sola palabra ajena, **no se genera** y en su lugar aparece
+`diagnostico_controles_anonimo.BLOQUEADO.txt`.
+
+### Formato de fecha: solo con evidencia
+
+Fuentes aceptadas: texto de ayuda del campo, atributos del calendario, un ejemplo inequívoco y la configuración del
+componente (jQuery UI Datepicker, bootstrap-datepicker, flatpickr incluido su campo alternativo, Inputmask con formato
+de fecha, Materialize y el campo de fecha de Ext JS). El año solo se acepta con cuatro cifras: `y` o `yy` cambian de
+significado según la librería y no se interpretan, igual que una máscara `99/99/9999`.

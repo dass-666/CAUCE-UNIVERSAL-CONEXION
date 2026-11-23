@@ -58,6 +58,14 @@ const oculto = (el) => { if (el.dataset && el.dataset.input) return document.get
     return null;
   }
   const c = contenedor(el); return c ? c.querySelector("input[type=hidden],input[aria-hidden=true]") : null; };
+// Botón o flecha que acompaña a un cuadro de texto dentro de su mismo envoltorio (lo que una persona pulsa para desplegar).
+// Nunca los botones de subir/bajar de un campo numérico.
+const vecino = (el) => { for (let n = el.parentElement, k = 0; n && k < 3 && n.tagName !== "FORM" && n !== document.body; n = n.parentElement, k++) {
+    if (Array.from(n.querySelectorAll("input:not([type=hidden]),select,textarea")).some((x) => x !== el && visible(x))) return null;
+    const t = Array.from(n.querySelectorAll("[class*=trigger i],[class*=arrow i],[class*=caret i],[class*=toggle i],button[type=button]"))
+      .filter((x) => x !== el && !x.contains(el) && visible(x) && !/spin|clear|reset|date|calend/i.test(cls(x)) && !x.matches("a[href],[type=submit]"));
+    if (t.length) return t.length === 1 ? t[0] : null;       // varios: no se adivina cuál
+  } return null; };
 // lo que aparece es un calendario, no una lista de opciones
 const esCalendario = (xs) => { if (!xs.length) return false;
   if (xs.some((o) => o.closest("table,[class*=datepicker i],[class*=calendar i],[class*=flatpickr i],[class*=picker__ i],[class*=daterange i]"))) return true;
@@ -89,6 +97,7 @@ SENALES_JS = "(el) => {" + COMUN_JS + r"""
   const LISTA = /autocomplete|typeahead|combo|select|dropdown|suggest|tt-input|awesomplete|es-input|chosen|lookup/i;
   const FECHA = /date|fecha|calend|flatpickr|picker__|hasDatepicker/i;
   const out = { clases: [], aria: {}, datos: [], eventos: [], jquery: null, widgets: [], opciones_config: null, abre_al_escribir_min: null,
+    componente: null, numerico: false, disparador_vecino: false,
     solo_lectura: !!el.readOnly, datalist: !!el.getAttribute("list"), oculto_pareja: !!oculto(el), parece_fecha: false, fuertes: [] };
   for (let n = el, k = 0; n && k < 3 && n.tagName !== "FORM" && n !== document.body; n = n.parentElement, k++) {
     if (k > 0 && Array.from(n.querySelectorAll("input:not([type=hidden]),select,textarea")).some((x) => x !== el && visible(x))) break;
@@ -121,6 +130,37 @@ SENALES_JS = "(el) => {" + COMUN_JS + r"""
     }
     if (datos.ttTypeahead || datos.typeahead) out.fuertes.push("componente typeahead de jQuery");
   }
+  // Ext JS: el componente dueño del campo declara qué es y, si es un combo con datos locales, sus opciones.
+  try {
+    const E = window.Ext; let c = null;
+    if (E) {
+      try { if (E.Component && E.Component.fromElement) c = E.Component.fromElement(el); } catch (e) {}
+      if (!c && E.getCmp) c = E.getCmp((el.id || "").replace(/-inputEl$/, "")) || E.getCmp(el.id) || null;
+    }
+    if (c) {
+      const es = (x) => { try { return !!(c.isXType && c.isXType(x)); } catch (e) { return false; } };
+      out.componente = { libreria: "extjs", version: String((E.versions && E.versions.extjs && E.versions.extjs.version) || E.version || ""),
+        xtype: String(c.xtype || (c.getXType && c.getXType()) || ""), editable: c.editable !== false };
+      if (es("datefield") || es("timefield")) out.parece_fecha = true;
+      else if (es("numberfield") || es("spinnerfield")) out.numerico = true;
+      else if (es("combobox") || es("combo")) {
+        out.fuertes.push("combo de Ext JS");
+        const st = c.getStore ? c.getStore() : c.store;
+        const filas = st ? (st.getRange ? st.getRange() : (st.data && st.data.items) || []) : [];
+        out.origen_opciones = !st ? "desconocido" : (c.queryMode === "remote" || c.mode === "remote") ? "servidor" : "lista local";
+        if (filas.length && filas.length <= 300 && c.displayField) {
+          const r = filas.map((f) => { const t = clean(String(f.get ? f.get(c.displayField) : (f.data || {})[c.displayField])); return t ? { value: t, label: t } : null; });
+          if (r.every(Boolean)) out.opciones_config = r;
+        }
+      }
+    }
+  } catch (e) {}
+  if (el.getAttribute("role") === "spinbutton" || el.type === "number") out.numerico = true;
+  for (let n = el.parentElement, k = 0; n && k < 3 && n.tagName !== "FORM" && n !== document.body; n = n.parentElement, k++) {
+    if (Array.from(n.querySelectorAll("input:not([type=hidden]),select,textarea")).some((x) => x !== el && visible(x))) break;
+    if (n.querySelector("[class*=spinner i],[class*=spin-up i],[class*=spin-down i]")) out.numerico = true;
+  }
+  out.disparador_vecino = !!vecino(el);
   if (window.M && window.M.Autocomplete && window.M.Autocomplete.getInstance && window.M.Autocomplete.getInstance(el)) out.fuertes.push("componente de autocompletar");
   const txt = [el.name, el.id, el.getAttribute("placeholder"), el.getAttribute("data-date-format"), el.getAttribute("data-format")].join(" ");
   if (FECHA.test(txt) || /(dd|mm|yyyy|aaaa)[\/\-.]/i.test(txt)) out.parece_fecha = true;
@@ -308,6 +348,19 @@ DATO_LIBRE = {"email", "telefono", "nombre", "apellido", "nombre_completo", "cod
               "empresa", "cargo", "comentario", "mensaje", "fecha", "fecha_nacimiento"}
 
 
+# Vigilancia: el análisis no debe cambiar ningún valor del formulario. Se guarda el estado de todos los controles
+# (dentro de la página, sin sacarlo) y se compara tras cada interacción. Solo se devuelve QUÉ control cambió.
+FOTO_JS = r"""() => { window.__cauce_foto = Array.from(document.querySelectorAll("input,select,textarea"))
+    .map((e) => [e, (e.type === "checkbox" || e.type === "radio") ? String(e.checked) : String(e.value)]); return window.__cauce_foto.length; }"""
+CAMBIOS_JS = r"""() => (window.__cauce_foto || []).filter(([e, v]) => e.isConnected
+    && ((e.type === "checkbox" || e.type === "radio") ? String(e.checked) : String(e.value)) !== v)
+    .map(([e]) => ({ nombre: e.getAttribute("name") || "", id: e.id || "", tipo: (e.getAttribute("type") || e.tagName).toLowerCase() }))"""
+VECINO_JS = "(el) => {" + COMUN_JS + " return vecino(el); }"
+FOCO_BUSQUEDA_JS = r"""() => { const a = document.activeElement; return !!a && a.matches("input[type=search]") && a.value !== ""; }"""
+
+MODOS = ("pasivo", "clic")
+
+
 def _esperar_aparicion(page: Any, loc: Any, espera_ms: int) -> dict:
     t, r = 0, {"calendario": False, "nuevos": 0, "opciones": []}
     while t < espera_ms:
@@ -328,93 +381,213 @@ def _opciones(crudas: list) -> list[FieldOption]:
     return out
 
 
-def sondear_textos(sesion: Any, campos: list) -> list[dict]:
-    """Comprueba, campo de texto por campo de texto, si abre una lista. Solo interacción ordinaria: un clic y, si no
-    aparece nada, la tecla flecha abajo; después Escape. No escribe nada. Devuelve una explicación por cada campo
-    (reconocido o descartado y por qué) y registra en la sesión los que resultan ser listas, para que `inspect()` los
-    trate como tales a partir de ahora."""
+def cancelar(page: Any, loc: Any) -> None:
+    """Cierra una lista abierta durante el análisis sin elegir nada. Escape es «cancelar»; no se usa si el foco está en
+    un cuadro de búsqueda con contenido (el navegador lo vaciaría). Nunca flechas, Intro ni Tab."""
+    try:
+        if page.evaluate(FOCO_BUSQUEDA_JS):
+            page.mouse.click(2, 2)
+            page.wait_for_timeout(200)
+            return
+    except Exception:
+        pass
+    cerrar(page, loc)
+
+
+class _Vigilancia:
+    """Corta la fase activa en cuanto un valor del formulario cambia."""
+
+    def __init__(self, sesion: Any, campos: list):
+        self.sesion, self.campos = sesion, campos
+        self.alterados: list[str] = []
+        sesion.page.evaluate(FOTO_JS)
+
+    def comprobar(self) -> list[str]:
+        try:
+            cambios = self.sesion.page.evaluate(CAMBIOS_JS)
+        except Exception:
+            return []
+        claves = []
+        for c in cambios:
+            f = next((x for x in self.campos if (c["id"] and x.id == c["id"]) or (c["nombre"] and x.name == c["nombre"])), None)
+            claves.append(f.key if f else f"control sin clave ({c['tipo']})")
+        if claves:
+            self.alterados = claves
+            self.sesion.analisis_alterado = list(claves)
+        return claves
+
+
+def descubrir(sesion: Any, campos: list, modo: str = "clic", solo_claves: Optional[set] = None) -> list[dict]:
+    """Averigua qué controles son listas y con qué opciones, en dos fases separadas:
+
+    1. PASIVA (siempre): solo lee la página y la configuración de sus componentes. Ni clics ni teclas.
+    2. ACTIVA (solo con modo «clic»): un clic de ratón en el control —lo mismo que hace una persona para empezar a
+       usarlo— y, si no basta, en su flecha. Nunca teclas de selección (flechas, Intro, Tab) ni escritura. Mientras
+       dura, la sesión bloquea las peticiones de escritura al servidor y se vigila el formulario: si cualquier valor
+       cambia, la fase activa se interrumpe y el análisis queda marcado como alterado.
+
+    Devuelve una explicación por control. Los cuadros de texto que resultan ser listas quedan registrados en la sesión."""
     from .matcher import field_concept
-    page, explicaciones = sesion.page, []
+    if modo not in MODOS:
+        raise ValueError("modo de sondeo no válido")
+    page, explicaciones, pendientes = sesion.page, [], []
+
+    # ---------------------------------------------------------------- fase pasiva
     for f in campos:
-        if f.tag != "input" or f.type == "custom-select":
-            continue
-        e: dict[str, Any] = {"clave": f.key, "tipo_detectado": f.type, "decision": "texto", "pasos": []}
+        e: dict[str, Any] = {"clave": f.key, "tipo_detectado": f.type, "decision": f.type, "fase": "pasiva", "pasos": []}
         explicaciones.append(e)
-        if f.type not in TIPOS_TEXTO:
-            e["motivo"] = f"no se sondea: es un campo de tipo «{f.type}»"
+        es_lista = f.type == "custom-select"
+        if not es_lista and (f.tag != "input" or f.type not in TIPOS_TEXTO):
+            e["motivo"] = f"control nativo de tipo «{f.type}»: no necesita comprobación"
             continue
         if not f.visible or f.disabled:
-            e["motivo"] = "no se sondea: no está visible o está deshabilitado"
+            e["motivo"] = "no se comprueba: no está visible o está deshabilitado"
             continue
-        loc = page.locator(f.selector).first
-        try:
-            sen = loc.evaluate(SENALES_JS)
-        except Exception as exc:
-            e["motivo"] = f"no se pudo inspeccionar: {type(exc).__name__}"
+        sen, config = {}, None
+        if f.tag == "input":
+            try:
+                sen = page.locator(f.selector).first.evaluate(SENALES_JS)
+            except Exception as exc:
+                e["motivo"] = f"no se pudo inspeccionar: {type(exc).__name__}"
+                continue
+            config = sen.pop("opciones_config", None)
+            e["senales"] = sen
+        if es_lista:
+            e["decision"] = "lista"
+            if f.options:
+                e.update(opciones=len(f.options), origen_opciones="página",
+                         motivo=f"lista reconocida por su estructura; {len(f.options)} opciones presentes en la página")
+            elif config:
+                f.options = _opciones(config)
+                _cache(page)[f.key] = f.options
+                e.update(opciones=len(f.options), origen_opciones="configuración del componente", motivo=(
+                    f"lista reconocida por su estructura; {len(f.options)} opciones leídas de la configuración del componente"))
+            else:
+                e.update(opciones=0, motivo="lista reconocida por su estructura; sus opciones no están en la página")
+                pendientes.append((f, e, sen, None))
             continue
-        config = sen.pop("opciones_config", None)
-        e["senales"] = sen
         concepto = field_concept(f)[0]
-        if sen["parece_fecha"] or concepto in ("fecha", "fecha_nacimiento"):
-            e["motivo"] = "no se sondea: parece un campo de fecha (un clic abriría el calendario)"
+        if sen.get("numerico"):
+            e["motivo"] = "campo numérico con botones de subir y bajar: no es una lista y no se toca"
             continue
-        if sen["datalist"]:
+        if sen.get("parece_fecha") or concepto in ("fecha", "fecha_nacimiento"):
+            e["motivo"] = "campo de fecha (por su componente, sus clases o su rótulo): no se pulsa para no abrir el calendario"
+            continue
+        if sen.get("datalist"):
             e["motivo"] = "usa <datalist> nativo: admite texto libre y se rellena como texto"
             continue
-        opciones, modo, calendario = [], "", False
-        try:
-            antes = loc.input_value()
-            loc.scroll_into_view_if_needed(timeout=2000)
-            loc.evaluate(MARCAR_PREVIAS_JS)
-            clic(page, loc)
-            r = _esperar_aparicion(page, loc, 750)
-            e["pasos"].append({"accion": "clic", "elementos_nuevos": r["nuevos"], "opciones": len(r["opciones"]), "calendario": r["calendario"]})
-            calendario = r["calendario"]
-            if r["opciones"]:
-                opciones, modo = _opciones(r["opciones"]), "clic"
-            elif not calendario:
-                page.keyboard.press("ArrowDown")
-                r = _esperar_aparicion(page, loc, 450)
-                e["pasos"].append({"accion": "flecha abajo", "elementos_nuevos": r["nuevos"], "opciones": len(r["opciones"]), "calendario": r["calendario"]})
+        libre = concepto in DATO_LIBRE and not (sen.get("solo_lectura") or sen.get("oculto_pareja"))
+        if config and not libre:
+            ops = _opciones(config)
+            e.update(decision="lista", modo="configuración", opciones=len(ops), origen_opciones="configuración del componente",
+                     motivo=f"es una lista: {len(ops)} opciones leídas de la configuración del componente, sin interactuar")
+            _registrar(sesion, f, ops)
+            continue
+        pendientes.append((f, e, sen, concepto))
+
+    # ---------------------------------------------------------------- fase activa (opcional)
+    activa = modo == "clic"
+    vig = None
+    if activa and pendientes:
+        sesion.solo_lectura_red = True              # desde aquí, ninguna petición de escritura sale hacia el servidor
+        vig = _Vigilancia(sesion, campos)
+    for f, e, sen, concepto in pendientes:
+        es_lista = f.type == "custom-select"
+        libre = (not es_lista) and concepto in DATO_LIBRE and not (sen.get("solo_lectura") or sen.get("oculto_pareja"))
+        permitido = activa and not (vig and vig.alterados) and (solo_claves is None or f.key in solo_claves)
+        opciones, via = [], ""
+        if permitido:
+            e["fase"] = "activa"
+            loc = page.locator(f.selector).first
+            calendario = False
+            try:
+                loc.scroll_into_view_if_needed(timeout=2000)
+                loc.evaluate(MARCAR_PREVIAS_JS)
+                clic(page, loc)
+                r = _esperar_aparicion(page, loc, 1500 if es_lista else 750)
+                e["pasos"].append({"accion": "clic", "elementos_nuevos": r["nuevos"], "opciones": len(r["opciones"]), "calendario": r["calendario"]})
                 calendario = r["calendario"]
                 if r["opciones"]:
-                    opciones, modo = _opciones(r["opciones"]), "flecha abajo"
-            cerrar(page, loc)
-            e["valor_alterado_por_el_sondeo"] = loc.input_value() != antes
-        except Exception as exc:
-            e["pasos"].append({"accion": "error", "tipo": type(exc).__name__})
-            try:
-                page.keyboard.press("Escape")
-            except Exception:
-                pass
-        if calendario:
-            e["motivo"] = "al pulsarlo se abre un calendario, no una lista: se trata como fecha"
+                    opciones, via = _opciones(r["opciones"]), "clic"
+                elif not calendario and f.tag == "input":
+                    flecha = page.evaluate_handle(VECINO_JS, loc.element_handle()).as_element()
+                    if flecha is not None:
+                        clic(page, flecha)
+                        r = _esperar_aparicion(page, loc, 900)
+                        e["pasos"].append({"accion": "clic en su flecha", "elementos_nuevos": r["nuevos"], "opciones": len(r["opciones"]), "calendario": r["calendario"]})
+                        calendario = r["calendario"]
+                        if r["opciones"]:
+                            opciones, via = _opciones(r["opciones"]), "clic en su flecha"
+                cancelar(page, loc)
+            except Exception as exc:
+                e["pasos"].append({"accion": "error", "tipo": type(exc).__name__})
+                try:
+                    cancelar(page, loc)
+                except Exception:
+                    pass
+            alterados = vig.comprobar()
+            if alterados:
+                e["valor_alterado_por_el_sondeo"] = True
+                e["controles_alterados"] = alterados
+                e["motivo"] = ("la comprobación con clic cambió un valor del formulario: se interrumpe la fase activa y "
+                               "este control no se clasifica")
+                continue
+            if calendario:
+                e["motivo"] = "al pulsarlo se abre un calendario, no una lista: se trata como fecha"
+                continue
+        if es_lista:
+            f.options = opciones
+            _cache(page)[f.key] = opciones
+            e.update(opciones=len(opciones), **({"origen_opciones": via} if opciones else {}))
+            e["motivo"] = (f"lista reconocida por su estructura; {len(opciones)} opciones vistas al abrirla ({via})" if opciones else
+                           "lista reconocida por su estructura; " + ("no mostró opciones al pulsarla" if permitido else
+                           _sin_fase_activa(modo, vig)))
             continue
-        libre = concepto in DATO_LIBRE and not (sen["solo_lectura"] or sen["oculto_pareja"])
         if opciones:
             if libre:
                 e["motivo"] = (f"muestra sugerencias, pero es un dato libre reconocido ({concepto}) sin valor interno "
                                "asociado: se rellena como texto")
                 continue
-            e.update(decision="lista", modo=modo, opciones=len(opciones),
-                     motivo=f"al interactuar ({modo}) aparecen {len(opciones)} opciones: es una lista")
-        elif sen["fuertes"] and not libre:
-            opciones = _opciones(config)
-            e.update(decision="lista", modo="escribir", opciones=len(opciones), motivo=(
-                "indicios de lista (" + "; ".join(sen["fuertes"]) + ") pero solo muestra opciones al escribir"
-                + (": opciones leídas de la configuración local del componente" if opciones else
-                   ": las opciones no se conocen hasta teclear; se usará el texto exacto de la tabla de equivalencias")))
-        elif sen["solo_lectura"]:
+            e.update(decision="lista", modo=via, opciones=len(opciones), origen_opciones=via,
+                     motivo=f"al interactuar ({via}) aparecen {len(opciones)} opciones: es una lista")
+        elif sen.get("fuertes") and not libre:
+            e.update(decision="lista", modo="escribir", opciones=0, motivo=(
+                "indicios de lista (" + "; ".join(sen["fuertes"]) + ") y sus opciones no están en la página: solo se "
+                "conocen al escribir; se usará el texto exacto de la tabla de equivalencias"
+                + ("" if permitido else " · " + _sin_fase_activa(modo, vig))))
+        elif not permitido:
+            e["motivo"] = "campo de texto sin indicios de lista en la página · " + _sin_fase_activa(modo, vig)
+            e["sin_comprobar"] = bool(sen.get("eventos")) and not libre
+            continue
+        elif sen.get("solo_lectura"):
             e["motivo"] = "es de solo lectura y al pulsarlo no apareció ninguna lista: no editable"
             continue
         else:
-            e["motivo"] = ("al hacer clic y pulsar flecha abajo no apareció ninguna lista y no tiene indicios de "
-                           "autocompletar: campo de texto normal" + (f" (dato libre: {concepto})" if libre else ""))
+            e["motivo"] = ("al pulsarlo no apareció ninguna lista y no tiene indicios de autocompletar: campo de texto "
+                           "normal" + (f" (dato libre: {concepto})" if libre else ""))
             continue
-        sesion.listas_texto[f.key] = opciones
-        promover(f, opciones)
-        _cache(page)[f.key] = opciones          # también si está vacía: ya se sondeó, no se repite
+        _registrar(sesion, f, opciones)
+    if activa and pendientes:
+        sesion.solo_lectura_red = False
     return explicaciones
+
+
+def _sin_fase_activa(modo: str, vig: Any) -> str:
+    if vig is not None and vig.alterados:
+        return "no se comprobó: la fase activa se interrumpió al detectar un cambio en el formulario"
+    return ("no se comprobó con clic: análisis en modo pasivo" if modo == "pasivo" else
+            "no se comprobó con clic: el control no forma parte del perfil")
+
+
+def _registrar(sesion: Any, f: Any, opciones: list[FieldOption]) -> None:
+    sesion.listas_texto[f.key] = opciones
+    promover(f, opciones)
+    _cache(sesion.page)[f.key] = opciones       # también si está vacía: ya se comprobó, no se repite
+
+
+def sondear_textos(sesion: Any, campos: list, modo: str = "clic") -> list[dict]:
+    """Compatibilidad: ver `descubrir`."""
+    return descubrir(sesion, campos, modo)
 
 
 def promover(f: Any, opciones: list[FieldOption]) -> None:

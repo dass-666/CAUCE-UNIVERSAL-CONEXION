@@ -214,12 +214,18 @@ def aprobar_perfil(cfg: dict, settings: Settings, *, aprobado_por: str, autoriza
     with BrowserSession(settings, headless=True) as s:
         s.open_url(policy.check(cfg["url"], autorizado), policy.guard(autorizado))
         analisis = s.inspect()
+        alterado: list = []
         if not analisis.safety.blocked:
-            from .listas import completar_opciones, sondear_textos
-            sondear_textos(s, analisis.all_fields)       # cuadros de texto que en realidad abren una lista
-            completar_opciones(s.page, analisis.all_fields)
+            # Misma comprobación que en el análisis y con el mismo modo; la fase de clic, solo en los campos del perfil.
+            from .listas import MODOS, descubrir
+            modo = cfg.get("sondeo") if cfg.get("sondeo") in MODOS else "clic"
+            descubrir(s, analisis.all_fields, modo, solo_claves=set(cfg["campos_formulario"].values()))
+            alterado = list(s.analisis_alterado)
     if analisis.safety.blocked:
         raise ConfigInvalida("La página exige intervención humana; no se aprueba un perfil sobre ella.")
+    if alterado:
+        raise ConfigInvalida("La comprobación con clic cambió el valor de un control del formulario; no se aprueba el "
+                             "perfil. Analice en modo pasivo y revise el diagnóstico.")
     equiv = cfg.get("equivalencias") or {}
     por_clave = {f.key: f for f in analisis.all_fields}
     for logico, t in equiv.items():

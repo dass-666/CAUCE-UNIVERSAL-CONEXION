@@ -40,7 +40,7 @@ CFG = {
 @pytest.mark.browser
 def test_analisis_explica_cada_control_y_anonimiza(tmp_path):
     st = settings_para(tmp_path)
-    inf = A.analizar_url((LAB / "10_textos_con_lista.html").as_uri(), autorizado=False, settings=st, expediente=EXP)
+    inf = A.analizar_url((LAB / "10_textos_con_lista.html").as_uri(), autorizado=False, settings=st, expediente=EXP, sondeo="clic")
     c = {x["clave"]: x for x in inf["campos"]}
     assert c["alta::operacion_txt"]["tipo"] == "custom-select"
     assert [o["etiqueta"] for o in c["alta::operacion_txt"]["opciones"]] == ["Nueva cita", "Reprogramar cita"]
@@ -69,18 +69,6 @@ def test_analisis_explica_cada_control_y_anonimiza(tmp_path):
         assert texto not in anon, texto
     a = json.loads(anon)
     assert a["anonimizado"] is True and "url" not in a and len(a["explicaciones"]) == len(d["explicaciones"])
-
-
-def test_anonimizar_quita_textos_y_valores_de_atributos():
-    d = {"formato": DC.FORMATO, "url": "https://institucion.example/x", "titulo_documento": "Institución X",
-         "marcos": [{"host": "otro.example", "titulo": "Pago"}],
-         "campos_reconocidos": [{"clave": "f::a", "etiqueta": "Nombre del titular"}],
-         "candidatos": [{"texto": "Elija sucursal", "atributos": {"role": "button", "placeholder": "Sucursal Centro"},
-                         "esqueleto": '<div.caja role="button" title="Sucursal Centro">Sucursal Centro<span.x>Norte</span></div>'}]}
-    a = json.dumps(DC.anonimizar(d), ensure_ascii=False)
-    for texto in ("institucion", "Institución", "otro.example", "Pago", "titular", "sucursal", "Sucursal", "Norte"):
-        assert texto not in a, texto
-    assert 'role=\\"button\\"' in a and "div.caja" in a and "span.x" in a
 
 
 @pytest.fixture

@@ -18,11 +18,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import json
 import re
 
 from . import listas as LJ
 
-FORMATO = "cauce.diagnostico_controles.v1"
+FORMATO = "cauce.diagnostico_controles.v2"
 
 RECOGER_JS = r"""
 (selectoresReconocidos) => {
@@ -87,7 +88,7 @@ RECOGER_JS = r"""
   const cuenta = (s) => document.querySelectorAll(s).length;
   const w = window;
   const librerias = {
-    jquery: !!w.jQuery, select2: !!(w.jQuery && w.jQuery.fn && w.jQuery.fn.select2) || cuenta("[class*=select2]") > 0,
+    jquery: !!w.jQuery, ext_js: !!(w.Ext && (w.Ext.getCmp || w.Ext.Component)), select2: !!(w.jQuery && w.jQuery.fn && w.jQuery.fn.select2) || cuenta("[class*=select2]") > 0,
     chosen: cuenta("[class*=chosen-]") > 0, tom_select: cuenta(".ts-wrapper,.ts-control") > 0, choices: cuenta(".choices") > 0,
     selectize: cuenta(".selectize-control") > 0, bootstrap_select: cuenta(".bootstrap-select") > 0, nice_select: cuenta(".nice-select") > 0,
     react: !!document.querySelector("[data-reactroot]") || Array.from(document.querySelectorAll("body *")).slice(0, 400).some((e) => Object.keys(e).some((k) => k.startsWith("__react"))),
@@ -106,159 +107,230 @@ RECOGER_JS = r"""
     formularios: zonas.length, marcos, shadow_dom: sombra, librerias,
     candidatos: finales.map((c, i) => ({ n: i, motivo: c.motivo, sondeable: c.sondeable, selector: selector(c.el), elemento: firma(c.el),
       atributos: attrs(c.el), ancestros: ruta(c.el), texto: corto(c.el.textContent, 60), esqueleto: esqueleto(c.el, 0).slice(0, 900),
-      anterior: c.el.previousElementSibling ? firma(c.el.previousElementSibling) + " «" + corto(c.el.previousElementSibling.textContent, 30) + "»" : "",
+      anterior: c.el.previousElementSibling ? firma(c.el.previousElementSibling) : "",
+      anterior_texto: c.el.previousElementSibling ? corto(c.el.previousElementSibling.textContent, 30) : "",
       siguiente: c.el.nextElementSibling ? firma(c.el.nextElementSibling) : "" })),
   };
 }
 """
 
-# Tras un clic: qué elementos nuevos se ven y dónde está el foco (solo forma y textos cortos de la página)
-NUEVOS_JS = "(el) => {" + LJ.COMUN_JS + r"""
-  const corto = (s, n) => { s = clean(s); return s.length > n ? s.slice(0, n) + "…" : s; };
-  const firma = (e) => e.tagName.toLowerCase() + (cls(e) ? "." + cls(e).trim().split(/\s+/).slice(0, 4).join(".") : "");
-  const previas = window.__cauce_previas || new Set();
-  const nuevos = Array.from(document.querySelectorAll("body *")).filter((o) => !previas.has(o) && visible(o));
-  const hojasN = nuevos.filter((o) => !Array.from(o.children).some((h) => nuevos.includes(h)) && clean(o.textContent));
-  const a = document.activeElement;
-  return { nuevos_visibles: nuevos.length,
-    dentro_del_control: nuevos.filter((o) => el.contains(o) || (el.parentElement && el.parentElement.contains(o))).length,
-    muestra: hojasN.slice(0, 12).map((o) => ({ elemento: firma(o), padre: o.parentElement ? firma(o.parentElement) : "",
-      rol: o.getAttribute("role") || "", data: Array.from(o.attributes).filter((x) => x.name.startsWith("data-")).map((x) => x.name).slice(0, 5),
-      texto: corto(o.textContent, 40) })),
-    opciones_reconocidas: candidatos(el).length,
-    foco: a && a !== document.body ? firma(a) + (a.readOnly ? " [solo lectura]" : "") : "" };
-}"""
 
-
-def recoger(sesion: Any, analisis: Any, explicaciones: Any = None) -> dict:
-    """Devuelve el diagnóstico. No lanza: si algo falla, lo anota en `errores`."""
+def recoger(sesion: Any, analisis: Any, explicaciones: Any = None, seguridad: Any = None) -> dict:
+    """Devuelve el diagnóstico. SOLO LECTURA: no hace clics ni pulsa teclas; las interacciones, si las hubo, las hizo
+    la fase activa del análisis y llegan ya descritas en `explicaciones`. No lanza: los fallos van a `errores`."""
     page = sesion.page
     out: dict[str, Any] = {"formato": FORMATO, "errores": [], "nota": (
-        "Solo estructura de la página; sin datos de personas, cookies ni parámetros de URL. Los textos son rótulos y "
-        "opciones de la propia página.")}
+        "Solo estructura de la página; sin datos de personas, cookies ni parámetros de URL. Los textos son rótulos de la "
+        "propia página. Para compartir use la versión anonimizada.")}
     campos = analisis.all_fields
-    # Por qué cada control quedó como quedó: los cuadros de texto traen la explicación de su sondeo; el resto, su vía.
+    out["seguridad"] = dict(seguridad or {})
     por_clave = {e["clave"]: e for e in (explicaciones or [])}
     out["explicaciones"] = []
     for f in campos:
-        e = dict(por_clave.get(f.key) or {"clave": f.key, "tipo_detectado": f.type, "pasos": []})
+        e = dict(por_clave.get(f.key) or {"clave": f.key, "tipo_detectado": f.type, "fase": "pasiva", "pasos": [],
+                                         "decision": f.type, "motivo": "sin comprobación (página con intervención humana)"})
         e["tipo_final"] = f.type
-        if "motivo" not in e:
-            e["decision"] = "lista" if f.type == "custom-select" else f.type
-            e["motivo"] = ("reconocida por su estructura en la página (select sustituido, ARIA, campo oculto o clase de "
-                           f"lista); {len(f.options)} opciones" if f.type == "custom-select" else
-                           f"control nativo de tipo «{f.type}»: no necesita sondeo")
+        e["opciones"] = len(f.options)          # la cifra es SIEMPRE la del análisis real
         out["explicaciones"].append(e)
     out["campos_reconocidos"] = [{"clave": f.key, "tipo": f.type, "etiqueta": f.label[:60], "visible": f.visible,
                                   "editable": f.fillable, "opciones": len(f.options)} for f in campos]
+    listas = [f for f in campos if f.type == "custom-select"]
+    out["resumen"] = {"campos": len(campos), "listas": len(listas),
+                      "listas_con_opciones": sum(1 for f in listas if f.options),
+                      "opciones_en_total": sum(len(f.options) for f in listas),
+                      "interacciones": sum(len([p for p in e.get("pasos", []) if p.get("accion") != "error"])
+                                           for e in out["explicaciones"])}
     try:
         out.update(page.evaluate(RECOGER_JS, [f.selector for f in campos if f.type != "hidden"]))
     except Exception as exc:
         out["errores"].append(f"recoger: {type(exc).__name__}")
-        return out
-    if analisis.safety.blocked:
-        out["errores"].append("página con intervención humana requerida: no se hacen clics de sondeo")
-        return out
-    sondeos = []
-    objetivos = [("lista reconocida", f.selector, f.key) for f in campos
-                 if f.type == "custom-select" and f.visible and f.fillable][:15]
-    objetivos += [("candidato", c["selector"], f"candidato {c['n']}") for c in out.get("candidatos", []) if c["sondeable"]][:15]
-    for clase, selector, nombre in objetivos:
-        r: dict[str, Any] = {"objetivo": nombre, "clase": clase}
-        try:
-            loc = page.locator(selector).first
-            loc.scroll_into_view_if_needed(timeout=2000)
-            loc.evaluate(LJ.MARCAR_PREVIAS_JS)
-            LJ.clic(page, loc)
-            page.wait_for_timeout(700)
-            r.update(loc.evaluate(NUEVOS_JS))
-        except Exception as exc:
-            r["error"] = type(exc).__name__
-        finally:
-            try:
-                LJ.cerrar(page, page.locator(selector).first)
-            except Exception:
-                pass
-        sondeos.append(r)
-    out["sondeos"] = sondeos
     return out
 
 
 def resumen_markdown(d: dict) -> str:
+    r, seg = d.get("resumen") or {}, d.get("seguridad") or {}
     L = ["# Diagnóstico de controles", "", d.get("nota", ""), "",
-         f"- Formularios: {d.get('formularios')} · campos reconocidos: {len(d.get('campos_reconocidos', []))} · "
+         f"- Formularios: {d.get('formularios')} · campos reconocidos: {r.get('campos', len(d.get('campos_reconocidos', [])))} · "
          f"candidatos sin reconocer: {len(d.get('candidatos', []))}",
+         f"- Listas: {r.get('listas', 0)} · con opciones: {r.get('listas_con_opciones', 0)} · opciones en total: {r.get('opciones_en_total', 0)}",
          f"- Marcos (iframes): {len(d.get('marcos', []))} · componentes con Shadow DOM: {len(d.get('shadow_dom', []))}",
-         "- Librerías detectadas: " + (", ".join(k for k, v in (d.get("librerias") or {}).items() if v) or "ninguna conocida"), ""]
+         "- Librerías detectadas: " + (", ".join(k for k, v in (d.get("librerias") or {}).items() if v) or "ninguna conocida"), "",
+         "## Seguridad del análisis", "",
+         "- Modo: " + ("pasivo: solo lectura de la página, sin clics ni teclas" if seg.get("sondeo") != "clic" else
+                       "con comprobación de clic: solo ratón, sin teclado, con las escrituras al servidor bloqueadas"),
+         f"- Interacciones realizadas: {r.get('interacciones', 0)}",
+         "- Valores del formulario alterados: " + (", ".join(seg.get("controles_alterados") or []) or "ninguno"),
+         f"- Peticiones de escritura bloqueadas: {seg.get('escrituras_bloqueadas', 0)}",
+         f"- Controles sin comprobar: {len(seg.get('sin_comprobar') or [])}", ""]
     if d.get("marcos"):
         L.append("## Marcos")
-        L += [f"- {m['host'] or '(sin src)'} · mismo origen: {m['mismo_origen']} · campos dentro: {m['campos_dentro']}" for m in d["marcos"]]
+        L += [f"- {m.get('host') or '(sin src)'} · mismo origen: {m['mismo_origen']} · campos dentro: {m['campos_dentro']}" for m in d["marcos"]]
         L.append("")
-    if d.get("candidatos"):
-        L.append("## Candidatos sin reconocer")
-        for c in d["candidatos"]:
-            L += [f"### {c['n']}. {c['elemento']} — {c['motivo']}", f"- antes: {c['anterior']} · ancestros: {' < '.join(c['ancestros'])}",
-                  "```html", c["esqueleto"], "```"]
     if d.get("explicaciones"):
         L += ["## Por qué cada control se reconoció o se descartó", ""]
         for e in d["explicaciones"]:
-            pasos = "; ".join(f"{p.get('accion')}: {p.get('opciones', 0)} opciones, {p.get('elementos_nuevos', 0)} elementos nuevos"
+            pasos = "; ".join(f"{p.get('accion')}: {p.get('opciones', 0)} opciones vistas"
                               + (" (calendario)" if p.get("calendario") else "") for p in e.get("pasos", []) if p.get("accion") != "error")
             sen = e.get("senales") or {}
-            indicios = ", ".join(sen.get("fuertes", [])) or "ninguno"
-            L.append(f"- **{e['clave']}** — detectado «{e.get('tipo_detectado')}», queda como «{e.get('tipo_final')}». {e.get('motivo', '')}"
-                     + (f" · sondeo: {pasos}" if pasos else "") + (f" · indicios: {indicios}" if sen else "")
+            L.append(f"- **{e['clave']}** — detectado «{e.get('tipo_detectado')}», queda como «{e.get('tipo_final')}»"
+                     + (f" con {e.get('opciones', 0)} opciones" if e.get("tipo_final") == "custom-select" else "")
+                     + f". {e.get('motivo', '')}"
+                     + (f" · fase {e.get('fase')}" if e.get("fase") else "") + (f" · pasos: {pasos}" if pasos else "")
+                     + (f" · indicios: {', '.join(sen.get('fuertes') or []) or 'ninguno'}" if sen else "")
                      + (f" · eventos: {', '.join(sen.get('eventos', [])[:8])}" if sen.get("eventos") else "")
-                     + (" · AVISO: el sondeo cambió el contenido del campo" if e.get("valor_alterado_por_el_sondeo") else ""))
+                     + (" · AVISO: la comprobación cambió un valor del formulario" if e.get("valor_alterado_por_el_sondeo") else ""))
         L.append("")
-    if d.get("sondeos"):
-        L.append("## Sondeos (qué aparece al hacer clic)")
-        for s in d["sondeos"]:
-            L.append(f"- {s['objetivo']} ({s['clase']}): " + (f"error {s['error']}" if s.get("error") else
-                     f"{s.get('nuevos_visibles')} elementos nuevos, {s.get('opciones_reconocidas')} reconocidos como opciones; "
-                     f"foco en {s.get('foco') or '—'}"))
+    if d.get("candidatos"):
+        L.append("## Candidatos sin reconocer (solo descritos, no se pulsan)")
+        for c in d["candidatos"]:
+            L += [f"### {c['n']}. {c['elemento']} — {c['motivo']}", f"- antes: {c.get('anterior', '')} · ancestros: {' < '.join(c['ancestros'])}",
+                  "```html", c["esqueleto"], "```"]
     return "\n".join(L) + "\n"
 
 
-_TEXTOS = {"etiqueta", "texto", "anterior", "titulo", "titulo_documento", "siguiente_texto"}
-_QUITAR = {"url", "host"}
+# ---------------------------------------------------------------------------------------------------------------------
+# Versión para compartir. Principio: lista blanca. En la salida solo pueden quedar palabras de un vocabulario técnico
+# conocido o de los textos que genera este programa; cualquier otra palabra (clases, ids, nombres de campo, atributos)
+# se sustituye por un seudónimo estable (t1, t2…), y los textos de la página, por su longitud. Después se VERIFICA la
+# salida entera con la misma lista blanca: si queda una sola palabra fuera de ella, no se exporta.
+
+VOCAB = set("""
+a abbr active addon after alert align all alt anchor ant app area aria arrow article aside auto autocomplete awesomplete
+badge bar base before bg block body bold boot bootstrap border bottom bound box boundlist btn bs button by
+calendar caption card caret cell center check checkbox checked child choice choices chosen class clear clearfix click
+close code col collapse collapsed color cols column combo combobox complete component container content control
+controls corner css current custom data date datefield datepicker datetime day days dd default describedby dialog
+disabled display div dl down drop dropdown dt dx easy edit editable el elem element em email empty enabled end error
+es expanded ext false fa field fieldset first fixed flat flatpickr flex float focus focused font footer for form
+formfield frame full glyphicon grid group h1 h2 h3 h4 h5 h6 handle has haspopup head header height helper hidden hide
+highlight hint horizontal hover href html i icon id iframe image img in inline inner input inputmode invalid is item
+items jq jquery js k kendo key keydown keypress keyup label labelledby large last layer layout left legend lg li line
+link list listbox live loading lookup main mark mask mat material maxlength md medium menu menuitem message middle
+min mm modal mode month mui multi multiple multiselect name nav new next ng no none normal not number numberfield
+of off ok ol on only open opt optgroup option options outer over overlay owns p pane panel parent part password
+pattern picker placeholder plain plugin popper popup position pre prev primary pull query radio range rc react
+readonly ref region remove required reset resize result results right role root row rows rtl scroll scroller search
+secondary section select select2 selectable selected selection selectize selector separator shadow show side single
+size slim sm small span spin spinbutton spinner split ss start state static status step strong style sub submit
+success suffix suggest suggestion suggestions sup tab tabindex table target tbody td tel text textarea textbox
+textfield tfoot th thead theme time title to toggle tom tool toolbar tooltip top tr tree trigger true ts tt twitter
+timeout exception playwright type typeahead ui ul under unselectable up url v val valid value vertical view visible w warning webkit week widget
+width wrap wrapper x xs xtype y year yy yyyy z zone
+boton buscar calendario campo campos contenedor desplegable entrada fecha fila formulario lista listas oculto opcion
+opciones selector texto
+""".split())
+
+_TEXTOS = {"etiqueta", "texto", "anterior_texto", "titulo", "siguiente_texto"}
+_QUITAR = {"url", "host", "titulo_documento"}
+_PROPIOS = {"formato", "nota", "motivo", "decision", "modo", "fase", "accion", "tipo", "tipo_detectado", "tipo_final",
+            "origen_opciones", "sondeo", "libreria", "version", "fuertes", "jquery"}
+_CLAVES_DE_CAMPO = {"clave", "objetivo", "controles_alterados", "sin_comprobar"}
 _ATRIBUTOS_SEGUROS = ("role", "type", "tabindex", "readonly", "disabled", "inputmode", "maxlength", "contenteditable",
                       "aria-expanded", "aria-haspopup", "aria-autocomplete", "aria-hidden", "aria-disabled")
+_PALABRA = re.compile(r"[A-Z]?[a-zà-ÿ]+|[A-ZÀ-Ý]+(?![a-zà-ÿ])|\d+")
+_SEUDONIMO = re.compile(r"^(t|campo)\d+$")
 
 
-def _sin_texto(html: str) -> str:
-    """Quita del esqueleto HTML los textos visibles y los valores de atributos que podrían nombrar a alguien."""
-    html = re.sub(r">([^<>]+)<", lambda m: ">" + ("…" if m.group(1).strip() else "") + "<", html)
-    def attr(m: "re.Match") -> str:
-        return m.group(0) if m.group(1) in _ATRIBUTOS_SEGUROS else f' {m.group(1)}="…"'
-    return re.sub(r' ([a-zA-Z_:][-a-zA-Z0-9_:.]*)="[^"]*"', attr, html)
+class ExportacionBloqueada(Exception):
+    """La versión anonimizada no superó la verificación: no se debe escribir ni compartir."""
 
 
-def anonimizar(d: Any, clave: str = "") -> Any:
-    """Copia del diagnóstico para compartir: sin URL ni dominios, sin título, sin rótulos ni textos de opciones y sin
-    valores de atributos libres. Se conservan etiquetas HTML, clases, roles, tipos, recuentos y decisiones, que es lo
-    que hace falta para corregir el detector. Los nombres de clase e id son técnicos, pero conviene repasarlos antes
-    de enviar el archivo."""
-    if isinstance(d, dict):
-        out = {}
-        for k, v in d.items():
-            if k in _QUITAR:
-                continue
-            if k in _TEXTOS and isinstance(v, str):
-                out[k] = f"«texto de {len(v)} caracteres»" if v else ""
-            elif k == "esqueleto" and isinstance(v, str):
-                out[k] = _sin_texto(v)
-            elif k == "atributos" and isinstance(v, dict):
-                out[k] = {a: (x if a in _ATRIBUTOS_SEGUROS else "…") for a, x in v.items()}
-            elif k == "aria" and isinstance(v, dict):
-                out[k] = {a: (x if a in _ATRIBUTOS_SEGUROS else "…") for a, x in v.items()}
-            else:
-                out[k] = anonimizar(v, k)
-        if "nota" in out:
-            out["nota"] = "Versión anonimizada: sin URL, título, rótulos ni textos de opciones. Solo estructura técnica."
-        if "formato" in out:
-            out["anonimizado"] = True
-        return out
-    if isinstance(d, list):
-        return [anonimizar(x, clave) for x in d]
-    return d
+def _vocabulario_propio() -> set:
+    """Palabras de los textos que genera este programa (motivos, notas): las de su propio código fuente."""
+    from pathlib import Path
+    out = set(VOCAB)
+    for nombre in ("diagnostico_controles.py", "listas.py"):
+        try:
+            fuente = (Path(__file__).parent / nombre).read_text(encoding="utf-8")
+        except OSError:
+            continue
+        out.update(m.group(0).lower() for m in _PALABRA.finditer(fuente))
+    return out
+
+
+class _Anonimizador:
+    def __init__(self) -> None:
+        self.tokens: dict[str, str] = {}
+        self.campos: dict[str, str] = {}
+
+    def _token(self, m: "re.Match") -> str:
+        t = m.group(0)
+        pegado = m.start() > 0 and m.string[m.start() - 1].isalnum()      # camelCase o letras+cifras: se separa con «_»
+        if t.isdigit():
+            return ("_" if pegado else "") + (t if len(t) <= 2 else "0")
+        if t.lower() in VOCAB:
+            return t
+        return ("_" if pegado else "") + self.tokens.setdefault(t.lower(), f"t{len(self.tokens) + 1}")
+
+    def estructural(self, s: str) -> str:
+        return _PALABRA.sub(self._token, s)
+
+    def campo(self, s: str) -> str:
+        return self.campos.setdefault(s, f"campo{len(self.campos) + 1}")
+
+    def html(self, s: str) -> str:
+        s = re.sub(r">([^<>]+)<", lambda m: ">" + ("…" if m.group(1).strip() else "") + "<", s)
+        def attr(m: "re.Match") -> str:
+            n = m.group(1)
+            return f' {self.estructural(n)}="{self.estructural(m.group(2)) if n in _ATRIBUTOS_SEGUROS else "…"}"'
+        s = re.sub(r' ([a-zA-Z_:][-a-zA-Z0-9_:.]*)="([^"]*)"', attr, s)
+        return re.sub(r"<(/?)([^\s>]+)", lambda m: "<" + m.group(1) + self.estructural(m.group(2)), s)
+
+    def valor(self, d: Any, clave: str = "") -> Any:
+        if isinstance(d, dict):
+            out: dict[str, Any] = {}
+            for k, v in d.items():
+                if k in _QUITAR:
+                    continue
+                if clave in ("atributos", "aria"):         # nombre de atributo -> valor
+                    out[self.estructural(k)] = self.estructural(str(v)) if k in _ATRIBUTOS_SEGUROS else "…"
+                elif clave == "librerias":
+                    out[k] = bool(v)
+                else:
+                    out[k] = self.valor(v, k)
+            return out
+        if isinstance(d, list):
+            return [self.valor(x, clave) for x in d]
+        if isinstance(d, bool) or d is None or isinstance(d, (int, float)):
+            return d
+        s = str(d)
+        if clave in _TEXTOS:
+            return f"texto de {len(s)} caracteres" if s else ""
+        if clave in _CLAVES_DE_CAMPO:
+            return self.campo(s)
+        if clave in _PROPIOS:
+            return re.sub(r"«[^»]*»", lambda m: "«" + self.estructural(m.group(0)[1:-1]) + "»", s)
+        if clave == "esqueleto":
+            return self.html(s)
+        return self.estructural(s)
+
+
+def verificar_anonimo(d: Any) -> list[str]:
+    """Palabras de la salida que NO están en la lista blanca (vacío = seguro). No depende del diagnóstico original."""
+    permitido = _vocabulario_propio()
+    texto = json.dumps(d, ensure_ascii=False)
+    fuera = []
+    for m in _PALABRA.finditer(texto):
+        t = m.group(0).lower()
+        if t.isdigit():
+            if len(t) > 4:
+                fuera.append(t)
+        elif t not in permitido and not _SEUDONIMO.match(t) and len(t) > 1:
+            fuera.append(t)
+    if re.search(r"https?:|www\.|[a-z0-9]@[a-z0-9-]+\.[a-z]{2,}", texto, re.I):
+        fuera.append("(patrón de URL o correo)")
+    return sorted(set(fuera))
+
+
+def anonimizar(d: dict) -> dict:
+    """Copia del diagnóstico segura para compartir. Lanza `ExportacionBloqueada` si la verificación encuentra en la
+    salida cualquier palabra ajena a la lista blanca."""
+    out = _Anonimizador().valor(d)
+    out["anonimizado"] = True
+    out["nota"] = ("Versión anonimizada por lista blanca: sin URL, dominios, título, rótulos ni textos de opciones; las "
+                   "clases, identificadores y nombres de campo ajenos al vocabulario técnico aparecen como seudónimos "
+                   "(t1, t2…, campo1…). Verificada antes de escribirse.")
+    fuera = verificar_anonimo(out)
+    if fuera:
+        raise ExportacionBloqueada(f"{len(fuera)} palabra(s) fuera de la lista blanca")
+    return out

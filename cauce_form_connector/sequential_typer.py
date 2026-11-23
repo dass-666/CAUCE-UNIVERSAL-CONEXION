@@ -161,9 +161,11 @@ class SequentialTyper:
             loc = self.locator(f)
             es_texto = f.tag == "input"          # cuadro de texto que abre una lista (autocompletar y similares)
             visibles = LJ.abrir(self.page, loc, 750 if es_texto else 1500)
-            if not visibles and es_texto:        # algunas solo se abren con el teclado
-                self.page.keyboard.press("ArrowDown")
-                visibles = LJ.esperar_opciones(self.page, loc, 450)
+            if not visibles and es_texto:        # combos cuyo cuadro no despliega: se pulsa su flecha, como una persona
+                flecha = self.page.evaluate_handle(LJ.VECINO_JS, loc.element_handle()).as_element()
+                if flecha is not None:
+                    LJ.clic(self.page, flecha)
+                    visibles = LJ.esperar_opciones(self.page, loc, 900)
             opciones = LJ.opciones_conocidas(self.page, f) or visibles
             opt = next((o for o in opciones if o.value == value), None) or choose_option(opciones, value)
             escribible = self.page.evaluate(LJ.FOCO_ESCRIBIBLE_JS)

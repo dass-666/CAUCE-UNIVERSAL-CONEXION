@@ -103,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
                       help="expediente SINTÉTICO con el modelo de Monitor (solo se mira si hay dato, nunca se muestra)")
     p_az.add_argument("--salida", help="carpeta de resultados (por defecto informes/analisis_<formulario>_<fecha>)")
     p_az.add_argument("--nombre", default="", help="nombre legible del formulario")
+    p_az.add_argument("--sondeo", choices=("pasivo", "clic"), default="pasivo",
+                      help="pasivo (por defecto): solo lee la página, sin clics ni teclas. clic: además pulsa con el ratón "
+                           "los controles que la lectura no resolvió (sin teclado, escrituras bloqueadas, corta si algo cambia)")
     p_az.add_argument("--perfil-previo", help="perfil ya revisado de esta misma URL: la vista previa conserva sus rutas, "
                                               "formatos de fecha y equivalencias para no repetir la configuración")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")
@@ -256,7 +259,8 @@ def _analizar_formulario(args: argparse.Namespace, settings: Any) -> int:
             print(f"No se pudo leer el expediente: {type(exc).__name__}", file=sys.stderr)
             return 6
     try:
-        inf = A.analizar_url(url, autorizado=args.authorized, settings=settings, expediente=expediente, nombre=args.nombre)
+        inf = A.analizar_url(url, autorizado=args.authorized, settings=settings, expediente=expediente, nombre=args.nombre,
+                             sondeo=args.sondeo)
     except UrlNotAllowed as exc:
         print(f"URL no autorizada: {exc}", file=sys.stderr)
         return 3

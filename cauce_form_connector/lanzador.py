@@ -110,9 +110,10 @@ def agregar_host(datos: Path, host: str) -> None:
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def args_analizar(url: str, autorizado: bool, expediente: str, salida: Path, previo: str = "") -> list[str]:
+def args_analizar(url: str, autorizado: bool, expediente: str, salida: Path, previo: str = "",
+                  clic: bool = False) -> list[str]:
     a = [sys.executable, "-m", "cauce_form_connector", "analizar-formulario", "--url", url,
-         "--expediente", expediente, "--salida", str(salida)]
+         "--expediente", expediente, "--salida", str(salida), "--sondeo", "clic" if clic else "pasivo"]
     if previo:
         a += ["--perfil-previo", previo]
     return a + (["--authorized"] if autorizado else [])
@@ -189,6 +190,11 @@ class App:
                         ttk.Button(b, text="Abrir carpeta de resultados", command=self.abrir_carpeta)]
         for i, x in enumerate(self.botones):
             x.grid(row=0, column=i, padx=(0, 8))
+        # Por defecto el análisis solo LEE la página. La comprobación con clic es una fase aparte y opcional.
+        self.clic = tk.BooleanVar(value=False)
+        ttk.Checkbutton(b, variable=self.clic, text="Al analizar, permitir comprobación con clic en las listas que la "
+                        "lectura no resuelva (solo ratón, sin teclado; se detiene si algo cambia)"
+                        ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(6, 0))
 
         self.log = scrolledtext.ScrolledText(f, height=20, wrap="word")
         self.log.grid(row=6, column=0, columnspan=3, sticky="nsew")
@@ -286,7 +292,8 @@ class App:
         if not url:
             return
         salida = self.datos / "analisis" / datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.escribir(f"\nAnalizando (solo lectura)… resultados en {salida}")
+        self.escribir(f"\nAnalizando ({'lectura y comprobación con clic' if self.clic.get() else 'solo lectura, sin clics ni teclas'})… "
+                      f"resultados en {salida}")
 
         def fin(rc):
             if (salida / "vista_previa.html").exists():
@@ -294,13 +301,18 @@ class App:
                 self.escribir("Pulse «Revisar perfil» para revisar y descargar el perfil.")
                 if (salida / "diagnostico_controles.json").exists():
                     self.escribir("«diagnostico_controles.md» de esa carpeta explica por qué cada control se reconoció o "
-                                  "se descartó. Para compartirlo use «diagnostico_controles_anonimo.json»: no lleva URL, "
-                                  "rótulos ni textos de opciones.")
+                                  "se descartó.")
+                    if (salida / "diagnostico_controles_anonimo.json").exists():
+                        self.escribir("Para compartir use solo «diagnostico_controles_anonimo.json» (verificado: sin URL, "
+                                      "rótulos, textos ni nombres de clases o identificadores propios del sitio).")
+                    else:
+                        self.escribir("La versión anonimizada NO se generó porque no superó la verificación de seguridad: "
+                                      "no comparta el diagnóstico.")
 
         previo = perfil_previo_de(url, [(self.datos / "formularios", "*.json"), (Path.home() / "Downloads", "perfil_*.json")])
         if previo:
             self.escribir(f"Se conservará la configuración ya revisada de esta URL ({Path(previo).name}).")
-        self.ejecutar(args_analizar(url, host_de(url) not in LOCALES, self.exp.get(), salida, previo), fin)
+        self.ejecutar(args_analizar(url, host_de(url) not in LOCALES, self.exp.get(), salida, previo, bool(self.clic.get())), fin)
 
     def revisar(self) -> None:
         d = self.ultimo_analisis

@@ -115,9 +115,17 @@ def categoria(f: FieldDescriptor) -> str:
     return "texto"
 
 
-_PARTE = {"d": "dd", "dd": "dd", "j": "dd", "m": "mm", "mm": "mm", "n": "mm", "y": "aaaa", "yyyy": "aaaa", "aaaa": "aaaa"}
-_FMT_RE = re.compile(r"(?<![a-z%])%?(dd?|mm?|j|n|y|yyyy|aaaa)([/\-.])%?(dd?|mm?|j|n|y|yyyy|aaaa)\2%?(dd?|mm?|j|n|y|yyyy|aaaa)(?![a-z])", re.I)
+_FMT_RE = re.compile(r"(?<![A-Za-z%])%?(dd?|DD?|mm?|MM?|j|n|Y|yyyy|YYYY|aaaa|AAAA)([/\-.])%?(dd?|DD?|mm?|MM?|j|n|Y|yyyy|YYYY|aaaa|AAAA)\2"
+                     r"%?(dd?|DD?|mm?|MM?|j|n|Y|yyyy|YYYY|aaaa|AAAA)(?![A-Za-z])")
 _EJEMPLO_RE = re.compile(r"(?<!\d)(\d{1,4})([/\-.])(\d{1,2})\2(\d{1,4})(?!\d)")
+
+
+def _parte(g: str) -> str:
+    """Parte de fecha que nombra el fragmento. El año solo vale con 4 cifras: «yyyy», «aaaa» o «Y» (notación de PHP);
+    «y» o «yy» pueden ser de 2 cifras según la librería y no se interpretan."""
+    if g in ("Y",) or g.lower() in ("yyyy", "aaaa"):
+        return "aaaa"
+    return {"d": "dd", "dd": "dd", "j": "dd", "m": "mm", "mm": "mm", "n": "mm"}.get(g.lower(), "")
 
 
 def _formatos_en(texto: str) -> set[str]:
@@ -125,7 +133,7 @@ def _formatos_en(texto: str) -> set[str]:
     cuyo día es mayor que 12 (31/12/2024). Un ejemplo como 05/06/2024 no decide nada y no se cuenta."""
     out: set[str] = set()
     for m in _FMT_RE.finditer(texto):
-        partes = [_PARTE[g.lower()] for g in (m.group(1), m.group(3), m.group(4))]
+        partes = [_parte(g) for g in (m.group(1), m.group(3), m.group(4))]
         if sorted(partes) == ["aaaa", "dd", "mm"]:
             out.add(m.group(2).join(partes))
     for m in _EJEMPLO_RE.finditer(texto):
@@ -185,9 +193,13 @@ def _nombre_logico(f: FieldDescriptor, usados: set[str]) -> str:
 
 # --------------------------------------------------------------------------- análisis (navegador)
 def analizar_url(url: str, *, autorizado: bool, settings: Optional[Settings] = None,
-                 expediente: Optional[dict] = None, nombre: str = "") -> dict:
+                 expediente: Optional[dict] = None, nombre: str = "", sondeo: str = "pasivo") -> dict:
     """Abre la URL autorizada UNA vez, sin ventana, la inspecciona y devuelve el informe completo.
-    Lanza `UrlNotAllowed` si la política no la permite."""
+    Lanza `UrlNotAllowed` si la política no la permite.
+
+    `sondeo`: «pasivo» (por defecto) solo lee la página: ni clics ni teclas. «clic» añade una fase activa separada:
+    un clic de ratón en los controles que la lectura no resolvió, sin teclado, con las peticiones de escritura
+    bloqueadas y cortando al primer cambio de valor (ver `listas.descubrir`)."""
     from .page_inspector import BrowserSession
 
     settings = settings or get_settings()
@@ -201,12 +213,15 @@ def analizar_url(url: str, *, autorizado: bool, settings: Optional[Settings] = N
         extra["pagina"]["navegaciones_bloqueadas"] = s.blocked_requests
         explicaciones: list = []
         if not analisis.safety.blocked:   # listas JavaScript que solo muestran sus opciones al abrirlas (clic normal)
-            from .listas import completar_opciones, sondear_textos
-            explicaciones = sondear_textos(s, analisis.all_fields)   # cuadros de texto que en realidad abren una lista
-            completar_opciones(s.page, analisis.all_fields)
-        try:                              # evidencia de cómo están hechos los controles (lo último: puede abrir listas)
+            from .listas import descubrir
+            explicaciones = descubrir(s, analisis.all_fields, sondeo)
+        seguridad = {"sondeo": sondeo, "controles_alterados": list(s.analisis_alterado),
+                     "escrituras_bloqueadas": s.escrituras_bloqueadas,
+                     "sin_comprobar": [e["clave"] for e in explicaciones if e.get("sin_comprobar")
+                                       or (e.get("decision") == "lista" and not e.get("opciones") and e.get("fase") == "pasiva")]}
+        try:                              # evidencia de cómo están hechos los controles: solo lectura, sin clics
             from . import diagnostico_controles as DC
-            diagnostico = DC.recoger(s, analisis, explicaciones)
+            diagnostico = DC.recoger(s, analisis, explicaciones, seguridad)
         except Exception as exc:
             diagnostico = {"formato": "cauce.diagnostico_controles.v1", "errores": [type(exc).__name__]}
         inicial = s.initial_html
@@ -219,6 +234,19 @@ def analizar_url(url: str, *, autorizado: bool, settings: Optional[Settings] = N
     estatico = analyze_html(inicial) if inicial is not None else None
     inf = construir_informe(analisis, extra, url_ok, expediente=expediente, estatico=estatico, nombre=nombre)
     inf["_diagnostico_controles"] = dict(diagnostico, url=inf["url"])       # se guarda en un archivo aparte
+    inf["seguridad_analisis"] = seguridad
+    inf["perfil_borrador"]["sondeo"] = sondeo       # al aprobar se comprueba la página del mismo modo
+    if seguridad["controles_alterados"]:
+        inf["advertencias"].insert(0, "ATENCIÓN: la comprobación con clic cambió el valor de un control ("
+                                   + ", ".join(seguridad["controles_alterados"]) + "). La fase activa se interrumpió en ese "
+                                   "momento; la página del análisis se descartó sin enviar nada. Revise el diagnóstico.")
+    if seguridad["escrituras_bloqueadas"]:
+        inf["advertencias"].append(f"Durante la comprobación con clic la página intentó {seguridad['escrituras_bloqueadas']} "
+                                   "petición(es) de escritura al servidor: se bloquearon.")
+    if sondeo == "pasivo" and seguridad["sin_comprobar"]:
+        inf["advertencias"].append(f"Análisis pasivo (sin clics): {len(seguridad['sin_comprobar'])} control(es) podrían ser "
+                                   "listas cuyas opciones solo se ven al pulsarlos. Para comprobarlos, repita el análisis "
+                                   "permitiendo la comprobación con clic.")
     return inf
 
 
@@ -533,8 +561,17 @@ def guardar(inf: dict, carpeta: str | Path) -> dict[str, str]:
         rutas["diagnostico_md"] = d / "diagnostico_controles.md"
         rutas["diagnostico_json"].write_bytes(b(json.dumps(diag, ensure_ascii=False, indent=2) + "\n"))
         rutas["diagnostico_md"].write_bytes(b(DC.resumen_markdown(diag)))
-        rutas["diagnostico_anonimo"] = d / "diagnostico_controles_anonimo.json"
-        rutas["diagnostico_anonimo"].write_bytes(b(json.dumps(DC.anonimizar(diag), ensure_ascii=False, indent=2) + "\n"))
+        anonimo, bloqueado = d / "diagnostico_controles_anonimo.json", d / "diagnostico_controles_anonimo.BLOQUEADO.txt"
+        for viejo in (anonimo, bloqueado):
+            if viejo.exists():
+                viejo.unlink()
+        try:        # solo se escribe si supera la verificación por lista blanca
+            anonimo.write_bytes(b(json.dumps(DC.anonimizar(diag), ensure_ascii=False, indent=2) + "\n"))
+            rutas["diagnostico_anonimo"] = anonimo
+        except DC.ExportacionBloqueada as exc:
+            bloqueado.write_bytes(b("No se generó la versión anonimizada del diagnóstico: no superó la verificación "
+                                    f"de seguridad ({exc}). No comparta el diagnóstico completo.\n"))
+            rutas["diagnostico_anonimo_bloqueado"] = bloqueado
     rutas["informe_json"].write_bytes(b(json.dumps(inf, ensure_ascii=False, indent=2) + "\n"))
     rutas["informe_md"].write_bytes(b(informe_markdown(inf)))
     rutas["perfil"].write_bytes(b(json.dumps(inf["perfil_borrador"], ensure_ascii=False, indent=2) + "\n"))

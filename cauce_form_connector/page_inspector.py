@@ -78,6 +78,9 @@ class BrowserSession:
         self.blocked_requests = 0
         # clave -> opciones de los cuadros de texto que se comprobó (o se aprobó) que abren una lista
         self.listas_texto: dict[str, list] = {}
+        self.solo_lectura_red = False       # True durante la fase activa del análisis
+        self.escrituras_bloqueadas = 0
+        self.analisis_alterado: list[str] = []
         # Solo informativo (analizador): HTML tal como lo sirvió el sitio, antes de ejecutar JavaScript
         self.initial_html: Optional[str] = None
         self.last_settle_changes = 0
@@ -139,6 +142,11 @@ class BrowserSession:
             req = route.request
             if offline:
                 self.blocked_requests += 1
+                route.abort()
+                return
+            if self.solo_lectura_red and req.method.upper() not in ("GET", "HEAD", "OPTIONS"):
+                # análisis: mientras se interactúa con la página, nada que pueda modificar datos sale hacia el servidor
+                self.escrituras_bloqueadas += 1
                 route.abort()
                 return
             if nav_guard is not None and req.is_navigation_request() and req.frame.parent_frame is None:

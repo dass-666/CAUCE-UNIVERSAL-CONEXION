@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from cauce_form_connector import analizador_formularios as A
+from cauce_form_connector import diagnostico_controles as DC
 from cauce_form_connector import puente_monitor as P
 from cauce_form_connector.models import FieldDescriptor
 
@@ -34,7 +35,7 @@ CFG = {
 
 
 @pytest.mark.parametrize("texto,esperado", [
-    ("dd/mm/aaaa", {"dd/mm/aaaa"}), ("DD-MM-YYYY", {"dd-mm-aaaa"}), ("d/m/Y", {"dd/mm/aaaa"}),
+    ("dd/mm/aaaa", {"dd/mm/aaaa"}), ("DD-MM-YYYY", {"dd-mm-aaaa"}), ("d/m/Y", {"dd/mm/aaaa"}), ("d/m/y", set()),
     ("%d.%m.%Y", {"dd.mm.aaaa"}), ("dd/MM/yyyy", {"dd/mm/aaaa"}), ("yyyy-mm-dd", {"aaaa-mm-dd"}),
     ("ej. 31/12/2024", {"dd/mm/aaaa"}), ("12/31/2024", {"mm/dd/aaaa"}), ("2024-12-31", {"aaaa-mm-dd"}),
     ("05/06/2024", set()), ("99/99/9999", set()), ("Nombre y apellidos", set()),
@@ -55,7 +56,7 @@ def test_formato_ambiguo_o_contradictorio_no_se_adivina():
 @pytest.mark.browser
 def test_analisis_reconoce_listas_fecha_y_genera_diagnostico(tmp_path):
     st = settings_para(tmp_path)
-    inf = A.analizar_url((LAB / "09_listas_de_libreria.html").as_uri(), autorizado=False, settings=st, expediente=EXP)
+    inf = A.analizar_url((LAB / "09_listas_de_libreria.html").as_uri(), autorizado=False, settings=st, expediente=EXP, sondeo="clic")
     campos = {c["clave"]: c for c in inf["campos"]}
     assert campos["alta::operacion"]["tipo"] == "custom-select"
     assert [o["valor"] for o in campos["alta::operacion"]["opciones"]] == ["1", "2"]
@@ -66,7 +67,7 @@ def test_analisis_reconoce_listas_fecha_y_genera_diagnostico(tmp_path):
     assert campos["alta::f_cita"]["decision"] == "humano" and "calendario" in campos["alta::f_cita"]["motivo"]
 
     # dos análisis dan las mismas claves aunque los identificadores de la página cambien en cada carga
-    otra = A.analizar_url((LAB / "09_listas_de_libreria.html").as_uri(), autorizado=False, settings=st, expediente=EXP)
+    otra = A.analizar_url((LAB / "09_listas_de_libreria.html").as_uri(), autorizado=False, settings=st, expediente=EXP, sondeo="clic")
     assert [c["clave"] for c in otra["campos"]] == [c["clave"] for c in inf["campos"]]
     assert otra["perfil_borrador"]["_borrador"]["firma_estructura_analizada"] == inf["perfil_borrador"]["_borrador"]["firma_estructura_analizada"]
 
@@ -78,8 +79,8 @@ def test_analisis_reconoce_listas_fecha_y_genera_diagnostico(tmp_path):
     assert informe["perfil_previo"]["equivalencias"]["operacion"]["valores"] == {"nueva": "1", "reprogramar": "2"}
     assert "perfil_previo" in Path(rutas["vista_previa"]).read_text(encoding="utf-8")
     d = json.loads(Path(rutas["diagnostico_json"]).read_text(encoding="utf-8"))
-    assert d["formato"] == "cauce.diagnostico_controles.v1" and not d.get("errores")
-    assert {s["objetivo"] for s in d["sondeos"] if s.get("opciones_reconocidas")} >= {"alta::operacion", "alta::auto_tramite"}
+    assert d["formato"] == DC.FORMATO and not d.get("errores")
+    assert {e["clave"] for e in d["explicaciones"] if e["opciones"]} >= {"alta::operacion", "alta::auto_tramite"}
     assert not d["candidatos"]
     crudo = Path(rutas["diagnostico_json"]).read_text(encoding="utf-8") + Path(rutas["diagnostico_md"]).read_text(encoding="utf-8")
     for dato in (EXP["correo"], EXP["telefono"], EXP["nombre"] if "nombre" in EXP else EXP["correo"]):

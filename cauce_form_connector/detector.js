@@ -95,6 +95,25 @@
 
   // Pistas del formato que espera el campo (solo texto de la página, nunca valores escritos): atributos de las librerías
   // de calendario y máscaras, title y el texto de ayuda asociado.
+  // Formato en notación de PHP (Ext JS, flatpickr): d/j día, m/n mes, Y año de 4 cifras. Cualquier otra letra (año de
+  // 2 cifras, nombres de mes, horas) hace que no se use: no se adivina.
+  const phpFecha = (f) => /^[djmnY]([\/\-.])[djmnY]\1[djmnY]$/.test(f)
+    ? f.replace(/[dj]/, "dd").replace(/[mn]/, "mm").replace(/Y/, "yyyy") : "";
+  // El campo es de fecha según su componente o sus clases (para no confundirlo con una lista ni abrir su calendario)
+  const pareceFecha = (el) => {
+    try { const E = window.Ext; if (E) { let c = null;
+        try { if (E.Component && E.Component.fromElement) c = E.Component.fromElement(el); } catch (e) {}
+        if (!c && E.getCmp) c = E.getCmp((el.id || "").replace(/-inputEl$/, "")) || null;
+        if (c && c.isXType && (c.isXType("datefield") || c.isXType("timefield"))) return true; } } catch (e) {}
+    if (el._flatpickr || /hasDatepicker|datepicker|flatpickr/i.test(el.className || "")) return true;
+    for (let n = el.parentElement, k = 0; n && k < 3 && n.tagName !== "FORM" && n !== document.body; n = n.parentElement, k++) {
+      if (Array.from(n.querySelectorAll("input:not([type=hidden]),select,textarea")).some((x) => x !== el && isVisible(x))) break;
+      if (n.querySelector("[class*=date-trigger i],[class*=datepicker i],[class*=calendar i]")) return true;
+    }
+    return false;
+  };
+  const numerico = (el) => el.getAttribute("role") === "spinbutton";
+
   const formatHint = (el) => {
     const out = [];
     for (const a of ["data-date-format", "data-dateformat", "data-format", "data-mask", "data-inputmask",
@@ -113,7 +132,21 @@
         const f = d && ((d.o && d.o.format) || (typeof d.format === "function" ? d.format() : d.format));
         if (typeof f === "string") out.push(f);
       }
-      if (el._flatpickr && el._flatpickr.config && typeof el._flatpickr.config.dateFormat === "string") out.push(el._flatpickr.config.dateFormat);
+      if (el._flatpickr && el._flatpickr.config && typeof el._flatpickr.config.dateFormat === "string" && !el._flatpickr.altInput) out.push(phpFecha(el._flatpickr.config.dateFormat));
+      // flatpickr con campo alternativo: el cuadro visible usa «altFormat»
+      document.querySelectorAll("input.flatpickr-input").forEach((o) => { const fp = o._flatpickr;
+        if (fp && fp.altInput === el && fp.config && typeof fp.config.altFormat === "string") out.push(phpFecha(fp.config.altFormat)); });
+      // Ext JS: el campo de fecha declara su formato (notación de PHP: d/m/Y)
+      const E = window.Ext;
+      if (E) {
+        let c = null;
+        try { if (E.Component && E.Component.fromElement) c = E.Component.fromElement(el); } catch (e) {}
+        if (!c && E.getCmp) c = E.getCmp((el.id || "").replace(/-inputEl$/, "")) || E.getCmp(el.id) || null;
+        if (c && c.isXType && c.isXType("datefield") && typeof c.format === "string") out.push(phpFecha(c.format));
+      }
+      // Inputmask con formato de fecha explícito (una máscara 99/99/9999 no dice el orden y no se usa)
+      const im = el.inputmask && el.inputmask.opts;
+      if (im && typeof im.inputFormat === "string" && /d/i.test(im.inputFormat) && /y/i.test(im.inputFormat)) out.push(im.inputFormat);
       const M = window.M;
       const mi = M && M.Datepicker && M.Datepicker.getInstance && M.Datepicker.getInstance(el);
       if (mi && mi.options && typeof mi.options.format === "string") out.push(mi.options.format);
@@ -303,6 +336,7 @@
     // 2) ARIA
     Array.from(raiz.querySelectorAll("[role=combobox],[aria-haspopup=listbox]")).forEach((e) => {
       if (e.matches("select,textarea,option") || !libre(e)) return;
+      if (e.matches("input") && (pareceFecha(e) || numerico(e))) return;      // fecha con calendario o número: no es una lista
       if (!visibleReal(e) && !e.matches("input")) return;
       const root = e.matches("input") ? raizAria(e, raiz) : (raizAria(e, raiz).contains(e) ? raizAria(e, raiz) : e.parentElement);
       if (!libre(root) || !visibleReal(root)) return;
@@ -327,6 +361,12 @@
         if (!(DROP_RE.test(cls(c)) || /-select|dropdown/i.test(c.tagName)) || c.matches("label,option,optgroup,form,fieldset,script,style")) return;
         if (!libre(c) || !visibleReal(c) || !pulsable(c) || c.closest("[role=listbox],ul,ol")) return;
         if (c.querySelector("select,textarea,input:not([type=hidden])") || textOf(c).length > 160) return;
+        // Adorno de un cuadro de texto (flecha, botones de subir/bajar, icono de calendario): el control es el cuadro
+        for (let n = c.parentElement, k = 0; n && k < 3 && n !== raiz && n !== document.body; n = n.parentElement, k++) {
+          const vis = Array.from(n.querySelectorAll("input:not([type=hidden]),textarea")).filter(visibleReal);
+          if (vis.length === 1) return;
+          if (vis.length > 1) break;
+        }
         nuevo(disparador(c), c, null, "");
       });
     }
