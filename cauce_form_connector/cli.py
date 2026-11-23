@@ -87,6 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     p_au.add_argument("--aprobar-perfil", metavar="REV_ID", help="paso humano: aprobar/actualizar el perfil (rev_xxx) "
                                                                  "tras revisar los campos del perfil de formulario")
     p_au.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
+    p_au.add_argument("--autorizacion", metavar="AUT_REF", help="referencia de la autorización escrita del sitio (aut_xxx); "
+                                                               "obligatoria para sitios externos")
     p_au.add_argument("--espera-s", type=int, default=300, help="segundos que se mantiene la ventana para la revisión")
     p_au.add_argument("--json", action="store_true", help="salida JSON (respuesta del contrato + informe) en vez de texto")
     p_az = sub.add_parser("analizar-formulario", help="SOLO LECTURA: analiza un formulario autorizado y genera informe "
@@ -185,10 +187,23 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
+    import re
+    from urllib.parse import urlsplit
     from . import puente_monitor as P
+    from .url_policy import LOCAL_HOSTS
     try:
         cfg = P.cargar_formulario(args.formulario, url=args.url, puerto=args.puerto)
         expediente = json.loads(Path(args.expediente).read_text(encoding="utf-8"))
+        # Sitios externos: en CADA ejecución (no solo al aprobar) se exige la declaración y una referencia real de
+        # autorización; las referencias de demostración solo valen para formularios locales de laboratorio.
+        p = urlsplit(cfg["url"])
+        externo = p.scheme in ("http", "https") and (p.hostname or "").lower() not in LOCAL_HOSTS
+        UrlPolicy.load(settings.allowed_hosts_file).check(cfg["url"], args.authorized)
+        if externo and not (args.authorized and args.autorizacion
+                            and re.fullmatch(r"aut_[a-z0-9_]{1,40}", args.autorizacion) and args.autorizacion != "aut_demo"):
+            print("URL no autorizada: para un sitio externo use --authorized y --autorizacion aut_xxx (referencia de la "
+                  "autorización escrita).", file=sys.stderr)
+            return 3
         if args.aprobar_perfil:
             info = P.aprobar_perfil(cfg, settings, aprobado_por=args.aprobar_perfil, autorizado=args.authorized)
             print(f"Perfil aprobado: {info['perfil']} (sha256 {info['perfil_sha256'][:12]}…, firma {info['firma']})", file=sys.stderr)
@@ -196,13 +211,20 @@ def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
                 print(f"  Tabla «{logico}» aprobada: {len(cob['codigos_cubiertos'])} códigos"
                       + (f"; sin fila (los completa la persona): {', '.join(cob['codigos_sin_fila'])}" if cob["codigos_sin_fila"] else ""),
                       file=sys.stderr)
-        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s)
-    except (P.ConfigInvalida, OSError, ValueError) as exc:
-        print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)
-        return 6
-    except UrlNotAllowed as exc:
+        extra: dict[str, Any] = {}
+        if externo:
+            aprobado = (P.info_perfil(cfg, settings) or {}).get("aprobado_por")
+            extra = {"autorizacion_ref": args.autorizacion, "otorgada_por": aprobado or "rev_sin_aprobar"}
+        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s, **extra)
+    except UrlNotAllowed as exc:          # antes que ValueError: UrlNotAllowed hereda de ValueError
         print(f"URL no autorizada: {exc}", file=sys.stderr)
         return 3
+    except P.ConfigInvalida as exc:       # mensajes propios, sin datos personales: se muestran para poder corregir
+        print(f"Error de configuración: {exc}", file=sys.stderr)
+        return 6
+    except (OSError, ValueError) as exc:
+        print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)
+        return 6
     if args.json:
         _emit({"salida": r["salida"], "respuesta": r["respuesta"], "informe": r["informe"]})
     else:
