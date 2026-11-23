@@ -103,3 +103,7 @@ Ejemplo en `cmd`: `set CAUCE_TYPING_DELAY_MS=80` antes de `iniciar_windows.bat`.
 | El puerto 8765 está ocupado | Otra aplicación lo usa | `python -m cauce_form_connector.web.app --port 8800` |
 | Antivirus bloquea Chromium | Política corporativa | Pida a TI permitir `%USERPROFILE%\AppData\Local\ms-playwright` |
 | Teclado en español y caracteres raros | No debería ocurrir: los acentos y la ñ se envían como eventos de tecla Unicode, independientes de la distribución del teclado de Windows | Si ocurre, indíquelo con la captura del informe |
+
+## Programa con ventana (doble clic)
+
+Abra `abrir_cauce_forms.bat` con doble clic. La primera vez instala lo necesario. La ventana tiene la URL y los botones «Analizar formulario», «Revisar perfil» y «Preparar autorrellenado». Los resultados se guardan en `%LOCALAPPDATA%\CauceForms` (solo para su usuario, fuera de esta carpeta). El conector nunca envía el formulario.
