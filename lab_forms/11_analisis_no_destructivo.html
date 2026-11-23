@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 11 · Análisis que no debe alterar nada</title>
+<link rel="stylesheet" href="lab.css">
+<style>
+.combo-wrap{display:inline-flex;align-items:stretch}
+.combo-trigger{display:inline-block;width:22px;border:1px solid #888;border-left:0;cursor:pointer;text-align:center;background:#eee;color:#111}
+.spin-wrap{display:inline-flex}
+.spinner-btns{display:inline-flex;flex-direction:column}
+.spinner-btns span{cursor:pointer;border:1px solid #888;font-size:9px;line-height:10px;padding:0 4px;background:#eee;color:#111}
+.sug{position:absolute;z-index:9;min-width:200px;background:#fff;color:#111;border:1px solid #888;list-style:none;margin:0;padding:0}
+.sug li{padding:6px 10px;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+  <h1>Laboratorio 11 · Controles que un análisis podría alterar (simulado)</h1>
+  <p class="nota">Formulario de PRUEBA con datos ficticios. Reproduce controles que cambian con una sola tecla o un solo
+    clic: un campo numérico que baja con la flecha abajo (como los de Ext JS), un combo cuyo cuadro no despliega (solo su
+    flecha), un campo que guarda en el servidor al recibir el foco, y un conmutador que cambia de valor al pulsarlo
+    (se desactiva con <code>?trampa=0</code>). La página avisa a su servidor de cada evento para poder comprobarlo.</p>
+  <form id="alta" action="#hecho" method="post">
+    <div class="fila">
+      <label for="cantidad">Cantidad</label>
+      <span class="spin-wrap"><input id="cantidad" name="cantidad" type="text" role="spinbutton" value="5" autocomplete="off">
+        <span class="spinner-btns"><span class="spin-up" id="mas">▲</span><span class="spin-down" id="menos">▼</span></span></span>
+    </div>
+    <div class="fila">
+      <label for="sucursal_txt">Sucursal</label>
+      <span class="combo-wrap"><input id="sucursal_txt" name="sucursal_txt" type="text" autocomplete="off"><span class="combo-trigger" id="sucursal_flecha">▾</span></span>
+      <input type="hidden" id="sucursal" name="sucursal">
+    </div>
+    <div class="fila">
+      <label for="referencia">Referencia</label>
+      <input id="referencia" name="referencia" type="text" autocomplete="off">
+    </div>
+    <div class="fila">
+      <label for="turno">Turno</label>
+      <input id="turno" name="turno" type="text" readonly value="Mañana">
+    </div>
+    <div class="fila">
+      <label for="zona_txt">Zona</label>
+      <input id="zona_txt" name="zona_txt" type="text" readonly placeholder="Seleccione">
+      <input type="hidden" id="zona" name="zona">
+    </div>
+    <div class="fila">
+      <label for="f_nac">Fecha de nacimiento</label>
+      <input id="f_nac" name="f_nac" type="text" data-date-format="d/m/Y" maxlength="10">
+    </div>
+    <div class="fila"><label for="mail">Correo electrónico</label><input id="mail" name="mail" type="email"></div>
+    <button type="submit">Enviar</button>
+  </form>
+</main>
+<script>
+var TRAMPA = !/[?&]trampa=0/.test(location.search);
+var $ = function (id) { return document.getElementById(id); };
+// Aviso al servidor de laboratorio de cada evento del usuario y de cada cambio de valor (solo para las pruebas)
+function avisar(q) { try { fetch('/evento?' + q, {cache: 'no-store'}).catch(function () {}); } catch (e) {} }
+['click', 'keydown', 'focusin'].forEach(function (t) {
+  document.addEventListener(t, function (e) { avisar('t=' + t + (e.key ? '&k=' + encodeURIComponent(e.key) : '') + '&c=' + (e.target.id || '')); }, true);
+});
+var antes = {};
+function vigilar() { [].forEach.call(document.querySelectorAll('input'), function (i) {
+  if (antes[i.id] !== undefined && antes[i.id] !== i.value) avisar('t=cambio&c=' + i.id);
+  antes[i.id] = i.value; }); }
+vigilar(); setInterval(vigilar, 60);
+
+// Campo numérico: flecha abajo/arriba cambian el valor de inmediato (como un numberfield de Ext JS)
+(function () {
+  var c = $('cantidad'); function mover(d) { c.value = String((parseInt(c.value, 10) || 0) + d); }
+  c.addEventListener('keydown', function (e) { if (e.key === 'ArrowDown') { mover(-1); e.preventDefault(); } if (e.key === 'ArrowUp') { mover(1); e.preventDefault(); } });
+  $('mas').addEventListener('click', function () { mover(1); }); $('menos').addEventListener('click', function () { mover(-1); });
+})();
+function menu(inp, oculto, ops, disparador, alPulsarCuadro) {
+  var m = null;
+  function cerrar() { if (m) { m.remove(); m = null; } }
+  function abrir() {
+    if (m) return cerrar();
+    var q = inp.readOnly ? '' : inp.value.toLowerCase();
+    m = document.createElement('ul'); m.className = 'sug';
+    var r = inp.getBoundingClientRect(); m.style.left = r.left + 'px'; m.style.top = (r.bottom + window.scrollY) + 'px';
+    ops.filter(function (o) { return o[1].toLowerCase().indexOf(q) >= 0 || inp.value === o[1]; }).forEach(function (o) {
+      var li = document.createElement('li'); li.textContent = o[1];
+      li.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      li.addEventListener('click', function () { inp.value = o[1]; oculto.value = o[0]; cerrar(); });
+      m.appendChild(li);
+    });
+    document.body.appendChild(m);
+  }
+  if (disparador) disparador.addEventListener('click', abrir);
+  if (alPulsarCuadro) inp.addEventListener('click', abrir);
+  if (!inp.readOnly) inp.addEventListener('input', function () { oculto.value = ''; cerrar(); abrir(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+}
+menu($('sucursal_txt'), $('sucursal'), [['S001', 'Centro'], ['S002', 'Norte'], ['S003', 'Sur']], $('sucursal_flecha'), false);
+menu($('zona_txt'), $('zona'), [['Z1', 'Oriente'], ['Z2', 'Poniente']], null, true);
+// Guardado automático al recibir el foco: una petición de ESCRITURA al servidor
+$('referencia').addEventListener('focus', function () {
+  try { fetch('/guardar', {method: 'POST', body: 'borrador=1'}).catch(function () {}); } catch (e) {} });
+// Conmutador: un clic cambia su valor
+if (TRAMPA) $('turno').addEventListener('click', function () { this.value = this.value === 'Mañana' ? 'Tarde' : 'Mañana'; });
+document.getElementById('alta').addEventListener('submit', function (e) { e.preventDefault(); });
+</script>
+</body>
+</html>

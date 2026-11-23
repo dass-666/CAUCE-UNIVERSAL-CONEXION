@@ -31,8 +31,10 @@ def normalize_label(text: str) -> str:
 
 def field_fingerprint(f: FieldDescriptor | dict[str, Any]) -> dict[str, Any]:
     d = f.to_dict() if isinstance(f, FieldDescriptor) else f
-    opts = sorted((str(o.get("value", "")), normalize_label(str(o.get("label", ""))))
-                  for o in d.get("options", []))
+    # Listas personalizadas: sus opciones pueden no existir en la página hasta abrirlas, así que no entran en la firma
+    # (la opción se busca y se verifica al rellenar; si ya no existe, el campo queda como incidencia).
+    opts = [] if d.get("type") == "custom-select" else sorted(
+        (str(o.get("value", "")), normalize_label(str(o.get("label", "")))) for o in d.get("options", []))
     return {
         "key": d.get("key", ""), "tag": d.get("tag", ""), "type": d.get("type", ""),
         "label": normalize_label(d.get("label", "")), "aria": normalize_label(d.get("aria_label", "")),

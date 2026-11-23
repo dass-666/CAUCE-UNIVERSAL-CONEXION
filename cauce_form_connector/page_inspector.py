@@ -76,6 +76,14 @@ class BrowserSession:
         self._init_scripts: list[str] = []
         self._nav_guard: Optional[Callable[[str], bool]] = None
         self.blocked_requests = 0
+        # clave -> opciones de los cuadros de texto que se comprobó (o se aprobó) que abren una lista
+        self.listas_texto: dict[str, list] = {}
+        self.solo_lectura_red = False       # True durante la fase activa del análisis
+        self.escrituras_bloqueadas = 0
+        self.analisis_alterado: list[str] = []
+        # Solo informativo (analizador): HTML tal como lo sirvió el sitio, antes de ejecutar JavaScript
+        self.initial_html: Optional[str] = None
+        self.last_settle_changes = 0
         # --- H1: el envío no es una capacidad permanente de la sesión ---
         self.integration_mode = False      # True: no existe envío programático (modo `preparar`)
         self.submit_armed = False          # solo tras un relleno completado en ESTA página; un solo uso
@@ -136,6 +144,11 @@ class BrowserSession:
                 self.blocked_requests += 1
                 route.abort()
                 return
+            if self.solo_lectura_red and req.method.upper() not in ("GET", "HEAD", "OPTIONS"):
+                # análisis: mientras se interactúa con la página, nada que pueda modificar datos sale hacia el servidor
+                self.escrituras_bloqueadas += 1
+                route.abort()
+                return
             if nav_guard is not None and req.is_navigation_request() and req.frame.parent_frame is None:
                 if not nav_guard(req.url):
                     self.blocked_requests += 1
@@ -192,14 +205,19 @@ class BrowserSession:
         self.start()
         self._nav_guard = nav_guard
         self._new_context(nav_guard=nav_guard)
-        self.page.goto(url, wait_until="domcontentloaded")
+        resp = self.page.goto(url, wait_until="domcontentloaded")
+        self.initial_html = None
+        try:
+            self.initial_html = resp.text() if resp is not None else None
+        except Exception:
+            pass  # algunos esquemas (file://) o respuestas no exponen el cuerpo
         try:
             self.page.wait_for_load_state("networkidle", timeout=5000)
         except Exception:
             pass  # páginas con conexiones persistentes nunca llegan a "networkidle"
         self.source, self.source_label = "url", safe_url_label(url)
         self._url, self._html = url, None
-        self.settle()
+        self.last_settle_changes = self.settle()
 
     def reload_source(self) -> None:
         """Vuelve a cargar la fuente original (para empezar un relleno limpio)."""
@@ -229,6 +247,16 @@ class BrowserSession:
 
     def inspect(self) -> AnalysisResult:
         result = build_analysis(self.raw_scan(), self.source or "url", self.source_label, engine="browser")
+        conocidas = getattr(self, "listas_texto", None)
+        if conocidas:                 # cuadros de texto ya comprobados (o aprobados en el perfil) como listas
+            from .listas import TIPOS_TEXTO, promover
+            for f in result.all_fields:
+                if f.key in conocidas and f.tag == "input" and f.type in TIPOS_TEXTO:
+                    promover(f, conocidas[f.key])
+                elif f.key in conocidas and f.tag == "input" and f.type == "custom-select" and not f.options:
+                    # Combo que la página ya marca como lista pero cuyas opciones solo se leyeron al aprobar el perfil
+                    # (p. ej. del almacén de datos del componente): se usan las aprobadas, no lo que flote en pantalla.
+                    f.options = list(conocidas[f.key])
         if len(self.page.frames) > 1:
             result.warnings.append(
                 f"La página contiene {len(self.page.frames) - 1} iframe(s); los campos dentro de iframes "

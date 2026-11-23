@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 7 · Listas personalizadas, identificador y fecha con máscara</title>
+<link rel="stylesheet" href="lab.css">
+<style>
+.combo{position:relative;display:inline-block;min-width:220px}
+.combo [role=combobox]{border:1px solid #888;padding:6px 10px;cursor:pointer;background:#fff;color:#111;border-radius:4px}
+.combo [role=listbox]{position:absolute;z-index:5;left:0;right:0;margin:0;padding:0;list-style:none;background:#fff;color:#111;border:1px solid #888}
+.combo [role=listbox][hidden]{display:none}
+.combo [role=option]{padding:6px 10px;cursor:pointer}
+.combo [role=option][aria-selected=true]{background:#dbeafe}
+</style>
+</head>
+<body>
+<main>
+  <h1>Laboratorio 7 · Solicitud con listas personalizadas (simulado)</h1>
+  <p class="nota">Formulario de PRUEBA, con datos ficticios. Las listas de «Operación» y «Trámite» están hechas con
+    JavaScript (no son &lt;select&gt;). La fecha usa una máscara DD/MM/AAAA. No envía nada.</p>
+  <form id="solicitud" action="#hecho" method="post">
+    <div class="fila">
+      <label id="lbl_operacion">Operación</label>
+      <div class="combo">
+        <div id="operacion" role="combobox" tabindex="0" aria-labelledby="lbl_operacion" aria-haspopup="listbox"
+             aria-controls="lista_operacion" aria-expanded="false" aria-required="true" data-input="operacion_valor">Seleccione…</div>
+        <ul id="lista_operacion" role="listbox" hidden>
+          <li role="option" data-value="OP-N" aria-selected="false">Nueva cita</li>
+          <li role="option" data-value="OP-R" aria-selected="false">Reprogramar cita</li>
+        </ul>
+        <input type="hidden" id="operacion_valor" name="operacion_valor" value="">
+      </div>
+    </div>
+    <div class="fila">
+      <label for="id_cliente">Identificador de cliente</label>
+      <input id="id_cliente" name="id_cliente" type="text" required pattern="CL-\d{6}" maxlength="9" placeholder="CL-000000">
+    </div>
+    <div class="fila">
+      <label for="nacimiento">Fecha de nacimiento (DD/MM/AAAA)</label>
+      <input id="nacimiento" name="nacimiento" type="text" inputmode="numeric" placeholder="DD/MM/AAAA" maxlength="10"
+             required pattern="\d{2}/\d{2}/\d{4}">
+    </div>
+    <div class="fila">
+      <label id="lbl_tramite">Tipo de trámite</label>
+      <div class="combo">
+        <div id="tramite" role="combobox" tabindex="0" aria-labelledby="lbl_tramite" aria-haspopup="listbox"
+             aria-controls="lista_tramite" aria-expanded="false" aria-required="true" data-input="tramite_valor">Seleccione…</div>
+        <ul id="lista_tramite" role="listbox" hidden>
+          <li role="option" data-value="T-ALTA" aria-selected="false">Alta</li>
+          <li role="option" data-value="T-REN" aria-selected="false">Renovación</li>
+          <li role="option" data-value="T-CONS" aria-selected="false">Constancia</li>
+        </ul>
+        <input type="hidden" id="tramite_valor" name="tramite_valor" value="">
+      </div>
+    </div>
+    <div class="fila">
+      <label for="telefono">Teléfono a 10 dígitos</label>
+      <input id="telefono" name="telefono" type="tel" required pattern="\d{10}" maxlength="10">
+    </div>
+    <div class="fila">
+      <label for="telefono_confirmacion">Confirme su teléfono</label>
+      <input id="telefono_confirmacion" name="telefono_confirmacion" type="tel" required maxlength="10" data-confirm="telefono">
+    </div>
+    <div class="fila">
+      <label for="correo">Correo</label>
+      <input id="correo" name="correo" type="email" required>
+    </div>
+    <div class="fila">
+      <label for="correo_confirmacion">Confirme su correo</label>
+      <input id="correo_confirmacion" name="correo_confirmacion" type="email" required data-confirm="correo">
+    </div>
+    <button type="submit">Enviar solicitud</button>
+  </form>
+</main>
+<script>
+// Listas personalizadas: se abren con clic; al elegir una opción se marcan aria-selected, el texto visible y el
+// input oculto, y se emite «change» (lo que haría un componente real de una página).
+document.querySelectorAll('[role=combobox]').forEach(function (cb) {
+  var lista = document.getElementById(cb.getAttribute('aria-controls'));
+  var oculto = document.getElementById(cb.dataset.input);
+  cb.addEventListener('click', function () {
+    lista.hidden = !lista.hidden; cb.setAttribute('aria-expanded', String(!lista.hidden));
+  });
+  lista.querySelectorAll('[role=option]').forEach(function (op) {
+    op.addEventListener('click', function () {
+      lista.querySelectorAll('[role=option]').forEach(function (o) { o.setAttribute('aria-selected', 'false'); });
+      op.setAttribute('aria-selected', 'true');
+      cb.textContent = op.textContent; oculto.value = op.dataset.value;
+      lista.hidden = true; cb.setAttribute('aria-expanded', 'false');
+      oculto.dispatchEvent(new Event('change', {bubbles: true}));
+    });
+  });
+});
+// Máscara de fecha: solo dígitos; las barras las pone la página.
+var fecha = document.getElementById('nacimiento');
+fecha.addEventListener('input', function () {
+  var d = fecha.value.replace(/\D/g, '').slice(0, 8);
+  fecha.value = d.slice(0, 2) + (d.length > 2 ? '/' + d.slice(2, 4) : '') + (d.length > 4 ? '/' + d.slice(4) : '');
+});
+document.getElementById('solicitud').addEventListener('submit', function (e) { e.preventDefault(); });
+</script>
+</body>
+</html>

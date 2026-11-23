@@ -42,6 +42,7 @@ def _field_from_raw(raw: dict[str, Any], form_key: str) -> FieldDescriptor:
         maxlength=raw.get("maxlength"), min=raw.get("min", ""), max=raw.get("max", ""),
         step=raw.get("step", ""), inputmode=raw.get("inputmode", ""), options=opts,
         form_key=form_key, blocks_paste=bool(raw.get("blocks_paste")),
+        format_hint=str(raw.get("format_hint") or ""),
     )
 
 

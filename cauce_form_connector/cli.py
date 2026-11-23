@@ -87,8 +87,27 @@ def main(argv: list[str] | None = None) -> int:
     p_au.add_argument("--aprobar-perfil", metavar="REV_ID", help="paso humano: aprobar/actualizar el perfil (rev_xxx) "
                                                                  "tras revisar los campos del perfil de formulario")
     p_au.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
+    p_au.add_argument("--autorizacion", metavar="AUT_REF", help="(opcional) referencia de autorización del sitio (aut_xxx); "
+                                                               "si se omite, se registra aut_lista_dominios_local")
+    p_au.add_argument("--manuales-stdin", action="store_true", help="leer por stdin un JSON {campo: valor} con los datos "
+                      "de captura manual (@manual) de ESTA ejecución; no se guardan ni se imprimen")
     p_au.add_argument("--espera-s", type=int, default=300, help="segundos que se mantiene la ventana para la revisión")
     p_au.add_argument("--json", action="store_true", help="salida JSON (respuesta del contrato + informe) en vez de texto")
+    p_az = sub.add_parser("analizar-formulario", help="SOLO LECTURA: analiza un formulario autorizado y genera informe "
+                                                      "técnico, perfil borrador y vista previa para revisión humana")
+    g_az = p_az.add_mutually_exclusive_group(required=True)
+    g_az.add_argument("--url", help="URL autorizada del formulario")
+    g_az.add_argument("--html", help="archivo .html local (pruebas)")
+    p_az.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
+    p_az.add_argument("--expediente", default="sample_data/expediente_monitor_sintetico.json",
+                      help="expediente SINTÉTICO con el modelo de Monitor (solo se mira si hay dato, nunca se muestra)")
+    p_az.add_argument("--salida", help="carpeta de resultados (por defecto informes/analisis_<formulario>_<fecha>)")
+    p_az.add_argument("--nombre", default="", help="nombre legible del formulario")
+    p_az.add_argument("--sondeo", choices=("pasivo", "clic"), default="pasivo",
+                      help="pasivo (por defecto): solo lee la página, sin clics ni teclas. clic: además pulsa con el ratón "
+                           "los controles que la lectura no resolvió (sin teclado, escrituras bloqueadas, corta si algo cambia)")
+    p_az.add_argument("--perfil-previo", help="perfil ya revisado de esta misma URL: la vista previa conserva sus rutas, "
+                                              "formatos de fecha y equivalencias para no repetir la configuración")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")
     source(p_fi)
     p_fi.add_argument("--data", required=True)
@@ -108,6 +127,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "autorrellenar":
         return _autorrellenar(args, settings)
+
+    if args.cmd == "analizar-formulario":
+        return _analizar_formulario(args, settings)
 
     if args.cmd == "ui":
         from .web.app import main as ui_main
@@ -172,25 +194,101 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
+    import re
+    from urllib.parse import urlsplit
     from . import puente_monitor as P
+    from .url_policy import LOCAL_HOSTS
     try:
         cfg = P.cargar_formulario(args.formulario, url=args.url, puerto=args.puerto)
         expediente = json.loads(Path(args.expediente).read_text(encoding="utf-8"))
+        # Sitios externos: en CADA ejecución el dominio debe estar en la lista de permitidos y declararse con
+        # --authorized. La referencia --autorizacion es opcional; si se da, debe tener formato aut_xxx y no ser la de
+        # demostración. Sin ella, el registro indica que la autorización viene de la lista local de dominios.
+        p = urlsplit(cfg["url"])
+        externo = p.scheme in ("http", "https") and (p.hostname or "").lower() not in LOCAL_HOSTS
+        UrlPolicy.load(settings.allowed_hosts_file).check(cfg["url"], args.authorized)
+        aut_ref = args.autorizacion or "aut_lista_dominios_local"
+        if externo and not (args.authorized and re.fullmatch(r"aut_[a-z0-9_]{1,40}", aut_ref) and aut_ref != "aut_demo"):
+            print("URL no autorizada: para un sitio externo use --authorized (dominio en la lista de permitidos); "
+                  "--autorizacion, si se indica, debe ser aut_xxx y no aut_demo.", file=sys.stderr)
+            return 3
         if args.aprobar_perfil:
             info = P.aprobar_perfil(cfg, settings, aprobado_por=args.aprobar_perfil, autorizado=args.authorized)
             print(f"Perfil aprobado: {info['perfil']} (sha256 {info['perfil_sha256'][:12]}…, firma {info['firma']})", file=sys.stderr)
-        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s)
-    except (P.ConfigInvalida, OSError, ValueError) as exc:
-        print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)
-        return 6
-    except UrlNotAllowed as exc:
+            for logico, cob in info.get("equivalencias", {}).items():
+                print(f"  Tabla «{logico}» aprobada: {len(cob['codigos_cubiertos'])} códigos"
+                      + (f"; sin fila (los completa la persona): {', '.join(cob['codigos_sin_fila'])}" if cob["codigos_sin_fila"] else ""),
+                      file=sys.stderr)
+        extra: dict[str, Any] = {}
+        if externo:
+            aprobado = (P.info_perfil(cfg, settings) or {}).get("aprobado_por")
+            extra = {"autorizacion_ref": aut_ref, "otorgada_por": aprobado or "rev_sin_aprobar"}
+        manuales = None
+        if args.manuales_stdin:
+            manuales = json.loads(sys.stdin.read() or "{}")
+            if not isinstance(manuales, dict) or not all(isinstance(v, str) for v in manuales.values()):
+                raise P.ConfigInvalida("Los datos de captura manual deben ser un objeto JSON {campo: texto}.")
+        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s, manuales=manuales, **extra)
+    except UrlNotAllowed as exc:          # antes que ValueError: UrlNotAllowed hereda de ValueError
         print(f"URL no autorizada: {exc}", file=sys.stderr)
         return 3
+    except P.ConfigInvalida as exc:       # mensajes propios, sin datos personales: se muestran para poder corregir
+        print(f"Error de configuración: {exc}", file=sys.stderr)
+        return 6
+    except (OSError, ValueError) as exc:
+        print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)
+        return 6
     if args.json:
-        _emit({"salida": r["salida"], "respuesta": r["respuesta"], "informe": r["informe"]})
+        _emit({"salida": r["salida"], "salida_contrato": r["salida_contrato"], "respuesta": r["respuesta"],
+               "informe": r["informe"]})
     else:
         print(P.texto_informe(r["informe"]))
     return r["salida"]
+
+
+def _analizar_formulario(args: argparse.Namespace, settings: Any) -> int:
+    """Códigos: 0 informe generado, 3 URL no autorizada, 4 informe generado pero la página exige intervención
+    humana (CAPTCHA/uso humano), 6 error de entrada."""
+    from datetime import datetime
+    from . import analizador_formularios as A
+    url = Path(args.html).resolve().as_uri() if args.html else args.url
+    expediente = None
+    if args.expediente:
+        try:
+            expediente = json.loads(Path(args.expediente).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"No se pudo leer el expediente: {type(exc).__name__}", file=sys.stderr)
+            return 6
+    try:
+        inf = A.analizar_url(url, autorizado=args.authorized, settings=settings, expediente=expediente, nombre=args.nombre,
+                             sondeo=args.sondeo)
+    except UrlNotAllowed as exc:
+        print(f"URL no autorizada: {exc}", file=sys.stderr)
+        return 3
+    carpeta = args.salida or str(Path("informes") / ("analisis_" + inf["perfil_borrador"]["perfil"].removeprefix("perfil_")
+                                                     + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")))
+    if args.perfil_previo:
+        try:
+            previo = json.loads(Path(args.perfil_previo).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            previo = None
+        if A.adjuntar_perfil_previo(inf, previo):
+            print("Se conservó la configuración del perfil anterior de esta URL (revísela en la vista previa).")
+        else:
+            print("Aviso: el perfil anterior no es de esta URL o no se pudo leer; no se usó.")
+    rutas = A.guardar(inf, carpeta)
+    r = inf["resumen"]
+    print(f"Formulario: {inf['url']}")
+    print(f"Campos: {r['campos']} · automáticos: {r['automatico']} · revisar: {r['revisar']} · humano: {r['humano']} · "
+          f"ignorados: {r['ignorado']}")
+    if inf["bloqueo_humano"]["blocked"]:
+        print("ATENCIÓN: la página exige intervención humana; el perfil no se podrá aprobar.")
+    for a in inf["advertencias"]:
+        print(f"Aviso: {a}")
+    print("Resultados (no se envió nada):")
+    for k, v in rutas.items():
+        print(f"  {k}: {v}")
+    return 4 if inf["bloqueo_humano"]["blocked"] else 0
 
 
 def _aprobar_perfil(args: argparse.Namespace, settings: Any, policy: UrlPolicy) -> int:

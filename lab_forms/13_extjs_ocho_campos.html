@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 13 · Ocho campos con componentes Ext JS reales</title>
+<link rel="stylesheet" href="vendor/extjs/theme-classic-all.css">
+<script src="vendor/extjs/ext-all.js"></script>
+<style>body{font-family:sans-serif;margin:16px} .nota{max-width:640px;color:#333}</style>
+</head>
+<body>
+<h1>Laboratorio 13 · Solicitud con Ext JS (simulado)</h1>
+<p class="nota">Formulario de PRUEBA con datos ficticios, construido con la biblioteca Ext JS 6.2 real (se descarga aparte con
+  <code>scripts/preparar_lab_extjs.py</code>; no forma parte del repositorio). «Operación» es un desplegable Ext JS en el
+  que se puede escribir y que ya trae un valor; «Trámite» es un desplegable Ext JS que solo se abre con el ratón. Ambos
+  guardan un código interno distinto del texto visible. No envía nada.</p>
+<p id="sin_ext" class="nota" style="display:none;color:#a00"><b>Falta la biblioteca.</b> Ejecute primero
+  <code>python scripts/preparar_lab_extjs.py</code>.</p>
+<form id="alta" action="#hecho" method="post" onsubmit="return false"><div id="host"></div></form>
+<script>
+if (!window.Ext) { document.getElementById('sin_ext').style.display = 'block'; }
+else Ext.onReady(function () {
+  var operaciones = Ext.create('Ext.data.Store', {fields: ['cod', 'nom'],
+    data: [{cod: '1', nom: 'Nueva cita'}, {cod: '2', nom: 'Reprogramar cita'}]});
+  var tramites = Ext.create('Ext.data.Store', {fields: ['cod', 'nom'],
+    data: [{cod: 'A1', nom: 'Alta'}, {cod: 'R2', nom: 'Renovación'}, {cod: 'C3', nom: 'Constancia'}]});
+  window.panelAlta = Ext.create('Ext.form.Panel', {
+    renderTo: 'host', width: 520, bodyPadding: 12, title: 'Solicitud de cita (simulada)',
+    defaults: {labelWidth: 170, anchor: '100%', msgTarget: 'side'},
+    items: [
+      {xtype: 'combobox', itemId: 'operacion', name: 'operacion_txt', hiddenName: 'operacion', fieldLabel: 'Operación',
+       store: operaciones, queryMode: 'local', displayField: 'nom', valueField: 'cod', value: '2',
+       forceSelection: true, allowBlank: false},
+      {xtype: 'textfield', itemId: 'num_cliente', name: 'num_cliente', fieldLabel: 'Número de cliente',
+       regex: /^CL-\d{6}$/, maxLength: 9, enforceMaxLength: true, allowBlank: false},
+      {xtype: 'datefield', itemId: 'f_nac', name: 'f_nac', fieldLabel: 'Fecha de nacimiento', format: 'd/m/Y',
+       allowBlank: false},
+      {xtype: 'combobox', itemId: 'tramite', name: 'tramite_txt', hiddenName: 'tramite', fieldLabel: 'Trámite',
+       store: tramites, queryMode: 'local', displayField: 'nom', valueField: 'cod', editable: false,
+       forceSelection: true, allowBlank: false},
+      {xtype: 'textfield', itemId: 'tel', name: 'tel', fieldLabel: 'Teléfono', inputType: 'tel', maxLength: 10,
+       enforceMaxLength: true, allowBlank: false},
+      {xtype: 'textfield', itemId: 'tel2', name: 'tel2', fieldLabel: 'Repita el teléfono', inputType: 'tel',
+       maxLength: 10, enforceMaxLength: true, allowBlank: false, inputAttrTpl: 'data-confirm="tel"'},
+      {xtype: 'textfield', itemId: 'mail', name: 'mail', fieldLabel: 'Correo electrónico', vtype: 'email',
+       allowBlank: false},
+      {xtype: 'textfield', itemId: 'mail2', name: 'mail2', fieldLabel: 'Repita el correo', vtype: 'email',
+       allowBlank: false, inputAttrTpl: 'data-confirm="mail"'}
+    ],
+    buttons: [{text: 'Enviar', handler: function () { window.pulsacionesEnviar = (window.pulsacionesEnviar || 0) + 1; /* no envía nada */ }}]
+  });
+  // Lo que el COMPONENTE tiene registrado (no lo que se ve): lo leen las pruebas para comprobar el valor interno.
+  window.valoresInternos = function () {
+    var p = window.panelAlta, d = p.down('#f_nac').getValue();
+    return {operacion: p.down('#operacion').getValue(), tramite: p.down('#tramite').getValue(),
+            f_nac: d ? Ext.Date.format(d, 'Y-m-d') : null, num_cliente: p.down('#num_cliente').getValue(),
+            tel: p.down('#tel').getValue(), tel2: p.down('#tel2').getValue(),
+            mail: p.down('#mail').getValue(), mail2: p.down('#mail2').getValue(),
+            valido: p.getForm().isValid(), pulsacionesEnviar: window.pulsacionesEnviar || 0};
+  };
+});
+</script>
+</body>
+</html>

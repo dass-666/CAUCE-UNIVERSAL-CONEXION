@@ -40,7 +40,7 @@ POLL_S = 0.2
 # Un `submit` ocurrido durante esa ventana tras el relleno no se atribuye a una persona (sub-reporta; nunca sobre-reporta).
 GRACIA_ACTIVACION_S = 6.0
 _METODO = {"teclado_secuencial": "teclado_secuencial", "check": "check", "uncheck": "check",
-           "select_option": "seleccion", "fill_nativo": "fecha_nativa", "omitido": "teclado_secuencial"}
+           "select_option": "seleccion", "clic_lista_personalizada": "seleccion", "fill_nativo": "fecha_nativa", "omitido": "teclado_secuencial"}
 
 
 class _Parar(Exception):
@@ -88,6 +88,16 @@ def _consumir_id(state_dir: Path, solicitud_id: str, ahora: datetime) -> None:
         fh.write(ahora.isoformat(timespec="seconds"))
 
 
+def _listas_texto_aprobadas(perfil: dict) -> dict:
+    from .models import FieldOption
+    out: dict = {}
+    for f in perfil.get("fields", []):
+        if isinstance(f, dict) and f.get("type") == "custom-select" and f.get("tag") == "input" and f.get("key"):
+            out[f["key"]] = [FieldOption(value=str(o.get("value", "")), label=str(o.get("label", "")), selected=False)
+                             for o in f.get("options", []) if isinstance(o, dict) and o.get("value")]
+    return out
+
+
 def _cargar_perfil(sol: dict, settings: Settings) -> dict:
     """Perfil aprobado, con huella verificada sobre los MISMOS bytes que se interpretan (sin carrera)."""
     form = sol["formulario"]
@@ -111,6 +121,12 @@ def _cargar_perfil(sol: dict, settings: Settings) -> dict:
         raise _Parar("rechazado_no_autorizado", "PERFIL_NO_COINCIDE")
     if not set(sol["campos"]) <= set(integ["campos"]):
         raise _Parar("rechazado_solicitud_invalida", "CAMPO_NO_DECLARADO")
+    # Campos con tabla de equivalencias aprobada: solo se admiten los valores de opción de esa tabla. Un código
+    # de Monitor sin traducir (o cualquier otro texto) no llega al formulario, donde podría casar por parecido.
+    equiv = integ.get("equivalencias") or {}
+    for logico, valor in sol["campos"].items():
+        if logico in equiv and valor not in set(equiv[logico].get("valores", {}).values()):
+            raise _Parar("rechazado_solicitud_invalida", "SOLICITUD_MAL_FORMADA")
     return perfil
 
 
@@ -144,6 +160,27 @@ def _esperar_revision(sesion: BrowserSession, espera_s: int, desde: float,
             estado["cerrada"] = estado["cerrada"] or page.is_closed()
             if not estado["cerrada"] and not estado["crash"]:
                 return "error", time.monotonic() - ini
+
+
+def _mostrar_verificacion(campos: list, confirmaciones: list, por_clave: dict, a_clave: dict) -> None:
+    """Resultado de la verificación por stderr MIENTRAS la ventana sigue abierta. Sin valores: solo campo, estado y
+    el tipo de transformación que aplicó la página (p. ej. «convirtió a minúsculas»)."""
+    lineas = ["Verificación (la ventana sigue abierta; ciérrela usted al terminar de revisar):"]
+    for c in campos:
+        r = por_clave.get(a_clave[c["campo"]])
+        nota = ""
+        if r is not None and r.status == "error":     # FillError: mensaje propio sin datos; Playwright: solo el tipo
+            motivo = r.detail.split(":")[0] if r.detail.startswith(("Error", "Timeout")) else r.detail
+            nota = f" — no se pudo rellenar automáticamente ({motivo}); complételo usted en la ventana"
+        elif c["estado"] in ("ok_normalizado", "diferente") and r is not None and r.detail:
+            nota = f" — {r.detail}"
+        elif c["estado"] == "invalido":     # mensaje del navegador o del control (sin valores), no el texto de la página
+            nota = " — " + ((r.validation_message if r is not None else "") or "la página marca el campo como no válido")
+        lineas.append(f"  [{'OK' if c['estado'].startswith('ok') else 'REVISAR'}] {c['campo']}: {c['estado']}{nota}")
+    for c in confirmaciones:
+        lineas.append(f"  [{'OK' if c['coinciden'] else 'REVISAR'}] confirmación de {c['campo']}: "
+                      f"{'coincide' if c['coinciden'] else 'NO coincide'}")
+    print("\n".join(lineas), file=sys.stderr, flush=True)
 
 
 def ejecutar(texto: str, *, ahora: Optional[datetime] = None, settings: Optional[Settings] = None,
@@ -225,6 +262,8 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
             pagina_ok = False
         if not pagina_ok:                   # navegación bloqueada, error de red o redirección inesperada
             raise _Parar("error_interno", "PAGINA_NO_DISPONIBLE")
+        # Cuadros de texto que el perfil aprobado registró como listas: se tratan igual que cuando se aprobaron
+        sesion.listas_texto = _listas_texto_aprobadas(perfil)
         analisis = sesion.inspect()
         actual = structure_signature_v2(analisis.all_fields)
         if analisis.safety.blocked:         # CAPTCHA o página «solo humanos»: no se escribe nada ni se intenta superar
@@ -262,14 +301,17 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
         fin_relleno = time.monotonic()
         huella = C.huella_preparacion(sol["solicitud_id"], form["firma_estructura_esperada"], sol["campos"])
         base = dict(campos=campos, confirmaciones=confirmaciones, huella=huella)
-        if hay_incidencia:                  # no se espera revisión: hay que corregir antes
-            return _cerrar(run.respuesta("preparado_con_incidencias", ("CAMPO_NO_VERIFICADO",), **base), sol)
+        _mostrar_verificacion(campos, confirmaciones, por_clave, a_clave)
 
-        # --- revisión humana en la ventana visible; el conector solo observa ---
+        # --- revisión humana en la ventana visible; el conector solo observa. También con incidencias: la ventana
+        # queda abierta (sin borrar ni tocar los valores) para que la persona inspeccione y la cierre ella misma. ---
         espera = op["espera_revision_max_s"]
         resultado, dur = ("caducada", 0) if espera == 0 else _esperar_revision(sesion, espera, fin_relleno, gancho)
         if resultado == "error":
             raise _Parar("error_interno", "ERROR_INTERNO")
+        if hay_incidencia:
+            return _cerrar(run.respuesta("preparado_con_incidencias", ("CAMPO_NO_VERIFICADO",),
+                                         revision=(resultado, dur), observado=resultado == "envio_humano", **base), sol)
         if resultado == "envio_humano":
             r = run.respuesta("enviado_por_persona_observado", (), revision=("envio_humano", dur), observado=True, **base)
         elif resultado == "cerrada_sin_envio":

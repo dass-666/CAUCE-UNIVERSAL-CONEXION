@@ -1,0 +1,7 @@
+{
+  "_nota": "Fuente de datos SINTÉTICA de ejemplo. En la aplicación, las fuentes reales las configura la persona en %LOCALAPPDATA%\\CauceForms\\fuentes\\<nombre>.json. clave_expediente: campo del expediente de Monitor con el que se busca el registro.",
+  "clave_expediente": "correo",
+  "registros": {
+    "zz.mariana@example.com": {"num_cliente": "CL-000123", "id_cliente": "CL-000123"}
+  }
+}
