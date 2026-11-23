@@ -29,8 +29,33 @@ LOCALES = {"localhost", "127.0.0.1"}
 REVISOR = "rev_usuario_local"   # quien usa la ventana revisa el perfil en la vista previa antes de autorrellenar
 
 
+def paquete_python_store() -> str:
+    """Nombre de familia del paquete si este Python es el de Microsoft Store (p. ej.
+    «PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0»); "" en otro caso."""
+    for ruta in (sys.base_prefix, getattr(sys, "_base_executable", ""), sys.executable):
+        for parte in Path(ruta or "").parts:
+            if parte.startswith("PythonSoftwareFoundation.") and "_" in parte:
+                trozos = parte.split("_")          # Nombre_Versión_Arq__Editor o Nombre_Editor
+                return f"{trozos[0]}_{trozos[-1]}"
+    return ""
+
+
+def localappdata_real() -> str:
+    """%LOCALAPPDATA% tal como lo ven otros programas. El Python de Microsoft Store redirige las escrituras en
+    %LOCALAPPDATA% a %LOCALAPPDATA%\\Packages\\<paquete>\\LocalCache\\Local, así que Chromium o el Explorador no
+    encontrarían la ruta «normal». Si existe la carpeta redirigida, se usa esa (los datos siguen donde están)."""
+    base = os.environ.get("LOCALAPPDATA", "")
+    paquete = paquete_python_store() if (base and os.name == "nt") else ""
+    if paquete:
+        real = Path(base) / "Packages" / paquete / "LocalCache" / "Local"
+        if (real / "CauceForms").exists() or not (Path(base) / "CauceForms").exists():
+            if real.parent.exists():
+                return str(real)
+    return base
+
+
 def carpeta_datos() -> Path:
-    base = os.environ.get("CAUCE_DATOS") or os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
+    base = os.environ.get("CAUCE_DATOS") or localappdata_real() or str(Path.home() / ".local" / "share")
     d = Path(base) / "CauceForms"
     nueva = not d.exists()
     for sub in ("analisis", "perfiles", "logs", "config", "estado", "fuentes", "formularios"):
