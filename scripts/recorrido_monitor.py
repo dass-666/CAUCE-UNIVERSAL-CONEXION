@@ -12,6 +12,7 @@ import functools
 import http.server
 import json
 import os
+import shutil
 import sys
 import threading
 from pathlib import Path
@@ -31,6 +32,11 @@ def main() -> int:
     ap.add_argument("--expediente", default=str(ROOT / "sample_data/expediente_monitor_sintetico.json"))
     a = ap.parse_args()
     os.environ.setdefault("CAUCE_PROFILES_DIR", str(ROOT / "evidence" / "out" / "perfiles"))
+    if "CAUCE_FUENTES_DIR" not in os.environ:   # fuente de identificadores FICTICIA, solo para esta demostración
+        fuentes = ROOT / "evidence" / "out" / "fuentes"
+        fuentes.mkdir(parents=True, exist_ok=True)
+        shutil.copy(ROOT / "sample_data" / "fuente_identificadores_sintetica.json", fuentes / "identificadores.json")
+        os.environ["CAUCE_FUENTES_DIR"] = str(fuentes)
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT / "lab_forms"))
     handler.log_message = lambda *args: None
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)

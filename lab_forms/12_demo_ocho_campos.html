@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 12 · Demostración de ocho campos</title>
+<link rel="stylesheet" href="lab.css">
+<style>
+.sug{position:absolute;z-index:9;min-width:220px;background:#fff;color:#111;border:1px solid #888;list-style:none;margin:0;padding:0}
+.sug li{padding:6px 10px;cursor:pointer}
+.cal{position:absolute;z-index:9;background:#fff;color:#111;border:1px solid #888}
+.cal td{padding:2px 6px;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+  <h1>Laboratorio 12 · Solicitud de ocho campos (simulado)</h1>
+  <p class="nota">Formulario de PRUEBA con datos ficticios. Ocho campos: dos listas dinámicas sobre cuadros de texto,
+    un identificador, una fecha con calendario, teléfono y correo con sus confirmaciones.
+    «Operación» ya trae una opción elegida por defecto y abre su lista al enfocarlo. «Trámite» solo ofrece opciones al
+    escribir, busca con retardo y descarta la elección si se pulsa antes de que termine la búsqueda. Las dos guardan un
+    código en un campo oculto y vacían el cuadro si el texto no corresponde a una opción. No envía nada.</p>
+  <form id="alta" action="#hecho" method="post">
+    <div class="fila">
+      <label for="operacion_txt">Operación</label>
+      <input id="operacion_txt" name="operacion_txt" type="text" autocomplete="off" value="Reprogramar cita">
+      <input type="hidden" id="operacion" name="operacion" value="2">
+    </div>
+    <div class="fila">
+      <label for="num_cliente">Número de cliente</label>
+      <input id="num_cliente" name="num_cliente" type="text" required pattern="CL-\d{6}" maxlength="9">
+    </div>
+    <div class="fila">
+      <label for="f_nac">Fecha de nacimiento</label>
+      <input id="f_nac" name="f_nac" type="text" class="con-calendario" data-date-format="d/m/Y" maxlength="10" required>
+    </div>
+    <div class="fila">
+      <label for="tramite_txt">Trámite</label>
+      <span class="autocomplete-wrapper"><input id="tramite_txt" name="tramite_txt" type="text" autocomplete="off"></span>
+      <input type="hidden" id="tramite" name="tramite">
+    </div>
+    <div class="fila"><label for="tel">Teléfono</label><input id="tel" name="tel" type="tel" required maxlength="10"></div>
+    <div class="fila"><label for="tel2">Repita el teléfono</label><input id="tel2" name="tel2" type="tel" required maxlength="10" data-confirm="tel"></div>
+    <div class="fila"><label for="mail">Correo electrónico</label><input id="mail" name="mail" type="email" required></div>
+    <div class="fila"><label for="mail2">Repita el correo</label><input id="mail2" name="mail2" type="email" required data-confirm="mail"></div>
+    <button type="submit">Enviar</button>
+  </form>
+</main>
+<script>
+var plano = function (s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+var $ = function (id) { return document.getElementById(id); };
+// Lista sobre un cuadro de texto. cfg.minimo: letras para que aparezca; cfg.retardo: ms que tarda la búsqueda tras la
+// última tecla. Como en los componentes habituales, una búsqueda pendiente que termina DESPUÉS de elegir anula la elección.
+function lista(inp, oculto, ops, cfg) {
+  var menu = null, elegido = inp.value, reloj = null;
+  function cerrar() { if (menu) { menu.remove(); menu = null; } }
+  function pintar() {
+    cerrar();
+    var q = plano(inp.value);
+    if (q.length < cfg.minimo) return;
+    var vis = ops.filter(function (o) { return plano(o[1]).indexOf(q) >= 0; });
+    if (!vis.length) return;
+    menu = document.createElement('ul'); menu.className = 'sug';
+    var r = inp.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + window.scrollY) + 'px';
+    vis.forEach(function (o) {
+      var li = document.createElement('li'); li.className = 'ui-menu-item'; li.textContent = o[1];
+      li.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      li.addEventListener('click', function () { elegido = o[1]; inp.value = o[1]; oculto.value = o[0]; cerrar(); });
+      menu.appendChild(li);
+    });
+    document.body.appendChild(menu);
+  }
+  function buscar() {
+    clearTimeout(reloj);
+    reloj = setTimeout(function () { reloj = null; if (inp.value !== elegido) { oculto.value = ''; elegido = ''; }
+      else if (cfg.retardo) { oculto.value = ''; elegido = ''; }      // la búsqueda tardía pisa una elección prematura
+      pintar(); }, cfg.retardo);
+  }
+  if (cfg.abreAlEnfocar) inp.addEventListener('focus', function () { if (!menu) { var v = inp.value; inp.value = ''; pintar(); inp.value = v; } });
+  inp.addEventListener('input', function () { oculto.value = ''; elegido = ''; if (cfg.retardo) buscar(); else pintar(); });
+  inp.addEventListener('blur', function () { if (inp.value !== elegido || !oculto.value) { inp.value = ''; oculto.value = ''; elegido = ''; } cerrar(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+}
+lista($('operacion_txt'), $('operacion'), [['1', 'Nueva cita'], ['2', 'Reprogramar cita']], {minimo: 0, retardo: 0, abreAlEnfocar: true});
+lista($('tramite_txt'), $('tramite'), [['A1', 'Alta'], ['R2', 'Renovación'], ['C3', 'Constancia']], {minimo: 1, retardo: 300, abreAlEnfocar: false});
+// Calendario que se abre al enfocar la fecha (admite también escribirla)
+(function () {
+  var f = $('f_nac'), cal = null;
+  function cerrar() { if (cal) { cal.remove(); cal = null; } }
+  f.addEventListener('focus', function () {
+    cerrar(); cal = document.createElement('div'); cal.className = 'cal ui-datepicker';
+    var h = '<table><tr>';
+    for (var d = 1; d <= 28; d++) { h += '<td>' + d + '</td>' + (d % 7 === 0 ? '</tr><tr>' : ''); }
+    cal.innerHTML = h + '</tr></table>';
+    var r = f.getBoundingClientRect(); cal.style.left = r.left + 'px'; cal.style.top = (r.bottom + window.scrollY) + 'px';
+    document.body.appendChild(cal);
+  });
+  f.addEventListener('blur', cerrar);
+})();
+document.getElementById('alta').addEventListener('submit', function (e) { e.preventDefault(); });
+</script>
+</body>
+</html>

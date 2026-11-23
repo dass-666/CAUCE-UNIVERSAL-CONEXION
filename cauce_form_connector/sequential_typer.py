@@ -114,6 +114,15 @@ class SequentialTyper:
             kb.insert_text(ch)  # solo evento input; se informa en el resultado
             self.last_insert_text_fallbacks += 1
 
+    def _vaciar_foco(self) -> bool:
+        """Borra con el teclado (seleccionar todo + retroceso) el texto del cuadro que tiene el foco. Devuelve si había."""
+        if not self.page.evaluate("() => { const a = document.activeElement; return !!a && 'value' in a && a.value !== ''; }"):
+            return False
+        self.page.keyboard.press("ControlOrMeta+a")
+        self.page.keyboard.press("Backspace")
+        self.page.wait_for_timeout(150)
+        return True
+
     def locator(self, f: FieldDescriptor):
         return self.page.locator(f.selector).first
 
@@ -166,9 +175,13 @@ class SequentialTyper:
                 if flecha is not None:
                     LJ.clic(self.page, flecha)
                     visibles = LJ.esperar_opciones(self.page, loc, 900)
+            escribible = self.page.evaluate(LJ.FOCO_ESCRIBIBLE_JS)
+            if escribible and self._vaciar_foco():
+                # El cuadro ya tenía texto (valor por defecto de la página o una elección anterior): se borra con el
+                # teclado antes de escribir; si no, lo nuevo se añadiría a lo viejo y la lista quedaría mal filtrada.
+                visibles = LJ.esperar_opciones(self.page, loc, 450)
             opciones = LJ.opciones_conocidas(self.page, f) or visibles
             opt = next((o for o in opciones if o.value == value), None) or choose_option(opciones, value)
-            escribible = self.page.evaluate(LJ.FOCO_ESCRIBIBLE_JS)
             if opt is None and not opciones and es_texto and escribible:
                 # Lista que solo responde al escribir y cuyas opciones no se conocen de antemano: se teclea el texto
                 # aprobado y solo vale si la lista ofrece una opción EXACTAMENTE igual (nunca la más parecida).
@@ -180,7 +193,10 @@ class SequentialTyper:
                 LJ.cerrar(self.page, loc)
                 raise FillError("Ninguna opción de la lista coincide con el dato" if opciones
                                 else "La lista no mostró opciones al abrirla")
-            el = None if tecleado else LJ.buscar_opcion(self.page, loc, opt)
+            # Cuadro de texto editable: se escribe carácter a carácter, como una persona, y se elige la opción exacta
+            # cuando la lista la ofrece. En el resto de listas se pulsa la opción visible.
+            escribir_primero = es_texto and escribible
+            el = None if (tecleado or escribir_primero) else LJ.buscar_opcion(self.page, loc, opt)
             if el is None and escribible:
                 # lista con buscador, virtualizada o que solo se abre al escribir: se teclea el texto de la opción
                 # Como una persona: se va tecleando y se pulsa la opción en cuanto la lista la ofrece. Antes de la
@@ -200,7 +216,26 @@ class SequentialTyper:
                     elif i >= 1:
                         el = esperar(900 if i == len(letras) - 2 else 150)
                     if el is not None:
+                        # Muchos componentes buscan con retardo tras la última tecla y redibujan la lista: se espera a
+                        # que termine y se vuelve a localizar la opción antes de pulsarla (pulsar antes anula la elección).
+                        self.page.wait_for_timeout(500)
+                        el = LJ.buscar_opcion(self.page, loc, opt)
+                    if el is not None:
                         break
+            if el is None and escribir_primero and not tecleado:
+                # Al escribir no apareció (lista que no filtra por texto): se borra lo tecleado y se elige de la lista
+                # desplegada, como antes.
+                self._vaciar_foco()
+                el = LJ.buscar_opcion(self.page, loc, opt)
+                if el is None:
+                    LJ.cerrar(self.page, loc)
+                    LJ.abrir(self.page, loc, 750)
+                    flecha = self.page.evaluate_handle(LJ.VECINO_JS, loc.element_handle()).as_element()
+                    el = LJ.buscar_opcion(self.page, loc, opt)
+                    if el is None and flecha is not None:
+                        LJ.clic(self.page, flecha)
+                        LJ.esperar_opciones(self.page, loc, 900)
+                        el = LJ.buscar_opcion(self.page, loc, opt)
             if el is None:
                 if not tecleado:
                     LJ.cerrar(self.page, loc)
@@ -211,7 +246,7 @@ class SequentialTyper:
                                    "label: (o.innerText || o.textContent || '').replace(/\\s+/g, ' ').trim() })")
                 opt = FieldOption(value=real["value"], label=real["label"], selected=False)
                 opciones = [opt]
-            LJ.recordar(self.page, f.key, opciones)
+            LJ.recordar(self.page, f.key, opciones, parcial=tecleado)
             el.scroll_into_view_if_needed()
             LJ.clic(self.page, el)
             self.page.wait_for_timeout(150)

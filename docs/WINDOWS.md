@@ -60,6 +60,18 @@ GitHub Actions en un Windows sin `py`.
 Doble clic en **`recorrido_monitor_windows.bat`**: sirve los formularios de laboratorio, aprueba el perfil del lab 06
 (con tablas de equivalencias) y abre una ventana rellenada y verificada. No envía nada; ciérrela al terminar.
 
+**Demostración de los ocho campos** (laboratorio 12): en una consola, dentro de la carpeta del proyecto,
+
+```
+recorrido_monitor_windows.bat config\formularios\lab_demo_ocho_campos.json
+```
+
+Rellena dos listas dinámicas, una fecha con formato declarado por el componente, un identificador leído de una
+fuente de prueba (`sample_data\fuente_identificadores_sintetica.json`), teléfono y correo con sus repeticiones.
+En las listas con cuadro de texto el conector borra primero lo que hubiera, escribe letra por letra, espera las
+sugerencias, pulsa la opción cuyo texto coincide exactamente y comprueba el valor que quedó registrado (también el
+código oculto). Si la opción no existe, se detiene y lo dice; nunca elige «la más parecida».
+
 ## Pruebas y demostración
 
 Doble clic en **`probar_windows.bat`**: ejecuta `pytest` y `scripts\demo_lab.py`.

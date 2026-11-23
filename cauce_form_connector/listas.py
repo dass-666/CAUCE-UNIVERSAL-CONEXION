@@ -178,6 +178,9 @@ MARCAR_PREVIAS_JS = "(el) => {" + COMUN_JS + r"""
   window.__cauce_previas = new Set(Array.from(document.querySelectorAll("body *")).filter(visible));
   return window.__cauce_previas.size; }"""
 
+LISTA_A_LA_VISTA_JS = "(el) => {" + COMUN_JS + r"""
+  return Array.from(document.querySelectorAll("[role=option],[role=listbox]")).some((o) => visible(o) && !el.contains(o)); }"""
+
 OPCIONES_VISIBLES_JS = "(el) => {" + COMUN_JS + r"""
   return candidatos(el).map((o) => ({ value: valor(o), label: texto(o), selected: false })); }"""
 
@@ -238,18 +241,21 @@ def _cache(page: Any) -> dict:
     return c
 
 
-def recordar(page: Any, clave: str, opciones: list[FieldOption]) -> None:
+def recordar(page: Any, clave: str, opciones: list[FieldOption], parcial: bool = False) -> None:
+    """`parcial`: solo se vio la opción elegida tras escribir (no la lista completa). Sirve para verificar lo que quedó
+    registrado, pero no para decidir qué opciones existen."""
     if opciones:
-        _cache(page)[clave] = opciones
+        (_cache(page) if not parcial else _cache(page).setdefault("#parciales", {}))[clave] = opciones
 
 
-def opciones_conocidas(page: Any, f: Any) -> list[FieldOption]:
-    return list(f.options) or _cache(page).get(f.key, [])
+def opciones_conocidas(page: Any, f: Any, con_parciales: bool = False) -> list[FieldOption]:
+    return (list(f.options) or _cache(page).get(f.key, [])
+            or (_cache(page).get("#parciales", {}).get(f.key, []) if con_parciales else []))
 
 
 def leer_seleccion(page: Any, f: Any) -> dict:
     loc = page.locator(f.selector).first
-    opts = [{"value": o.value, "label": o.label} for o in opciones_conocidas(page, f)]
+    opts = [{"value": o.value, "label": o.label} for o in opciones_conocidas(page, f, con_parciales=True)]
     return page.evaluate(LEER_SELECCION_JS, [loc.element_handle(), opts])
 
 
@@ -277,6 +283,12 @@ def clic(page: Any, loc: Any) -> None:
 def abrir(page: Any, loc: Any, espera_ms: int = 1500) -> list[FieldOption]:
     """Clic normal en el control y espera breve a que aparezcan opciones. Devuelve las visibles."""
     loc.scroll_into_view_if_needed()
+    # Una lista recién cerrada puede seguir a la vista mientras dura su animación: se espera a que desaparezca para no
+    # tomar sus opciones por «lo que ya estaba» y luego no verlas como nuevas.
+    for _ in range(4):
+        if not loc.evaluate(LISTA_A_LA_VISTA_JS):
+            break
+        page.wait_for_timeout(200)
     loc.evaluate(MARCAR_PREVIAS_JS)
     clic(page, loc)
     t = 0
