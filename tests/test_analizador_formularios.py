@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from cauce_form_connector import analizador_formularios as A
+from cauce_form_connector import esquema_monitor as M
 from cauce_form_connector import puente_monitor as P
 from cauce_form_connector.cli import main as cli_main
 from cauce_form_connector.html_analyzer import analyze_html
@@ -22,10 +23,9 @@ from cauce_form_connector.url_policy import UrlNotAllowed
 from integ_helpers import LAB, fabrica_espia, settings_para, Espia
 
 ROOT = Path(__file__).resolve().parents[1]
-EXP_RESERVA = json.loads((ROOT / "sample_data/expediente_ficticio_reserva.json").read_text(encoding="utf-8"))
-EXP_BASE = json.loads((ROOT / "sample_data/expediente_ficticio.json").read_text(encoding="utf-8"))
+EXP_MONITOR = json.loads((ROOT / "sample_data/expediente_monitor_sintetico.json").read_text(encoding="utf-8"))
 # Valores del expediente que NUNCA deben aparecer en informe, perfil ni vista previa
-SECRETOS = ["Mariana", "Zzejemplo", "example.com", "5587654321", "ZZPM900517", "1990-05-17", "jamás", "06700"]
+SECRETOS = ["Zzmariana", "Zzejemplo", "example.com", "5587654321", "1990-05-17", "2026-12-15", "S001", "R01"]
 
 
 class _Registro(http.server.SimpleHTTPRequestHandler):
@@ -66,7 +66,7 @@ def _sin_secretos(texto: str) -> None:
 @pytest.mark.browser
 def test_detecta_todo_lo_pedido_en_formulario_externo_simulado(sitio_registro, tmp_path):
     inf = A.analizar_url(sitio_registro + "/05_reserva_externa.html", autorizado=False,
-                         settings=settings_para(tmp_path), expediente=EXP_RESERVA)
+                         settings=settings_para(tmp_path), expediente=EXP_MONITOR)
     c = _por_name(inf)
     # Texto y numéricos, con selectores
     assert c["nombre"]["categoria"] == "texto" and c["nombre"]["selector"] == "#nombre"
@@ -94,13 +94,18 @@ def test_detecta_todo_lo_pedido_en_formulario_externo_simulado(sitio_registro, t
 
     # Decisiones: qué se rellena solo y qué necesita a una persona
     auto = {n for n, x in c.items() if x["decision"] == "automatico"}
-    assert auto == {"nombre", "apellidos", "f_nac", "correo", "correo2", "tel", "estado"}
-    assert c["doc_identidad"]["decision"] == "revisar"             # documento de identidad: siempre revisión
-    assert c["acepto"]["decision"] == "revisar"                    # consentimiento: siempre revisión
+    assert auto == {"f_nac", "correo", "correo2", "tel"}
+    # nombre y apellidos separados: Monitor solo tiene el nombre completo -> no se divide
+    assert c["nombre"]["decision"] == c["apellidos"]["decision"] == "revisar"
+    assert "no se divide" in c["apellidos"]["motivo"]
+    assert c["doc_identidad"]["decision"] == "humano" and c["doc_identidad"]["propuesta"] is None   # CURP: nunca
+    assert c["acepto"]["decision"] == "humano" and c["acepto"]["propuesta"] is None                 # consentimiento
+    assert c["estado"]["decision"] == "humano" and c["estado"]["propuesta"] is None   # «Estado» no es «region»
+    assert c["tramite"]["decision"] == "revisar" and "tabla de equivalencias" in c["tramite"]["motivo"]
+    assert c["fecha_cita"]["propuesta"]["ruta_expediente"] == "fecha_solicitada" and c["fecha_cita"]["decision"] == "revisar"
     assert c["comprobante"]["decision"] == "humano"                # archivos: persona
     assert c["horario"]["decision"] == "humano" and c["personas"]["decision"] == "humano"
     assert c["token_sesion"]["decision"] == "ignorado"
-    assert c["estado"]["propuesta"]["encaja_en_opciones"] is True  # "Ciudad de México" -> CMX
 
     # Solo lectura: una carga de la página y su CSS; ningún POST
     assert not [p for p in _Registro.peticiones if p[0] != "GET"]
@@ -117,33 +122,36 @@ def test_perfil_generado_funciona_con_autorrellenar(sitio_registro, tmp_path):
     """El borrador generado se carga con `cargar_formulario`, se aprueba y el motor existente lo rellena."""
     st = settings_para(tmp_path)
     url = sitio_registro + "/03_validaciones.html"
-    inf = A.analizar_url(url, autorizado=False, settings=st, expediente=EXP_BASE)
+    inf = A.analizar_url(url, autorizado=False, settings=st, expediente=EXP_MONITOR)
     perfil = inf["perfil_borrador"]
     assert perfil["_borrador"]["estado"] == "pendiente_revision_humana"
-    pendientes = {p["clave_campo"] for p in perfil["_borrador"]["pendientes_revision"]}
-    assert "alta::acepta_privacidad" in pendientes                   # el consentimiento lo decide una persona
     assert set(perfil["campos_formulario"].values()) == {
-        "alta::nombre_completo", "alta::email", "alta::email_confirmacion", "alta::telefono",
-        "alta::telefono_confirmacion", "alta::codigo_postal", "alta::ciudad"}
+        "alta::nombre_completo", "alta::email", "alta::email_confirmacion", "alta::telefono", "alta::telefono_confirmacion"}
+    assert set(perfil["campos_expediente"].values()) == {"nombre", "correo", "telefono"}   # rutas planas de Monitor
+    c = _por_name(inf)
+    assert c["codigo_postal"]["decision"] == c["ciudad"]["decision"] == "humano"      # Monitor no tiene esos datos
+    assert c["acepta_privacidad"]["decision"] == "humano"
     ruta = tmp_path / "perfil_borrador.json"
     ruta.write_text(json.dumps(perfil, ensure_ascii=False), encoding="utf-8")
 
     cfg = P.cargar_formulario(ruta)
-    assert P.autorrellenar(cfg, EXP_BASE, st, state_dir=tmp_path / "e")["salida"] == 6   # sin aprobar: no corre
+    assert P.autorrellenar(cfg, EXP_MONITOR, st, state_dir=tmp_path / "e")["salida"] == 6   # sin aprobar: no corre
     P.aprobar_perfil(cfg, st, aprobado_por="rev_prueba")
-    r = P.autorrellenar(cfg, EXP_BASE, st, espera_revision_s=0, state_dir=tmp_path / "e", fabrica_sesion=fabrica_espia)
+    r = P.autorrellenar(cfg, EXP_MONITOR, st, espera_revision_s=0, state_dir=tmp_path / "e", fabrica_sesion=fabrica_espia)
     inf2 = r["informe"]
     assert r["respuesta"]["envio"]["realizado_por_conector"] is False
-    assert len(inf2["campos"]) == 7 and all(x["correcto"] for x in inf2["campos"]), inf2
+    assert r["respuesta"]["contrato"] == "cauce.conector.v1"
+    assert len(inf2["campos"]) == 5 and all(x["correcto"] for x in inf2["campos"]), inf2
     assert all(x["coinciden"] for x in inf2["confirmaciones"])
-    assert Espia.ultimo.valores["email_confirmacion"] == "mariana.zz@example.com"
-    assert "CURP" not in json.dumps(Espia.ultimo.valores) and "NO-SE-USA" not in json.dumps(Espia.ultimo.valores)
+    assert Espia.ultimo.valores["email_confirmacion"] == "zz.mariana@example.com"
+    assert Espia.ultimo.valores["codigo_postal"] == "" and Espia.ultimo.valores["ciudad"] == ""   # no inventa datos
+    assert "S001" not in json.dumps(Espia.ultimo.valores) and "renovacion" not in json.dumps(Espia.ultimo.valores)
 
 
 @pytest.mark.browser
 def test_captcha_todo_queda_para_la_persona(tmp_path):
     inf = A.analizar_url((LAB / "04_captcha_simulado.html").resolve().as_uri(), autorizado=False,
-                         settings=settings_para(tmp_path), expediente=EXP_RESERVA)
+                         settings=settings_para(tmp_path), expediente=EXP_MONITOR)
     assert inf["bloqueo_humano"]["blocked"]
     assert {c["decision"] for c in inf["campos"]} <= {"humano", "ignorado"}
     assert inf["perfil_borrador"]["campos_formulario"] == {}
@@ -153,16 +161,16 @@ def test_captcha_todo_queda_para_la_persona(tmp_path):
 def test_vista_previa_permite_revisar_y_descargar(sitio_registro, tmp_path):
     from cauce_form_connector.page_inspector import BrowserSession
     st = settings_para(tmp_path)
-    inf = A.analizar_url(sitio_registro + "/05_reserva_externa.html", autorizado=False, settings=st, expediente=EXP_RESERVA)
+    inf = A.analizar_url(sitio_registro + "/05_reserva_externa.html", autorizado=False, settings=st, expediente=EXP_MONITOR)
     rutas = A.guardar(inf, tmp_path / "s")
     with BrowserSession(st, headless=True) as s:
         s.open_url(Path(rutas["vista_previa"]).resolve().as_uri())
         inicial = json.loads(s.page.text_content("#json"))
         assert set(inicial["campos_formulario"]) == set(inf["perfil_borrador"]["campos_formulario"])
-        # La persona desmarca el teléfono e incluye la CURP con su ruta propuesta
+        # La persona desmarca el teléfono e incluye el folio (revisar) con su ruta propuesta
         filas = [c for c in inf["campos"] if c["nombre_logico"]]
         i_tel = next(i for i, c in enumerate(filas) if c["name"] == "tel")
-        i_doc = next(i for i, c in enumerate(filas) if c["name"] == "doc_identidad")
+        i_doc = next(i for i, c in enumerate(filas) if c["name"] == "folio_anterior")
         s.page.uncheck(f'[data-i="{i_tel}"]')
         s.page.check(f'[data-i="{i_doc}"]')
         final = json.loads(s.page.text_content("#json"))
@@ -170,7 +178,7 @@ def test_vista_previa_permite_revisar_y_descargar(sitio_registro, tmp_path):
         i_arch = next(i for i, c in enumerate(filas) if c["name"] == "comprobante")
         assert s.page.is_disabled(f'[data-i="{i_arch}"]')
     assert "telefono" not in final["campos_formulario"]
-    assert final["campos_expediente"][filas[i_doc]["nombre_logico"]] == "titular.curp"
+    assert final["campos_expediente"][filas[i_doc]["nombre_logico"]] == "folio_anterior"
     assert final["_borrador"]["estado"] == "revisado_pendiente_aprobacion"
 
 
@@ -178,7 +186,7 @@ def test_vista_previa_permite_revisar_y_descargar(sitio_registro, tmp_path):
 def test_cli_genera_los_cuatro_archivos(tmp_path, capsys, monkeypatch):
     monkeypatch.setenv("CAUCE_PROFILES_DIR", str(tmp_path / "p"))
     rc = cli_main(["analizar-formulario", "--html", str(LAB / "05_reserva_externa.html"),
-                   "--expediente", str(ROOT / "sample_data/expediente_ficticio_reserva.json"),
+                   "--expediente", str(ROOT / "sample_data/expediente_monitor_sintetico.json"),
                    "--salida", str(tmp_path / "out")])
     out = capsys.readouterr().out
     assert rc == 0 and "no se envió nada" in out
@@ -202,27 +210,79 @@ def _informe_estatico(html: str, exp: dict | None) -> dict:
     return A.construir_informe(analyze_html(html), {}, "http://127.0.0.1/x.html", expediente=exp)
 
 
-def test_reglas_de_decision_sin_navegador():
+def test_lab06_correspondencias_correctas_e_incorrectas():
+    inf = _informe_estatico((LAB / "06_cita_monitor.html").read_text(encoding="utf-8"), EXP_MONITOR)
+    c = _por_name(inf)
+    ruta = lambda n: (c[n]["propuesta"] or {}).get("ruta_expediente")
+    # Correctas y automáticas
+    assert {n for n, x in c.items() if x["decision"] == "automatico"} == {
+        "nombre_completo", "nacimiento", "telefono", "correo", "correo_confirmacion"}
+    assert [ruta(n) for n in ("nombre_completo", "nacimiento", "telefono", "correo", "correo_confirmacion")] == [
+        "nombre", "fecha_nacimiento", "telefono", "correo", "correo"]
+    # Códigos: aunque los valores coincidan literalmente, hace falta tabla aprobada
+    for n, campo in (("tipo_tramite", "tipo_tramite"), ("oficina", "sucursal"), ("zona", "region"), ("modo", "modo")):
+        assert c[n]["decision"] == "revisar" and ruta(n) == campo and "tabla de equivalencias" in c[n]["motivo"]
+    assert "coinciden literalmente" in c["tipo_tramite"]["motivo"]
+    eq = {e["campo_monitor"]: e for e in inf["perfil_borrador"]["_borrador"]["equivalencias_pendientes"]}
+    assert set(eq) == {"tipo_tramite", "sucursal", "region", "modo"}
+    assert eq["modo"]["tabla"] == {"POR_DIA": None, "POR_HORARIO": None} and eq["sucursal"]["codigos_monitor"] == "catálogo no disponible"
+    assert all(e["aprobada_por"] is None for e in eq.values())
+    # Fechas de cita y rangos, identificadores: revisión
+    assert (ruta("fecha_preferida"), ruta("desde"), ruta("hasta")) == ("fecha_solicitada", "fechas_desde", "fechas_hasta")
+    assert {c[n]["decision"] for n in ("fecha_preferida", "desde", "hasta", "registro_previo")} == {"revisar"}
+    assert ruta("registro_previo") == "id_registro_previo"
+    # Nunca: RFC/consentimiento
+    assert c["rfc"]["decision"] == "humano" and ruta("rfc") is None
+    assert c["autorizo"]["decision"] == "humano" and ruta("autorizo") is None
+    # El perfil solo lleva campos automáticos y rutas existentes en Monitor
+    perfil = inf["perfil_borrador"]
+    assert set(perfil["campos_expediente"].values()) <= set(M.ESQUEMA)
+    assert not set(perfil["campos_expediente"].values()) & {"tipo_tramite", "sucursal", "region", "modo", "id_externo"}
+
+
+def test_reglas_de_dato_incorrecto():
     html = """<form id="f">
-      <label for="pais">País</label><select id="pais" name="pais"><option value="ES">España</option></select>
-      <label for="cp">Código postal</label><input id="cp" name="cp" pattern="\\d{4}">
-      <label for="fn">Fecha de nacimiento</label><input id="fn" name="fn" type="date">
+      <label for="n">Nombre</label><input id="n" name="n">
+      <label for="tel">Teléfono</label><input id="tel" name="tel" type="tel" pattern="\\d{8}">
+      <label for="fn">Fecha de nacimiento (dd/mm/aaaa)</label><input id="fn" name="fn" placeholder="dd/mm/aaaa">
+      <label for="cl">Identificador del cliente</label><input id="cl" name="cl">
+      <label for="estado">Estado</label><select id="estado" name="estado"><option value="CMX">CDMX</option></select>
       <label for="pw">Contraseña</label><input id="pw" name="pw" type="password">
     </form>"""
-    exp = {"domicilio": {"pais": "México", "cp": "06700"}, "titular": {"fecha_nacimiento": "no consta"}}
+    exp = dict(EXP_MONITOR, id_externo="ZZ-SINTETICO-1")
     c = _por_name(_informe_estatico(html, exp))
-    assert c["pais"]["decision"] == "revisar" and "opción" in c["pais"]["motivo"]       # valor fuera de la lista
-    assert c["cp"]["decision"] == "revisar" and "patrón" in c["cp"]["motivo"]           # no cumple pattern
-    assert c["fn"]["decision"] == "revisar" and "fecha" in c["fn"]["motivo"]
+    assert c["n"]["decision"] == "revisar" and "completo" in c["n"]["motivo"]   # «Nombre» a secas: confirmar
+    assert c["tel"]["decision"] == "revisar" and "patrón" in c["tel"]["motivo"]  # 10 dígitos de Monitor vs pattern 8
+    assert c["fn"]["decision"] == "revisar" and "AAAA-MM-DD" in c["fn"]["motivo"]
+    assert c["cl"]["decision"] == "humano" and c["cl"]["propuesta"] is None     # nunca id_externo por suposición
+    assert c["estado"]["decision"] == "humano"
     assert c["pw"]["decision"] == "humano"
-    sin_exp = _informe_estatico(html, None)
-    assert "No se indicó expediente" in " ".join(sin_exp["advertencias"])
-    assert sin_exp["perfil_borrador"]["campos_formulario"] == {}
+
+
+def test_expediente_que_no_sigue_el_modelo_de_monitor():
+    viejo = {"titular": {"nombre_completo": "Zzx"}, "contacto": {"correo": "zz@example.com"}, "curp": "X"}
+    assert M.validar_expediente(EXP_MONITOR) == []
+    avisos = " ".join(M.validar_expediente(viejo))
+    assert "titular" in avisos and "curp" in avisos and "faltan" in avisos
+    malo = dict(EXP_MONITOR, telefono="55-8765", fecha_nacimiento="17/05/1990", modo="SEMANAL")
+    assert len(M.validar_expediente(malo)) == 3
+    html = '<form id="f"><label for="e">Correo</label><input id="e" name="e" type="email"></form>'
+    inf = _informe_estatico(html, viejo)
+    assert _por_name(inf)["e"]["decision"] == "revisar"              # el expediente no trae «correo» plano
+    assert any("titular" in a for a in inf["advertencias"])
+    sin = _informe_estatico(html, None)
+    assert sin["perfil_borrador"]["campos_formulario"] == {}
+    assert "No se indicó expediente" in " ".join(sin["advertencias"])
+
+
+def test_expediente_sintetico_tiene_exactamente_el_modelo_de_monitor():
+    assert list(EXP_MONITOR) == list(M.ESQUEMA)
+    assert EXP_MONITOR["id_externo"] is None                          # identificador personal: ni siquiera sintético
 
 
 def test_perfil_borrador_respeta_formato_de_config_formularios(tmp_path):
     html = (LAB / "03_validaciones.html").read_text(encoding="utf-8")
-    inf = _informe_estatico(html, EXP_BASE)
+    inf = _informe_estatico(html, EXP_MONITOR)
     perfil = inf["perfil_borrador"]
     assert re.fullmatch(r"frm_[a-z0-9_]{1,40}", perfil["formulario_id"])
     assert re.fullmatch(r"[a-z0-9_]{1,40}", perfil["perfil"])
@@ -230,11 +290,6 @@ def test_perfil_borrador_respeta_formato_de_config_formularios(tmp_path):
     ruta = tmp_path / "p.json"
     ruta.write_text(json.dumps(perfil), encoding="utf-8")
     cfg = P.cargar_formulario(ruta)                                   # el validador existente lo acepta
-    valores, faltan = P.extraer_campos(EXP_BASE, cfg)
-    assert faltan == [] and "NO-SE-USA" not in json.dumps(valores)
+    valores, faltan = P.extraer_campos(EXP_MONITOR, cfg)
+    assert faltan == [] and set(valores) == set(perfil["campos_formulario"])
     _sin_secretos(json.dumps(inf) + A.informe_markdown(inf) + A.vista_previa_html(inf))
-
-
-def test_aplanar_ignora_listas_y_marca_vacios():
-    plano = A.aplanar({"a": {"b": "x", "c": ""}, "l": [1, 2], "n": None})
-    assert plano == {"a.b": "x", "a.c": "", "n": None}

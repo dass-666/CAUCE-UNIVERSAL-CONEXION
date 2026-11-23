@@ -6,7 +6,7 @@ cd /d "%~dp0"
 set "PLAYWRIGHT_BROWSERS_PATH=%~dp0.pw-browsers"
 chcp 65001 >nul
 set PYTHONIOENCODING=utf-8
-if not exist .venv (
+if not exist .venv\Scripts\python.exe (
   echo Primero ejecute instalar_windows.bat
   exit /b 1
 )
@@ -15,11 +15,12 @@ set "URL=%~1"
 if "%URL%"=="" set /p "URL=URL autorizada del formulario: "
 if "%URL%"=="" exit /b 1
 set "EXPEDIENTE=%~2"
-if "%EXPEDIENTE%"=="" set "EXPEDIENTE=sample_data\expediente_ficticio.json"
+if "%EXPEDIENTE%"=="" set "EXPEDIENTE=sample_data\expediente_monitor_sintetico.json"
 set "AUT="
 echo.
 echo Los dominios externos deben estar en config\allowed_hosts.json.
-set /p "RESP=Tiene autorizacion por escrito para analizar esta pagina? (S/N): "
+set "RESP=%CAUCE_AUTORIZADO%"
+if "%RESP%"=="" set /p "RESP=Tiene autorizacion por escrito para analizar esta pagina? (S/N): "
 if /i "%RESP%"=="S" set "AUT=--authorized"
 for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TS=%%i"
 set "SALIDA=informes\analisis_%TS%"
@@ -29,5 +30,6 @@ if "%RC%"=="3" (
   echo URL no autorizada: no se abrio la pagina.
   exit /b 3
 )
-if exist "%SALIDA%\vista_previa.html" start "" "%SALIDA%\vista_previa.html"
+REM CAUCE_NO_ABRIR=1 evita abrir el navegador (pruebas automaticas)
+if not "%CAUCE_NO_ABRIR%"=="1" if exist "%SALIDA%\vista_previa.html" start "" "%SALIDA%\vista_previa.html"
 exit /b %RC%

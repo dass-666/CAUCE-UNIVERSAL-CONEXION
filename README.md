@@ -65,7 +65,7 @@ Detalle y límites en [docs/CONTRATO_CAUCE_CONECTOR_V1.md](docs/CONTRATO_CAUCE_C
 
 ```bash
 python -m cauce_form_connector analizar-formulario --url https://sitio-autorizado.example/reserva --authorized \
-    --expediente sample_data/expediente_ficticio.json
+    --expediente sample_data/expediente_monitor_sintetico.json
 ```
 
 En Windows: doble clic en `analizar_formulario_windows.bat` (pide la URL y abre la vista previa).
@@ -77,6 +77,14 @@ sin ventana, y **no escribe, no hace clic ni envía**. Deja en `informes/analisi
 | `informe.md` / `informe.json` | Campos, selectores, tipos, opciones, fechas, confirmaciones, validaciones, elementos dinámicos y decisión por campo (automático / revisar / humano / ignorado) |
 | `perfil_borrador.json` | Perfil en el formato de `config/formularios/*.json`, solo con los campos automáticos; los dudosos van en `_borrador.pendientes_revision` |
 | `vista_previa.html` | Página local para marcar qué campos incluir, corregir la ruta del expediente y descargar el perfil revisado |
+
+Las correspondencias usan el **modelo real del Expediente de Monitor** (campos planos: `nombre`, `fecha_nacimiento`,
+`telefono`, `correo`, `id_externo`, `id_registro_previo`, `folio_anterior`, `tipo_tramite`, `operacion`, `region`,
+`sucursal`, `fecha_solicitada`, `fechas_desde`, `fechas_hasta`, `modo`; ver `cauce_form_connector/esquema_monitor.py`).
+Solo `nombre` (si el formulario pide el nombre completo), `fecha_nacimiento`, `telefono` y `correo` pueden ser
+automáticos. Nombre/apellidos separados, fechas de cita, folios e identificadores van a «revisar»; los códigos
+(`tipo_tramite`, `operacion`, `region`, `sucursal`, `modo`) exigen una tabla de equivalencias aprobada
+(`_borrador.equivalencias_pendientes`); CURP, RFC y consentimientos nunca se proponen.
 
 El perfil sigue siendo un borrador: `autorrellenar --formulario <perfil> --expediente <exp> --aprobar-perfil rev_xxx`
 es el paso humano que lo aprueba. Códigos de salida: `0` informe generado, `3` URL no autorizada (no se abre),

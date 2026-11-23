@@ -6,9 +6,9 @@ Reutiliza el motor existente (no lo duplica):
   opciones, radios agrupados y pares de confirmación.
 - `html_analyzer.analyze_html` sobre el HTML tal como llegó del servidor permite saber qué campos
   creó JavaScript después de cargar.
-- `matcher.match_fields` propone a qué dato del expediente corresponde cada campo.
-- `sequential_typer.choose_option` / `normalize_date` comprueban si un valor del expediente encajaría
-  en una lista o en un campo de fecha, con la MISMA lógica que usará el motor al rellenar.
+- `esquema_monitor` (modelo plano del Expediente de Monitor) decide qué campo de Monitor pide cada control, con
+  reglas explícitas: no divide nombres, no traduce códigos sin tabla aprobada y no propone CURP/RFC/consentimientos.
+- `matcher.field_concept` y `sequential_typer.normalize_date` se reutilizan para reconocer conceptos y fechas.
 
 Qué NO hace (por diseño): no escribe en la página, no hace clic, no envía, no inicia sesión, no resuelve
 CAPTCHA y no guarda ni muestra valores del expediente (solo si hay dato y si encaja). Abre la página una
@@ -27,9 +27,10 @@ from urllib.parse import urlsplit
 
 from .form_detector import strip_accents
 from .html_analyzer import analyze_html
-from .matcher import field_concept, match_fields
+from . import esquema_monitor as M
+from .matcher import field_concept
 from .models import AnalysisResult, FieldDescriptor
-from .sequential_typer import choose_option, normalize_date, to_bool
+from .sequential_typer import normalize_date
 from .settings import Settings, get_settings
 from .signature import structure_signature_v2
 from .url_policy import UrlPolicy, safe_url_label
@@ -68,10 +69,6 @@ EXTRA_JS = """
 }
 """
 
-# Conceptos que, aunque haya dato, siempre revisa una persona.
-CONCEPTOS_SENSIBLES = {"documento": "documento de identidad: confirmar que este sitio está autorizado a recibirlo",
-                       "acepta_terminos": "consentimiento: confirmar que el expediente registra consentimiento para este sitio",
-                       "boletin": "suscripción: decisión de la persona"}
 DATE_TEXT_RE = re.compile(r"(dd|aaaa|yyyy|mm)[/\-.]", re.I)
 
 
@@ -84,19 +81,6 @@ def slug(texto: str, largo: int = 36) -> str:
     t = strip_accents(texto or "").lower()
     t = re.sub(r"[^a-z0-9]+", "_", t).strip("_")
     return (t[:largo].strip("_")) or "formulario"
-
-
-def aplanar(expediente: Any, prefijo: str = "") -> dict[str, Any]:
-    """{ruta.con.puntos: valor escalar}. Las listas no se recorren (un perfil no apunta a posiciones)."""
-    out: dict[str, Any] = {}
-    if isinstance(expediente, dict):
-        for k, v in expediente.items():
-            ruta = f"{prefijo}.{k}" if prefijo else str(k)
-            if isinstance(v, dict):
-                out.update(aplanar(v, ruta))
-            elif isinstance(v, (str, int, float, bool)) or v is None:
-                out[ruta] = v
-    return out
 
 
 def _hay_dato(v: Any) -> bool:
@@ -134,13 +118,6 @@ def categoria(f: FieldDescriptor) -> str:
 def _formato_fecha_texto(f: FieldDescriptor) -> str:
     m = re.search(r"(dd|mm|aaaa|yyyy)([/\-.])(dd|mm|aaaa|yyyy)\2(dd|mm|aaaa|yyyy)", f.placeholder + " " + f.label, re.I)
     return m.group(0).lower() if m else ""
-
-
-def _a_formato(iso: str, formato: str) -> str:
-    y, m, d = iso.split("-")
-    sep = re.search(r"[/\-.]", formato).group(0)
-    partes = {"dd": d, "mm": m, "aaaa": y, "yyyy": y}
-    return sep.join(partes[p] for p in formato.split(sep))
 
 
 def _iso(valor: str) -> str:
@@ -198,8 +175,8 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
     etiqueta = safe_url_label(url)
     p = urlsplit(url_limpia)
     base_slug = slug((p.hostname or "") + "_" + (p.path or "")) if p.scheme != "file" else slug(Path(p.path).stem)
-    plano = aplanar(expediente or {})
-    rutas = sorted(plano)
+    plano = {k: v for k, v in (expediente or {}).items() if k in M.ESQUEMA} if isinstance(expediente, dict) else {}
+    rutas = list(M.CAMPOS)
     campos = analisis.all_fields
     extras = extra.get("campos") or [None] * len(campos)
     pagina = dict(extra.get("pagina") or {})
@@ -208,7 +185,6 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
     if estatico is not None:
         en_estatico = {(g.name, g.id) for g in estatico.all_fields}
 
-    propuestas = {m.field_key: m for m in match_fields(campos, rutas)} if rutas else {}
     usados: set[str] = set()
     logicos: dict[str, str] = {}
     filas: list[dict] = []
@@ -243,11 +219,20 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
 
     por_clave = {f.key: f for f in campos}
     filas_por_clave = {r["clave"]: r for r in filas}
+    equivalencias: list[dict] = []
     for r in filas:
         f = por_clave[r["clave"]]
         if f.confirms:
             continue
-        _decidir(r, f, propuestas.get(f.key), plano, analisis, bool(rutas))
+        rec = M.reconocer(f, campos)
+        _decidir(r, f, rec, plano, analisis, expediente is not None)
+        if rec.get("requiere_tabla") and r["decision"] == "revisar":
+            spec = M.ESQUEMA[rec["campo"]]
+            equivalencias.append({"campo_monitor": rec["campo"], "clave_campo": f.key, "etiqueta": f.label,
+                                  "codigos_monitor": spec["codigos"] or "catálogo no disponible",
+                                  "opciones_formulario": [{"valor": o.value, "etiqueta": o.label} for o in f.options if o.value],
+                                  "tabla": {c: None for c in (spec["codigos"] or [])},
+                                  "aprobada_por": None})
     for r in filas:  # las confirmaciones siguen al campo original
         f = por_clave[r["clave"]]
         if not f.confirms:
@@ -277,6 +262,7 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
             "generado_en": ahora.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "generado_por": FORMATO,
             "firma_estructura_analizada": structure_signature_v2(campos),
+            "equivalencias_pendientes": equivalencias,
             "pendientes_revision": [{"nombre_logico": r["nombre_logico"], "clave_campo": r["clave"],
                                      "etiqueta": r["etiqueta"],
                                      "ruta_expediente_propuesta": (r.get("propuesta") or {}).get("ruta_expediente"),
@@ -297,27 +283,34 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
         "solo_lectura": True,
         "envio_realizado": False,
         "bloqueo_humano": analisis.safety.to_dict(),
-        "advertencias": list(analisis.warnings) + _advertencias(pagina, estatico, expediente),
+        "advertencias": list(analisis.warnings) + _advertencias(pagina, estatico, expediente)
+                        + (M.validar_expediente(expediente) if expediente is not None else []),
         "pagina": pagina,
         "formularios": [{"clave": fm.key, "selector": fm.selector, "metodo": fm.method,
                          "botones_envio": fm.submit_buttons, "n_campos": len(fm.fields)} for fm in analisis.forms],
         "resumen": {"campos": len(filas), "automatico": conteo.get("automatico", 0),
                     "revisar": conteo.get("revisar", 0), "humano": conteo.get("humano", 0),
                     "ignorado": conteo.get("ignorado", 0)},
-        "expediente": {"rutas_disponibles": rutas, "es_ejemplo": True,
-                       "nota": "Comparación contra un expediente de EJEMPLO: el formato real de Monitor no está "
-                               "confirmado. Solo se informa si hay dato y si encaja, nunca su valor."},
+        "expediente": {"rutas_disponibles": rutas, "modelo": "Expediente de Cauce Monitor (plano, 15 campos)",
+                       "sintetico": True,
+                       "nota": "Correspondencias contra el modelo real del Expediente de Monitor (campos planos), "
+                               "comprobadas con un expediente SINTÉTICO. Solo se informa si hay dato y si encaja, nunca "
+                               "su valor. Los códigos (trámite, operación, región, sucursal, modo) necesitan una tabla de "
+                               "equivalencias aprobada."},
         "campos": filas,
         "perfil_borrador": perfil,
     }
 
 
-def _decidir(r: dict, f: FieldDescriptor, m: Any, plano: dict, analisis: AnalysisResult, hay_expediente: bool) -> None:
+def _decidir(r: dict, f: FieldDescriptor, rec: dict, plano: dict, analisis: AnalysisResult,
+             hay_expediente: bool) -> None:
+    """Decisión final de un campo: parte de lo que permite el modelo de Monitor (`rec`) y comprueba el dato sintético."""
     cat = r["categoria"]
+    campo = rec.get("campo")
     r["propuesta"] = None
-    if m is not None and m.column:
-        r["propuesta"] = {"ruta_expediente": m.column, "confianza": m.confidence, "motivo": m.reason,
-                          "estado_matcher": m.status, "dato_en_expediente": _hay_dato(plano.get(m.column))}
+    if campo:
+        r["propuesta"] = {"ruta_expediente": campo, "motivo": rec["motivo"], "evidencia": rec.get("evidencia", ""),
+                          "dato_en_expediente": _hay_dato(plano.get(campo)) if hay_expediente else None}
 
     def fija(decision: str, motivo: str) -> None:
         r["decision"], r["motivo"] = decision, motivo
@@ -330,52 +323,42 @@ def _decidir(r: dict, f: FieldDescriptor, m: Any, plano: dict, analisis: Analysi
         return fija("humano", "contraseñas: nunca se rellenan automáticamente")
     if analisis.safety.blocked:
         return fija("humano", "la página exige intervención humana (CAPTCHA o marca de uso humano)")
-    if not hay_expediente:
-        return fija("revisar", "sin expediente para comparar")
-    if r["propuesta"] is None:
-        return fija("humano", "el expediente no tiene un dato equivalente")
+    if rec["decision_maxima"] != "automatico":
+        return fija(rec["decision_maxima"], rec["motivo"])
     p = r["propuesta"]
-    valor = plano.get(p["ruta_expediente"])
-    concepto = field_concept(f)[0]
-    if not p["dato_en_expediente"]:
-        return fija("revisar", "hay ruta equivalente pero el expediente de ejemplo no trae valor")
-    if p["estado_matcher"] != "auto":
-        return fija("revisar", f"correspondencia dudosa ({p['motivo']})")
-    if concepto in CONCEPTOS_SENSIBLES:
-        return fija("revisar", CONCEPTOS_SENSIBLES[concepto])
+    if not hay_expediente:
+        return fija("revisar", "sin expediente sintético para comprobar el formato del dato")
     if r["dinamico"].get("oculto_condicional"):
         return fija("revisar", "solo aparece bajo una condición; confirmar cuándo se rellena")
-    sval = ("si" if valor else "no") if isinstance(valor, bool) else str(valor)
+    if not p["dato_en_expediente"]:
+        return fija("revisar", f"el expediente sintético no trae «{campo}»")
+    valor = plano.get(campo)
+    sval = str(valor)
     if cat == "lista":
-        if choose_option(f.options, sval) is None:
-            return fija("revisar", "el dato no coincide con ninguna opción de la lista; hace falta una tabla de equivalencias")
-        p["encaja_en_opciones"] = True
-    elif cat == "casilla":
-        if to_bool(sval) is None:
-            return fija("revisar", "el dato no es sí/no")
-    elif cat == "fecha":
-        if f.type == "date" and not _iso(sval):
-            return fija("revisar", "el dato no es una fecha reconocible (AAAA-MM-DD o DD/MM/AAAA)")
+        return fija("revisar", "lista: requiere tabla de equivalencias aprobada")
+    if cat == "fecha":
         if f.type != "date":
             return fija("revisar", f"control de tipo {f.type}: confirmar el formato")
+        if not _iso(sval):
+            return fija("revisar", "el dato no es una fecha AAAA-MM-DD")
     elif cat == "fecha_texto":
         fmt = r["validaciones"].get("formato_fecha")
-        iso = _iso(sval)
-        if not fmt or not iso or _a_formato(iso, fmt) != sval:
-            return fija("revisar", f"fecha en texto con formato «{fmt or 'desconocido'}»: el motor escribe el dato tal cual; "
-                                   "confirmar que el expediente usa ese formato")
+        return fija("revisar", f"fecha en texto con formato «{fmt or 'desconocido'}» y Monitor usa AAAA-MM-DD: el motor "
+                               "escribe el dato tal cual; hace falta conversión aprobada")
     elif cat in ("numerico", "numerico_texto"):
         if not re.fullmatch(r"-?\d+([.,]\d+)?", re.sub(r"[\s\-()]", "", sval)):
             return fija("revisar", "el campo es numérico y el dato no lo es")
     if f.pattern:
         try:
             if not re.fullmatch(f.pattern, sval):
-                return fija("revisar", "el dato del ejemplo no cumple el patrón del campo (pattern)")
+                return fija("revisar", "el dato sintético de Monitor no cumple el patrón del campo (pattern)")
         except re.error:
             pass
     if f.maxlength is not None and len(sval) > f.maxlength:
-        return fija("revisar", "el dato del ejemplo supera la longitud máxima del campo")
-    fija("automatico", f"{p['motivo']} (confianza {p['confianza']:.0%})")
+        return fija("revisar", "el dato sintético de Monitor supera la longitud máxima del campo")
+    if f.minlength is not None and len(sval) < f.minlength:
+        return fija("revisar", "el dato sintético de Monitor no llega a la longitud mínima del campo")
+    fija("automatico", f"{rec['motivo']} → «{campo}» de Monitor ({rec.get('evidencia') or 'regla explícita'})")
 
 
 def _advertencias(pagina: dict, estatico: Optional[AnalysisResult], expediente: Optional[dict]) -> list[str]:

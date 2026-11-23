@@ -48,25 +48,25 @@ Resultado de referencia: **70 pruebas superadas**, demo `DEMO SUPERADA` y ejempl
 
 ## 3 bis. Analizador de formularios externos (`analizar-formulario`)
 
-Verificado (pruebas `tests/test_analizador_formularios.py`, solo con páginas de laboratorio locales y datos ficticios):
+Verificado (pruebas `tests/test_analizador_formularios.py`, solo con páginas de laboratorio locales y datos sintéticos):
 detección de texto, numéricos, selectores, listas y opciones, fechas nativas y en texto, confirmaciones, validaciones
-visibles, campos creados por JavaScript y bloques condicionales; solo una petición GET a la página y ningún POST;
-el perfil borrador lo acepta `cargar_formulario` y, tras aprobarlo, `autorrellenar` rellena 7 de 7 campos del lab 03.
+visibles, campos creados por JavaScript y bloques condicionales; una sola petición GET y ningún POST; correspondencias
+con el modelo plano del Expediente de Monitor (correctas e incorrectas, labs 05 y 06); el perfil borrador del lab 03 lo
+acepta `cargar_formulario` y, tras aprobarlo, `autorrellenar` (contrato `cauce.conector.v1`) rellena 5 de 5 campos.
 
 Límites:
-1. **Expediente de ejemplo:** la comparación usa un expediente FICTICIO (`sample_data/expediente_ficticio*.json`). El formato
-   real de los expedientes de Cauce Monitor no está confirmado; con otro formato cambian las rutas propuestas.
-2. **Solo lo que se ve al cargar:** campos que aparecen tras elegir una opción, pasar de página (asistentes por pasos) o
-   iniciar sesión no se ven, porque el analizador no interactúa. Un bloque oculto ya presente se marca «oculto condicional».
-3. **«Creado por JavaScript»** compara con el HTML que sirvió el servidor; si no se pudo leer, se avisa y no se marca.
-4. **Mensajes de validación:** solo los textos asociados por `aria-describedby`, `title` y atributos HTML (`pattern`,
-   `min/max`, `maxlength`…). Las reglas que viven solo en JavaScript no se ven hasta que la página muestra el error.
-5. **Decisiones conservadoras:** documento de identidad, consentimientos, campos condicionales, listas cuyo valor no encaja,
-   fechas en texto y datos que no cumplen el `pattern` van a «revisar»; archivos, contraseñas y CAPTCHA, a «humano».
-6. **Sitios que bloquean robots o exigen sesión:** no se intenta eludir nada. Si el sitio responde con un bloqueo o pide
-   iniciar sesión, el informe saldrá vacío o con el formulario de acceso.
-7. **Windows:** verificado solo en GitHub Actions (`windows-latest`); `analizar_formulario_windows.bat` no se ha probado aún
-   en el PC de Windows 11.
+1. **Modelo de Monitor:** se usa la estructura recuperada por auditoría (15 campos planos). El expediente es SINTÉTICO
+   (`sample_data/expediente_monitor_sintetico.json`); no se ha probado con un expediente real ni con la vista enmascarada
+   (que no es contrato de intercambio).
+2. **Tablas de equivalencias:** el analizador genera la plantilla (`equivalencias_pendientes`) pero el motor actual NO
+   traduce códigos al rellenar; por eso esos campos nunca entran al perfil. Aplicar una tabla aprobada requiere un
+   cambio en `puente_monitor` (pendiente de decisión).
+3. **Catálogos de región y sucursal:** desconocidos; los códigos `R01`/`S001` del sintético son inventados.
+4. **Solo lo que se ve al cargar:** campos que aparecen al interactuar, pasar de página o iniciar sesión no se ven.
+5. **Mensajes de validación:** solo `aria-describedby`, `title` y atributos HTML; las reglas solo en JavaScript no.
+6. **Perfil del PR #3:** `config/formularios/lab_validaciones.json` sigue usando rutas anidadas (`titular.*`,
+   `contacto.*`) que Monitor no tiene; no se modificó en esta rama.
+7. **Windows:** verificado en GitHub Actions (`windows-latest`, incluido el instalador sin `py`); no en el PC Windows 11.
 
 ## 4. Riesgos legales y de uso (cuestionamiento del requisito de URL)
 

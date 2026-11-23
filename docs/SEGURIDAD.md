@@ -41,6 +41,9 @@ Mejoras menores aplicadas en la misma revisión:
   laboratorio registra una sola petición GET al formulario y ningún POST.
 - **Sin valores personales en las salidas:** el informe, el perfil y la vista previa dicen si hay dato y si encaja, nunca el
   valor (prueba `_sin_secretos` sobre los cuatro archivos y la salida del CLI).
+- **Sin equivalencias inventadas:** CURP, RFC, documentos y consentimientos no se proponen; `id_externo` (personal) no
+  se asume equivalente a ningún campo; los códigos de Monitor exigen una tabla aprobada. El expediente sintético deja
+  `id_externo` vacío.
 - **Vista previa local:** HTML autónomo con `Content-Security-Policy: default-src 'none'`; no carga nada de la red. Los textos de
   la página analizada se escapan antes de mostrarse.
 

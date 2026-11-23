@@ -95,8 +95,8 @@ def main(argv: list[str] | None = None) -> int:
     g_az.add_argument("--url", help="URL autorizada del formulario")
     g_az.add_argument("--html", help="archivo .html local (pruebas)")
     p_az.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
-    p_az.add_argument("--expediente", default="sample_data/expediente_ficticio.json",
-                      help="expediente de EJEMPLO para comparar (solo se mira si hay dato, nunca se muestra)")
+    p_az.add_argument("--expediente", default="sample_data/expediente_monitor_sintetico.json",
+                      help="expediente SINTÉTICO con el modelo de Monitor (solo se mira si hay dato, nunca se muestra)")
     p_az.add_argument("--salida", help="carpeta de resultados (por defecto informes/analisis_<formulario>_<fecha>)")
     p_az.add_argument("--nombre", default="", help="nombre legible del formulario")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")

@@ -52,6 +52,9 @@ Doble clic en **`analizar_formulario_windows.bat`** (o `analizar_formulario_wind
 Pide la URL, pregunta si tiene autorización y abre `vista_previa.html` en su navegador. Solo lectura: no rellena ni envía.
 El dominio debe estar antes en `config\allowed_hosts.json`. Resultados en `informes\analisis_<fecha>\`.
 
+`instalar_windows.bat` usa el lanzador `py` si existe y, si no, `python` (3.10 o superior). Esto se prueba en
+GitHub Actions en un Windows sin `py`.
+
 ## Pruebas y demostración
 
 Doble clic en **`probar_windows.bat`**: ejecuta `pytest` y `scripts\demo_lab.py`.
