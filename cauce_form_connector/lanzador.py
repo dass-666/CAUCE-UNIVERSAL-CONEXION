@@ -106,8 +106,8 @@ SALIDAS = {0: "Terminado.", 2: "Hubo campos por revisar (vea [REVISAR] arriba). 
 
 
 class App:
-    def __init__(self, tk, ttk, filedialog, messagebox, scrolledtext):
-        self.tk, self.filedialog, self.messagebox = tk, filedialog, messagebox
+    def __init__(self, tk, ttk, filedialog, messagebox, scrolledtext, simpledialog=None):
+        self.tk, self.filedialog, self.messagebox, self.simpledialog = tk, filedialog, messagebox, simpledialog
         self.datos = carpeta_datos()
         self.ultimo_analisis: Path | None = None
         self.cola: queue.Queue = queue.Queue()
@@ -162,7 +162,7 @@ class App:
             pass
         self.root.after(150, self.vaciar_cola)
 
-    def ejecutar(self, args: list[str], al_terminar=None) -> None:
+    def ejecutar(self, args: list[str], al_terminar=None, entrada: str | None = None) -> None:
         if self.ocupado:
             self.messagebox.showinfo("Cauce Forms", "Espere a que termine la operación en curso.")
             return
@@ -173,8 +173,12 @@ class App:
         def hilo():
             try:
                 p = subprocess.Popen(args, cwd=str(RAIZ), env=entorno(self.datos), stdout=subprocess.PIPE,
+                                     stdin=subprocess.PIPE if entrada is not None else subprocess.DEVNULL,
                                      stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                if entrada is not None:        # captura manual: solo por stdin, nunca en argumentos ni archivos
+                    p.stdin.write(entrada)
+                    p.stdin.close()
                 for linea in p.stdout:
                     self.cola.put(("linea", linea.rstrip("\n")))
                 rc = p.wait()
@@ -259,9 +263,37 @@ class App:
                                                  filetypes=[("Perfil JSON", "perfil_*.json"), ("JSON", "*.json")])
         if not perfil:
             return
+        manuales = self.pedir_manuales(perfil)
+        if manuales is None:
+            return
         self.escribir(f"\nPreparando autorrellenado con {perfil}…\nSe abrirá el navegador con los campos aprobados "
                       "rellenados y verificados. El conector NO envía: revise y envíe usted, o cierre la ventana.")
-        self.ejecutar(args_autorrellenar(perfil, self.exp.get(), url, REVISOR, externo, ""))
+        args = args_autorrellenar(perfil, self.exp.get(), url, REVISOR, externo, "")
+        if manuales:
+            args.append("--manuales-stdin")
+        self.ejecutar(args, entrada=json.dumps(manuales) if manuales else None)
+
+    def pedir_manuales(self, perfil: str) -> dict[str, str] | None:
+        """Datos que el expediente no tiene (p. ej. un identificador): la persona los escribe para ESTA ejecución.
+        No se guardan ni se muestran en el registro. Devuelve None si la persona cancela."""
+        try:
+            cfg = json.loads(Path(perfil).read_text(encoding="utf-8"))
+            campos = [l for l, r in cfg.get("campos_expediente", {}).items() if r == "@manual"]
+        except (OSError, ValueError, AttributeError):
+            return {}
+        etiquetas = cfg.get("etiquetas") or {}
+        out: dict[str, str] = {}
+        for logico in campos:
+            v = self.simpledialog.askstring("Cauce Forms", f"Escriba «{etiquetas.get(logico, logico)}».\n"
+                                            "Se usa solo en este autorrellenado y no se guarda.\n"
+                                            "Déjelo vacío para completarlo usted en el formulario.", parent=self.root)
+            if v is None:
+                return None
+            if v.strip():
+                out[logico] = v.strip()
+        if campos:
+            self.escribir(f"Captura manual: {len(out)} de {len(campos)} dato(s) escritos (no se muestran ni se guardan).")
+        return out
 
     def abrir_carpeta(self) -> None:
         d = self.ultimo_analisis or self.datos
@@ -273,8 +305,8 @@ class App:
 
 def main() -> None:
     import tkinter as tk
-    from tkinter import filedialog, messagebox, scrolledtext, ttk
-    App(tk, ttk, filedialog, messagebox, scrolledtext).root.mainloop()
+    from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
+    App(tk, ttk, filedialog, messagebox, scrolledtext, simpledialog).root.mainloop()
 
 
 if __name__ == "__main__":

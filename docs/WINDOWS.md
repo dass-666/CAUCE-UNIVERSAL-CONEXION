@@ -112,3 +112,10 @@ Abra `abrir_cauce_forms.bat` con doble clic. La primera vez instala lo necesario
 - Sitios externos: la primera vez que use un dominio, la ventana pregunta una sola vez si añadirlo a su lista local de dominios permitidos. Se siguen deteniendo ante CAPTCHA o inicio de sesión.
 - El perfil se revisa en la vista previa (campos y tablas de equivalencias) y se aprueba al pulsar «Preparar autorrellenado». Cada campo se verifica tras rellenarlo y el conector nunca envía el formulario.
 - Resultados, perfiles y lista de dominios en `%LOCALAPPDATA%\CauceForms` (solo su usuario, fuera de esta carpeta).
+
+### Campos que antes quedaban para la persona
+
+- **Listas hechas con JavaScript** (no `<select>`): se detectan sus opciones, se aplican con la tabla de equivalencias aprobada y se comprueba que el propio control reconozca la opción (opción marcada, valor interno y texto visible).
+- **Fechas en texto**: en la vista previa elija el formato (AAAA-MM-DD, DD/MM/AAAA, etc.). La conversión se aprueba con el perfil.
+- **Datos que el expediente no tiene** (por ejemplo un identificador de cliente): en la vista previa elija «captura manual». Al pulsar «Preparar autorrellenado», la ventana le pide el dato. Se usa solo en esa ejecución y no se guarda ni se muestra en el registro.
+- Ejemplo sintético: `lab_forms/07_listas_personalizadas.html` con `config/formularios/lab_listas_personalizadas.json`.

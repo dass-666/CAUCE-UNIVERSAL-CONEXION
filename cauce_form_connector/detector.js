@@ -134,12 +134,33 @@
     return d;
   };
 
+  // Listas desplegables construidas con JavaScript (role=combobox / aria-haspopup=listbox sobre un div o botón).
+  // Opciones: [role=option] de la lista asociada (aria-controls, aria-owns o la lista hermana). Valor de cada opción:
+  // data-value, si no el id, si no su texto. Se describen como type "custom-select".
+  const CUSTOM = '[role=combobox]:not(input):not(select):not(textarea),[aria-haspopup=listbox]:not(input):not(select):not(textarea)';
+  const listboxOf = (el) => document.getElementById(el.getAttribute("aria-controls") || "")
+    || document.getElementById(el.getAttribute("aria-owns") || "")
+    || (el.parentElement ? el.parentElement.querySelector("[role=listbox]") : null);
+  const optValue = (o) => o.getAttribute("data-value") || o.id || textOf(o);
+  const describeCustom = (el) => {
+    const d = describe(el);
+    d.type = "custom-select";
+    d.required = el.getAttribute("aria-required") === "true";
+    d.disabled = el.getAttribute("aria-disabled") === "true";
+    d.readonly = el.getAttribute("aria-readonly") === "true";
+    const lb = listboxOf(el);
+    d.options = lb ? Array.from(lb.querySelectorAll("[role=option]")).map((o) => ({
+      value: optValue(o), label: textOf(o), selected: o.getAttribute("aria-selected") === "true" })) : [];
+    return d;
+  };
+
   const controls = "input,select,textarea";
   const forms = Array.from(document.querySelectorAll("form"));
   const result = { forms: [], orphan_fields: [], signals: {} };
 
   forms.forEach((f, i) => {
-    const fields = Array.from(f.elements).filter((e) => e.matches && e.matches(controls)).map(describe);
+    const fields = Array.from(f.elements).filter((e) => e.matches && e.matches(controls)).map(describe)
+      .concat(Array.from(f.querySelectorAll(CUSTOM)).map(describeCustom));
     const submits = Array.from(f.querySelectorAll('button, input[type=submit], input[type=image]'))
       .filter((b) => (b.type || "submit").toLowerCase() === "submit" || b.tagName === "INPUT")
       .map((b) => clean(b.innerText || b.value || b.getAttribute("aria-label") || "Enviar"));
@@ -152,7 +173,8 @@
 
   // Campos fuera de cualquier <form> (frecuente en aplicaciones SPA)
   result.orphan_fields = Array.from(document.querySelectorAll(controls))
-    .filter((e) => !e.form && !e.closest("form")).map(describe);
+    .filter((e) => !e.form && !e.closest("form")).map(describe)
+    .concat(Array.from(document.querySelectorAll(CUSTOM)).filter((e) => !e.closest("form")).map(describeCustom));
   result.orphan_submits = Array.from(document.querySelectorAll("button")).filter((b) => !b.closest("form"))
     .map((b) => clean(b.innerText)).filter((t) => /enviar|submit|send|registrar|confirmar|guardar/i.test(t));
 

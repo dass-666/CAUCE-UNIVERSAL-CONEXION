@@ -99,7 +99,7 @@ def categoria(f: FieldDescriptor) -> str:
         return "contrasena"
     if f.confirms:
         return "confirmacion"
-    if t in ("select", "select-multiple", "radio"):
+    if t in ("select", "select-multiple", "radio", "custom-select"):
         return "lista"
     if t == "checkbox":
         return "casilla"
@@ -494,9 +494,14 @@ const rutas = INF.expediente.rutas_disponibles;
 const filas = INF.campos.filter((c) => c.nombre_logico);
 const EQ = Object.fromEntries((INF.perfil_borrador._borrador.equivalencias_pendientes || []).map((e) => [e.clave_campo, e]));
 const ESQ = INF.expediente.esquema;
+const FORMATOS = ["AAAA-MM-DD", "DD/MM/AAAA", "DD-MM-AAAA", "DD.MM.AAAA", "MM/DD/AAAA", "AAAA/MM/DD"];
 $("#filas").innerHTML = filas.map((c, i) => {
   const p = c.propuesta || {};
-  const opts = ['<option value="">— sin dato —</option>'].concat(rutas.map((r) => `<option ${r === p.ruta_expediente ? "selected" : ""}>${esc(r)}</option>`)).join("");
+  const opts = ['<option value="">— sin dato —</option>'].concat(rutas.map((r) => `<option ${r === p.ruta_expediente ? "selected" : ""}>${esc(r)}</option>`),
+    ['<option value="@manual">captura manual (se escribe al rellenar, un solo uso)</option>']).join("");
+  const fmtDet = String(c.validaciones.formato_fecha || "").toUpperCase().replace(/YYYY/g, "AAAA");
+  const fmt = c.categoria === "fecha_texto" ? `<br><label class="mut">formato: <select data-fmt="${i}">` +
+    FORMATOS.map((f) => `<option ${f === (fmtDet || "AAAA-MM-DD") ? "selected" : ""}>${f}</option>`).join("") + `</select></label>` : "";
   const val = Object.entries(c.validaciones).map(([k, v]) => `${esc(k)}=${esc(Array.isArray(v) ? v.join("; ") : v)}`)
     .concat(c.opciones.length ? [`${c.opciones.length} opciones`] : [], Object.keys(c.dinamico).filter((k) => k !== "oculto_por").map((k) => k.replace(/_/g, " "))).join("<br>");
   const bloqueado = c.decision === "humano" && ["archivo", "contrasena"].includes(c.categoria) || INF.bloqueo_humano.blocked;
@@ -511,17 +516,20 @@ $("#filas").innerHTML = filas.map((c, i) => {
   return `<tr><td><input type="checkbox" data-i="${i}" ${c.decision === "automatico" ? "checked" : ""} ${bloqueado ? "disabled" : ""}></td>
   <td><b>${esc(c.etiqueta || c.name || c.clave)}</b>${c.obligatorio ? " *" : ""}<br><span class="mut">${esc(c.nombre_logico)}</span></td>
   <td><code>${esc(c.selector)}</code></td><td>${esc(c.categoria)}<br><span class="mut">${esc(c.tipo)}</span></td><td>${val || "—"}</td>
-  <td><select data-r="${i}" ${bloqueado ? "disabled" : ""}>${opts}</select></td>
+  <td><select data-r="${i}" ${bloqueado ? "disabled" : ""}>${opts}</select>${fmt}</td>
   <td class="d-${esc(c.decision)}">${esc(c.decision)}</td><td>${esc(c.motivo)}</td></tr>` + tabla;
 }).join("");
 function perfil() {
   const base = JSON.parse(JSON.stringify(INF.perfil_borrador));
-  base.campos_formulario = {}; base.campos_expediente = {}; base.equivalencias = {};
+  base.campos_formulario = {}; base.campos_expediente = {}; base.equivalencias = {}; base.formatos_fecha = {}; base.etiquetas = {};
   const incl = [];
   filas.forEach((c, i) => {
     const on = document.querySelector(`[data-i="${i}"]`).checked;
     const ruta = document.querySelector(`[data-r="${i}"]`).value;
     if (!on || !ruta) return;
+    if (ruta === "@manual") base.etiquetas[c.nombre_logico] = c.etiqueta || c.name || c.clave;
+    const fsel = document.querySelector(`[data-fmt="${i}"]`);
+    if (fsel && ESQ[ruta] && ESQ[ruta].tipo === "fecha" && fsel.value !== "AAAA-MM-DD") base.formatos_fecha[c.nombre_logico] = fsel.value;
     if (ESQ[ruta] && ESQ[ruta].tipo === "codigo") {
       // Un código de Monitor solo entra con tabla: se toman las filas llenas
       const valores = {};
@@ -541,6 +549,8 @@ function perfil() {
   base._borrador.pendientes_revision = [];
   base._borrador.equivalencias_pendientes = [];
   if (!Object.keys(base.equivalencias).length) delete base.equivalencias;
+  if (!Object.keys(base.formatos_fecha).length) delete base.formatos_fecha;
+  if (!Object.keys(base.etiquetas).length) delete base.etiquetas;
   $("#cuenta").textContent = `${incl.length} campos incluidos`;
   return base;
 }

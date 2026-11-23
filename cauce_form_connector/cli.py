@@ -89,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     p_au.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
     p_au.add_argument("--autorizacion", metavar="AUT_REF", help="(opcional) referencia de autorización del sitio (aut_xxx); "
                                                                "si se omite, se registra aut_lista_dominios_local")
+    p_au.add_argument("--manuales-stdin", action="store_true", help="leer por stdin un JSON {campo: valor} con los datos "
+                      "de captura manual (@manual) de ESTA ejecución; no se guardan ni se imprimen")
     p_au.add_argument("--espera-s", type=int, default=300, help="segundos que se mantiene la ventana para la revisión")
     p_au.add_argument("--json", action="store_true", help="salida JSON (respuesta del contrato + informe) en vez de texto")
     p_az = sub.add_parser("analizar-formulario", help="SOLO LECTURA: analiza un formulario autorizado y genera informe "
@@ -216,7 +218,12 @@ def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
         if externo:
             aprobado = (P.info_perfil(cfg, settings) or {}).get("aprobado_por")
             extra = {"autorizacion_ref": aut_ref, "otorgada_por": aprobado or "rev_sin_aprobar"}
-        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s, **extra)
+        manuales = None
+        if args.manuales_stdin:
+            manuales = json.loads(sys.stdin.read() or "{}")
+            if not isinstance(manuales, dict) or not all(isinstance(v, str) for v in manuales.values()):
+                raise P.ConfigInvalida("Los datos de captura manual deben ser un objeto JSON {campo: texto}.")
+        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s, manuales=manuales, **extra)
     except UrlNotAllowed as exc:          # antes que ValueError: UrlNotAllowed hereda de ValueError
         print(f"URL no autorizada: {exc}", file=sys.stderr)
         return 3

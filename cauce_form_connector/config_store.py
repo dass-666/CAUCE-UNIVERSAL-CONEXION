@@ -76,7 +76,8 @@ class ProfileStore:
 
     def save_integration(self, name: str, analysis: AnalysisResult, campos: dict[str, str], *,
                          formulario_id: str, url: str, aprobado_por_ref: str,
-                         equivalencias: Optional[dict[str, Any]] = None) -> tuple[Path, str]:
+                         equivalencias: Optional[dict[str, Any]] = None,
+                         formatos_fecha: Optional[dict[str, str]] = None) -> tuple[Path, str]:
         """Guarda un perfil APROBADO para el modo de integración. `campos` = {nombre lógico: clave del campo}.
         Lo escribe una persona (o un proceso que ella ejecuta) tras revisar el formulario real: nada se
         completa con sugerencias. Devuelve (ruta, sha256 del archivo)."""
@@ -100,6 +101,9 @@ class ProfileStore:
         if equivalencias:
             # Tablas código de Monitor -> valor de opción, aprobadas junto con el perfil: la huella SHA-256 las protege
             profile["integracion"]["equivalencias"] = equivalencias
+        if formatos_fecha:
+            # Conversiones de fecha (AAAA-MM-DD -> formato del formulario) aprobadas con el perfil: también las cubre la huella
+            profile["integracion"]["formatos_fecha"] = formatos_fecha
         path = self.path_of(name)
         # Bytes explícitos (LF, UTF-8): la huella no debe depender del sistema operativo (en Windows write_text() usa CRLF)
         path.write_bytes((json.dumps(profile, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8"))

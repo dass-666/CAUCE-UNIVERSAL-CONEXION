@@ -35,6 +35,20 @@ TRUE_WORDS = {"1", "true", "si", "sí", "s", "yes", "y", "x", "on", "acepto", "v
 FALSE_WORDS = {"0", "false", "no", "n", "off", "", "falso"}
 
 
+# Busca, desde el control de la lista personalizada, la opción con ese valor (misma regla que detector.js)
+FIND_CUSTOM_OPTION_JS = """
+(el, v) => {
+  const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
+  const lb = document.getElementById(el.getAttribute("aria-controls") || "")
+    || document.getElementById(el.getAttribute("aria-owns") || "")
+    || (el.parentElement ? el.parentElement.querySelector("[role=listbox]") : null);
+  if (!lb) return null;
+  return Array.from(lb.querySelectorAll("[role=option]"))
+    .find((o) => (o.getAttribute("data-value") || o.id || clean(o.innerText || o.textContent)) === v) || null;
+}
+"""
+
+
 class FillError(Exception):
     pass
 
@@ -149,6 +163,19 @@ class SequentialTyper:
                 chosen.append(opt.value)
             self.locator(f).select_option(chosen if f.type == "select-multiple" else chosen[0])
             return "select_option", "|".join(chosen)
+        if f.type == "custom-select":
+            # Lista hecha con JavaScript: se abre con un clic y se elige la opción con otro clic, como una persona
+            opt = next((o for o in f.options if o.value == value), None) or choose_option(f.options, value)
+            if opt is None:
+                raise FillError("Ninguna opción de la lista personalizada coincide con el dato")
+            loc = self.locator(f)
+            loc.scroll_into_view_if_needed()
+            loc.click()
+            el = loc.evaluate_handle(FIND_CUSTOM_OPTION_JS, opt.value).as_element()
+            if el is None:
+                raise FillError("La lista personalizada no muestra la opción esperada")
+            el.click()
+            return "clic_lista_personalizada", opt.value
         if f.type == "checkbox":
             b = to_bool(value)
             if b is None:

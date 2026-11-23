@@ -14,7 +14,7 @@ TEXT_TYPES = {
     "text", "email", "tel", "password", "search", "url", "number", "textarea", "",
 }
 # Controles que NO reciben texto y usan su mecanismo normal de interacción.
-CHOICE_TYPES = {"select", "select-multiple", "checkbox", "radio"}
+CHOICE_TYPES = {"select", "select-multiple", "checkbox", "radio", "custom-select"}  # custom-select: lista hecha con JavaScript
 DATE_TYPES = {"date", "datetime-local", "month", "week", "time", "color", "range"}
 SKIP_TYPES = {"hidden", "submit", "button", "reset", "image", "file"}
 

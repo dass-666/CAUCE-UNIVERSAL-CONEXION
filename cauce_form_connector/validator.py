@@ -49,6 +49,37 @@ READ_RADIO_JS = """
 """
 
 
+# Lista personalizada: ¿qué opción reconoce el propio control? Se exige coherencia entre la opción marcada
+# (aria-selected), el valor interno (input oculto asociado, si existe) y el texto que muestra el control.
+READ_CUSTOM_JS = """
+(el) => {
+  const clean = (s) => (s || "").replace(/\\s+/g, " ").trim();
+  const lb = document.getElementById(el.getAttribute("aria-controls") || "")
+    || document.getElementById(el.getAttribute("aria-owns") || "")
+    || (el.parentElement ? el.parentElement.querySelector("[role=listbox]") : null);
+  const opts = lb ? Array.from(lb.querySelectorAll("[role=option]")) : [];
+  const val = (o) => o.getAttribute("data-value") || o.id || clean(o.innerText || o.textContent);
+  const hidden = el.dataset.input ? document.getElementById(el.dataset.input)
+    : (el.parentElement ? el.parentElement.querySelector("input[type=hidden]") : null);
+  const usaAria = opts.some((o) => o.hasAttribute("aria-selected"));
+  const marcadas = opts.filter((o) => o.getAttribute("aria-selected") === "true");
+  let valor = "", ok = true, msg = "";
+  if (usaAria) {
+    if (marcadas.length !== 1) { ok = false; msg = "el control no marca exactamente una opción como seleccionada"; }
+    else valor = val(marcadas[0]);
+  } else if (hidden) {
+    valor = hidden.value;
+  } else { ok = false; msg = "el control no expone qué opción está seleccionada"; }
+  if (ok && hidden && hidden.value !== valor) { ok = false; msg = "el valor interno del control no coincide con la opción marcada"; }
+  const elegida = opts.find((o) => val(o) === valor);
+  if (ok && elegida && !clean(el.innerText || el.textContent).includes(clean(elegida.innerText || elegida.textContent))) {
+    ok = false; msg = "el control no muestra la opción elegida";
+  }
+  return { value: valor, valid: ok, message: msg, pageError: "", ariaInvalid: el.getAttribute("aria-invalid") === "true" };
+}
+"""
+
+
 def _digits(s: str) -> str:
     return re.sub(r"\D", "", s or "")
 
@@ -60,6 +91,8 @@ def compare(f: FieldDescriptor, expected: str, actual: str) -> tuple[str, str]:
     if f.type in ("tel", "number") or f.inputmode in ("tel", "numeric"):
         if _digits(actual) and _digits(actual) == _digits(expected):
             return "ok_normalizado", "la página aplicó un formato (máscara); los dígitos coinciden"
+    if re.fullmatch(r"\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}", expected) and _digits(actual) == _digits(expected):
+        return "ok_normalizado", "la página aplicó una máscara de fecha; los dígitos coinciden"
     if (f.type == "email" or "@" in expected) and actual.strip().lower() == expected.strip().lower():
         return "ok_normalizado", "correo: la página " + transformacion(expected, actual)
     if actual.strip() == expected.strip():
@@ -95,6 +128,8 @@ def transformacion(expected: str, actual: str) -> str:
 def read_state(page: Any, f: FieldDescriptor) -> dict[str, Any]:
     if f.type == "radio":
         return page.evaluate(READ_RADIO_JS, f.name)
+    if f.type == "custom-select":
+        return page.locator(f.selector).first.evaluate(READ_CUSTOM_JS)
     return page.locator(f.selector).first.evaluate(READ_STATE_JS)
 
 

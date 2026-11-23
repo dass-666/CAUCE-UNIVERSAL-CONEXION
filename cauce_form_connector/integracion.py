@@ -40,7 +40,7 @@ POLL_S = 0.2
 # Un `submit` ocurrido durante esa ventana tras el relleno no se atribuye a una persona (sub-reporta; nunca sobre-reporta).
 GRACIA_ACTIVACION_S = 6.0
 _METODO = {"teclado_secuencial": "teclado_secuencial", "check": "check", "uncheck": "check",
-           "select_option": "seleccion", "fill_nativo": "fecha_nativa", "omitido": "teclado_secuencial"}
+           "select_option": "seleccion", "clic_lista_personalizada": "seleccion", "fill_nativo": "fecha_nativa", "omitido": "teclado_secuencial"}
 
 
 class _Parar(Exception):
@@ -159,10 +159,13 @@ def _mostrar_verificacion(campos: list, confirmaciones: list, por_clave: dict, a
     for c in campos:
         r = por_clave.get(a_clave[c["campo"]])
         nota = ""
-        if c["estado"] in ("ok_normalizado", "diferente") and r is not None and r.detail:
+        if r is not None and r.status == "error":     # FillError: mensaje propio sin datos; Playwright: solo el tipo
+            motivo = r.detail.split(":")[0] if r.detail.startswith(("Error", "Timeout")) else r.detail
+            nota = f" — no se pudo rellenar automáticamente ({motivo}); complételo usted en la ventana"
+        elif c["estado"] in ("ok_normalizado", "diferente") and r is not None and r.detail:
             nota = f" — {r.detail}"
-        elif c["estado"] == "invalido":
-            nota = " — la página marca el campo como no válido"
+        elif c["estado"] == "invalido":     # mensaje del navegador o del control (sin valores), no el texto de la página
+            nota = " — " + ((r.validation_message if r is not None else "") or "la página marca el campo como no válido")
         lineas.append(f"  [{'OK' if c['estado'].startswith('ok') else 'REVISAR'}] {c['campo']}: {c['estado']}{nota}")
     for c in confirmaciones:
         lineas.append(f"  [{'OK' if c['coinciden'] else 'REVISAR'}] confirmación de {c['campo']}: "

@@ -27,6 +27,10 @@ _ID_FRM = re.compile(r"frm_[a-z0-9_]{1,40}")
 _ID_PERFIL = re.compile(r"[a-z0-9_]{1,40}")
 _LOGICO = re.compile(r"[a-z][a-z0-9_]{0,39}")
 _CODIGO = re.compile(r"[A-Za-z0-9_\-]{1,40}")
+MANUAL = "@manual"            # campos_expediente: el dato lo escribe la persona en la ventana, para un solo uso
+# Conversión explícita AAAA-MM-DD -> formato que pide el formulario. Solo estos, y solo si el perfil lo declara.
+FORMATOS_FECHA = {"AAAA-MM-DD": "%Y-%m-%d", "DD/MM/AAAA": "%d/%m/%Y", "DD-MM-AAAA": "%d-%m-%Y",
+                  "DD.MM.AAAA": "%d.%m.%Y", "MM/DD/AAAA": "%m/%d/%Y", "AAAA/MM/DD": "%Y/%m/%d"}
 
 
 class ConfigInvalida(ValueError):
@@ -48,6 +52,7 @@ def cargar_formulario(ruta: str | Path, *, url: Optional[str] = None, puerto: Op
         raise ConfigInvalida("Perfil de formulario inválido (revise version, formulario_id, perfil y que campos_formulario "
                              "y campos_expediente tengan los mismos nombres).")
     cfg["equivalencias"] = equivalencias_normalizadas(cfg)
+    cfg["formatos_fecha"] = formatos_normalizados(cfg)
     if url:
         cfg["url"] = url
     elif puerto is not None:
@@ -85,6 +90,23 @@ def equivalencias_normalizadas(cfg: dict) -> dict:
     return {k: out[k] for k in sorted(out)}
 
 
+def formatos_normalizados(cfg: dict) -> dict:
+    """`formatos_fecha`: {nombre_logico: "DD/MM/AAAA"}. Solo para campos que leen una fecha del expediente."""
+    crudo = cfg.get("formatos_fecha") or {}
+    if not isinstance(crudo, dict):
+        raise ConfigInvalida("«formatos_fecha» debe ser un objeto.")
+    for logico, fmt in crudo.items():
+        spec = M.ESQUEMA.get(cfg["campos_expediente"].get(logico, ""))
+        if logico not in cfg["campos_formulario"] or not spec or spec["tipo"] != "fecha" or fmt not in FORMATOS_FECHA:
+            raise ConfigInvalida(f"Formato de fecha inválido para «{logico}» (formatos admitidos: "
+                                 f"{', '.join(FORMATOS_FECHA)}; el campo debe leer una fecha del expediente).")
+    return {k: crudo[k] for k in sorted(crudo)}
+
+
+def campos_manuales(cfg: dict) -> list[str]:
+    return [l for l, r in cfg["campos_expediente"].items() if r == MANUAL]
+
+
 def _obtener(expediente: dict, ruta: str) -> Any:
     cur: Any = expediente
     for parte in ruta.split("."):
@@ -94,13 +116,24 @@ def _obtener(expediente: dict, ruta: str) -> Any:
     return cur
 
 
-def extraer_campos(expediente: dict, cfg: dict) -> tuple[dict[str, str], list[str]]:
+def extraer_campos(expediente: dict, cfg: dict, manuales: Optional[dict[str, str]] = None) -> tuple[dict[str, str], list[str]]:
     """(valores a entregar, nombres lógicos sin dato). Solo se lee lo que el perfil declara; el resto del expediente
-    no se toca. Un valor vacío o ausente NO se inventa: el campo queda para la persona."""
+    no se toca. Un valor vacío o ausente NO se inventa: el campo queda para la persona. Los campos `@manual` toman el
+    dato que la persona escribió para esta ejecución (`manuales`), que no se guarda en ningún sitio."""
     valores, faltan = {}, []
     equiv = cfg.get("equivalencias") or {}
+    formatos = cfg.get("formatos_fecha") or {}
+    manuales = manuales or {}
     for logico in cfg["campos_formulario"]:
-        v = _obtener(expediente, cfg["campos_expediente"][logico])
+        ruta = cfg["campos_expediente"][logico]
+        if ruta == MANUAL:
+            v = str(manuales.get(logico) or "").strip()
+            if not v or len(v) > 200 or "\n" in v:
+                faltan.append(logico)
+            else:
+                valores[logico] = v
+            continue
+        v = _obtener(expediente, ruta)
         if v is None or (isinstance(v, str) and not v.strip()):
             faltan.append(logico)
             continue
@@ -109,6 +142,12 @@ def extraer_campos(expediente: dict, cfg: dict) -> tuple[dict[str, str], list[st
             # Código de Monitor -> valor de opción SOLO por la tabla aprobada; un código sin fila no se adivina
             texto = equiv[logico]["valores"].get(texto)
             if texto is None:
+                faltan.append(logico)
+                continue
+        if logico in formatos:
+            try:
+                texto = datetime.strptime(texto, "%Y-%m-%d").strftime(FORMATOS_FECHA[formatos[logico]])
+            except ValueError:            # fecha del expediente no válida: no se adivina
                 faltan.append(logico)
                 continue
         valores[logico] = texto
@@ -145,7 +184,8 @@ def aprobar_perfil(cfg: dict, settings: Settings, *, aprobado_por: str, autoriza
             raise ConfigInvalida(f"La tabla de «{logico}» usa valores que no son opciones del formulario actual.")
     ruta, sha = ProfileStore(settings.profiles_dir).save_integration(
         cfg["perfil"], analisis, cfg["campos_formulario"], formulario_id=cfg["formulario_id"],
-        url=cfg["url"].split("?")[0].split("#")[0], aprobado_por_ref=aprobado_por, equivalencias=equiv or None)
+        url=cfg["url"].split("?")[0].split("#")[0], aprobado_por_ref=aprobado_por, equivalencias=equiv or None,
+        formatos_fecha=cfg.get("formatos_fecha") or None)
     cobertura = {l: {"codigos_cubiertos": sorted(t["valores"]),
                      "codigos_sin_fila": sorted(set(M.ESQUEMA[t["campo_monitor"]]["codigos"] or []) - set(t["valores"]))}
                  for l, t in equiv.items()}
@@ -161,7 +201,8 @@ def info_perfil(cfg: dict, settings: Settings) -> Optional[dict]:
         perfil = json.loads(path.read_bytes().decode("utf-8"))
         return {"perfil_sha256": store.sha256_of_file(path), "firma": perfil["structure_signature_v2"],
                 "aprobado_por": perfil["integracion"]["aprobado_por_ref"],
-                "equivalencias": perfil["integracion"].get("equivalencias") or {}}
+                "equivalencias": perfil["integracion"].get("equivalencias") or {},
+                "formatos_fecha": perfil["integracion"].get("formatos_fecha") or {}}
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -187,7 +228,7 @@ def construir_solicitud(cfg: dict, info: dict, valores: dict[str, str], *, autor
 
 def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = None, *, autorizacion_ref: str = "aut_demo",
                   otorgada_por: str = "rev_demo", espera_revision_s: int = 300, pausa_tecla_ms: int = 40,
-                  state_dir: Optional[str | Path] = None, **kw: Any) -> dict:
+                  state_dir: Optional[str | Path] = None, manuales: Optional[dict[str, str]] = None, **kw: Any) -> dict:
     """Ejecuta el recorrido completo. Devuelve {"salida", "respuesta", "informe"}; el informe NO contiene valores."""
     settings = settings or get_settings()
     info = info_perfil(cfg, settings)
@@ -198,7 +239,11 @@ def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = No
         return {"salida": 6, "respuesta": None, "informe": {"estado": "equivalencias_no_aprobadas", "campos": [],
                 "sin_dato": [], "nota": "Las tablas de equivalencias del perfil de formulario no son las aprobadas: "
                                         "una persona debe revisarlas y volver a aprobar el perfil."}}
-    valores, faltan = extraer_campos(expediente, cfg)
+    if (cfg.get("formatos_fecha") or {}) != info.get("formatos_fecha", {}):
+        return {"salida": 6, "respuesta": None, "informe": {"estado": "formatos_no_aprobados", "campos": [],
+                "sin_dato": [], "nota": "Los formatos de fecha del perfil de formulario no son los aprobados: "
+                                        "una persona debe revisarlos y volver a aprobar el perfil."}}
+    valores, faltan = extraer_campos(expediente, cfg, manuales)
     sin_equiv = codigos_sin_equivalencia(expediente, cfg)
     if not valores:
         return {"salida": 6, "respuesta": None, "informe": {"estado": "expediente_sin_datos_utiles", "campos": [],
@@ -206,8 +251,10 @@ def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = No
     sol = construir_solicitud(cfg, info, valores, autorizacion_ref=autorizacion_ref, otorgada_por=otorgada_por,
                               espera_revision_s=espera_revision_s, pausa_tecla_ms=pausa_tecla_ms)
     resp, salida = ejecutar(json.dumps(sol), settings=settings, state_dir=state_dir, **kw)
-    inf = informe_legible(resp, cfg, settings, [f for f in faltan if f not in sin_equiv])
+    manual = set(campos_manuales(cfg))
+    inf = informe_legible(resp, cfg, settings, [f for f in faltan if f not in sin_equiv and f not in manual])
     inf["sin_equivalencia"] = sin_equiv
+    inf["manual_sin_dato"] = [f for f in faltan if f in manual]
     return {"salida": salida, "respuesta": resp, "informe": inf}
 
 
@@ -240,6 +287,8 @@ def texto_informe(inf: dict) -> str:
         L.append(f"  [{'OK' if c['coinciden'] else '!!'}] confirmación {c['campo']}: {'coincide' if c['coinciden'] else 'NO coincide'}")
     for s in inf.get("sin_dato", []):
         L.append(f"  [--] {s}: el expediente no trae dato; lo completa la persona")
+    for s in inf.get("manual_sin_dato", []):
+        L.append(f"  [--] {s}: captura manual sin dato (no se escribió en la ventana); lo completa la persona")
     for s in inf.get("sin_equivalencia", []):
         L.append(f"  [--] {s}: el código de Monitor no está en la tabla aprobada; lo completa la persona")
     if "revision_humana" in inf:
