@@ -115,7 +115,9 @@ Abra `abrir_cauce_forms.bat` con doble clic. La primera vez instala lo necesario
 
 ### Campos que antes quedaban para la persona
 
-- **Listas hechas con JavaScript** (no `<select>`): se detectan sus opciones, se aplican con la tabla de equivalencias aprobada y se comprueba que el propio control reconozca la opción (opción marcada, valor interno y texto visible).
-- **Fechas en texto**: en la vista previa elija el formato (AAAA-MM-DD, DD/MM/AAAA, etc.). La conversión se aprueba con el perfil.
+- **Listas hechas con JavaScript** (no `<select>`, con o sin atributos ARIA; si las opciones solo aparecen al abrir la lista, se abren con un clic normal para leerlas): se detectan sus opciones, se aplican con la tabla de equivalencias aprobada y se comprueba que el propio control reconozca la opción (opción marcada, valor interno y texto visible).
+- **Fechas en texto**: el formato se detecta del campo (p. ej. «dd/mm/aaaa») y la fecha se convierte sola. Si es ambiguo (p. ej. solo `\d{2}/\d{2}/\d{4}`), la vista previa pide elegirlo; no se adivina. La conversión se aprueba con el perfil.
 - **Datos que el expediente no tiene** (por ejemplo un identificador de cliente): en la vista previa elija «captura manual». Al pulsar «Preparar autorrellenado», la ventana le pide el dato. Se usa solo en esa ejecución y no se guarda ni se muestra en el registro.
 - Ejemplo sintético: `lab_forms/07_listas_personalizadas.html` con `config/formularios/lab_listas_personalizadas.json`.
+- **Identificadores desde una fuente local**: en la vista previa elija «fuente de datos local» e indique su nombre (por defecto `identificadores`). La fuente es un archivo que usted configura en `%LOCALAPPDATA%\CauceForms\fuentes\<nombre>.json` (formato en `sample_data/fuente_identificadores_sintetica.json`). Si no hay registro, el informe dice exactamente qué falta; nada se inventa.
+- **Reutilización**: tras la primera aprobación, el perfil se guarda en `%LOCALAPPDATA%\CauceForms\formularios`. Las siguientes veces, «Preparar autorrellenado» con la misma URL lo usa sin preguntar nada. Si en Descargas hay un perfil revisado más reciente para esa URL, se usa y se aprueba ese. Si el formulario cambió, se detiene (ESTRUCTURA_CAMBIADA) y pide volver a analizar.

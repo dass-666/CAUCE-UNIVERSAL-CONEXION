@@ -117,7 +117,19 @@ def categoria(f: FieldDescriptor) -> str:
 
 def _formato_fecha_texto(f: FieldDescriptor) -> str:
     m = re.search(r"(dd|mm|aaaa|yyyy)([/\-.])(dd|mm|aaaa|yyyy)\2(dd|mm|aaaa|yyyy)", f.placeholder + " " + f.label, re.I)
-    return m.group(0).lower() if m else ""
+    if m:
+        return m.group(0).lower()
+    # pattern AAAA-MM-DD es inequívoco; \d{2}/\d{2}/\d{4} NO (día/mes o mes/día): no se adivina
+    if re.fullmatch(r"\\d\{4\}-\\d\{2\}-\\d\{2\}|\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}", f.pattern or ""):
+        return "aaaa-mm-dd"
+    return ""
+
+
+def formato_aprobable(fmt_detectado: str) -> str:
+    """«dd/mm/aaaa» -> «DD/MM/AAAA» si es uno de los formatos que el motor sabe convertir; si no, ""."""
+    from .puente_monitor import FORMATOS_FECHA
+    f = fmt_detectado.upper().replace("YYYY", "AAAA")
+    return f if f in FORMATOS_FECHA else ""
 
 
 def _iso(valor: str) -> str:
@@ -155,6 +167,9 @@ def analizar_url(url: str, *, autorizado: bool, settings: Optional[Settings] = N
         extra = s.page.evaluate(EXTRA_JS, [f.selector for f in analisis.all_fields])
         extra["pagina"]["mutaciones_al_cargar"] = s.last_settle_changes
         extra["pagina"]["navegaciones_bloqueadas"] = s.blocked_requests
+        if not analisis.safety.blocked:   # listas JavaScript que solo muestran sus opciones al abrirlas (clic normal)
+            from .listas import completar_opciones
+            completar_opciones(s.page, analisis.all_fields)
         inicial = s.initial_html
         if inicial is None and urlsplit(url_ok).scheme == "file":
             from urllib.request import url2pathname
@@ -257,6 +272,7 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
         "perfil": ("perfil_" + base_slug)[:40],
         "campos_formulario": {r["nombre_logico"]: r["clave"] for r in auto},
         "campos_expediente": {r["nombre_logico"]: r["propuesta"]["ruta_expediente"] for r in auto},
+        "formatos_fecha": {r["nombre_logico"]: r["formato_fecha"] for r in auto if r.get("formato_fecha")},
         "_borrador": {
             "estado": "pendiente_revision_humana",
             "generado_en": ahora.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -345,9 +361,16 @@ def _decidir(r: dict, f: FieldDescriptor, rec: dict, plano: dict, analisis: Anal
         if not _iso(sval):
             return fija("revisar", "el dato no es una fecha AAAA-MM-DD")
     elif cat == "fecha_texto":
-        fmt = r["validaciones"].get("formato_fecha")
-        return fija("revisar", f"fecha en texto con formato «{fmt or 'desconocido'}» y Monitor usa AAAA-MM-DD: el motor "
-                               "escribe el dato tal cual; hace falta conversión aprobada")
+        fmt = formato_aprobable(r["validaciones"].get("formato_fecha", ""))
+        if not fmt:
+            return fija("revisar", "fecha en texto con formato no detectado o ambiguo (por ejemplo 05/06 puede ser día/mes "
+                                   "o mes/día): elija el formato en la vista previa; no se adivina")
+        iso = _iso(sval)
+        if not iso:
+            return fija("revisar", "el dato del expediente no es una fecha AAAA-MM-DD")
+        from .puente_monitor import FORMATOS_FECHA
+        sval = datetime.strptime(iso, "%Y-%m-%d").strftime(FORMATOS_FECHA[fmt])   # se valida el dato YA convertido
+        r["formato_fecha"] = fmt
     elif cat in ("numerico", "numerico_texto"):
         if not re.fullmatch(r"-?\d+([.,]\d+)?", re.sub(r"[\s\-()]", "", sval)):
             return fija("revisar", "el campo es numérico y el dato no lo es")
@@ -361,7 +384,8 @@ def _decidir(r: dict, f: FieldDescriptor, rec: dict, plano: dict, analisis: Anal
         return fija("revisar", "el dato sintético de Monitor supera la longitud máxima del campo")
     if f.minlength is not None and len(sval) < f.minlength:
         return fija("revisar", "el dato sintético de Monitor no llega a la longitud mínima del campo")
-    fija("automatico", f"{rec['motivo']} → «{campo}» de Monitor ({rec.get('evidencia') or 'regla explícita'})")
+    fija("automatico", f"{rec['motivo']} → «{campo}» de Monitor ({rec.get('evidencia') or 'regla explícita'})"
+         + (f"; se convierte a {r['formato_fecha']} (formato detectado en el campo)" if r.get("formato_fecha") else ""))
 
 
 def _advertencias(pagina: dict, estatico: Optional[AnalysisResult], expediente: Optional[dict]) -> list[str]:
@@ -498,10 +522,12 @@ const FORMATOS = ["AAAA-MM-DD", "DD/MM/AAAA", "DD-MM-AAAA", "DD.MM.AAAA", "MM/DD
 $("#filas").innerHTML = filas.map((c, i) => {
   const p = c.propuesta || {};
   const opts = ['<option value="">— sin dato —</option>'].concat(rutas.map((r) => `<option ${r === p.ruta_expediente ? "selected" : ""}>${esc(r)}</option>`),
-    ['<option value="@manual">captura manual (se escribe al rellenar, un solo uso)</option>']).join("");
+    ['<option value="@manual">captura manual (se escribe al rellenar, un solo uso)</option>',
+     '<option value="@fuente">fuente de datos local (identificador configurado)</option>']).join("");
+  const fu = ["texto", "numerico_texto"].includes(c.categoria) ? `<br><label class="mut">fuente: <input type="text" data-fu="${i}" value="identificadores" size="14"></label>` : "";
   const fmtDet = String(c.validaciones.formato_fecha || "").toUpperCase().replace(/YYYY/g, "AAAA");
   const fmt = c.categoria === "fecha_texto" ? `<br><label class="mut">formato: <select data-fmt="${i}">` +
-    FORMATOS.map((f) => `<option ${f === (fmtDet || "AAAA-MM-DD") ? "selected" : ""}>${f}</option>`).join("") + `</select></label>` : "";
+    ['<option value="">— no detectado: elija —</option>'].concat(FORMATOS.map((f) => `<option ${f === fmtDet ? "selected" : ""}>${f}</option>`)).join("") + `</select></label>` : "";
   const val = Object.entries(c.validaciones).map(([k, v]) => `${esc(k)}=${esc(Array.isArray(v) ? v.join("; ") : v)}`)
     .concat(c.opciones.length ? [`${c.opciones.length} opciones`] : [], Object.keys(c.dinamico).filter((k) => k !== "oculto_por").map((k) => k.replace(/_/g, " "))).join("<br>");
   const bloqueado = c.decision === "humano" && ["archivo", "contrasena"].includes(c.categoria) || INF.bloqueo_humano.blocked;
@@ -516,7 +542,7 @@ $("#filas").innerHTML = filas.map((c, i) => {
   return `<tr><td><input type="checkbox" data-i="${i}" ${c.decision === "automatico" ? "checked" : ""} ${bloqueado ? "disabled" : ""}></td>
   <td><b>${esc(c.etiqueta || c.name || c.clave)}</b>${c.obligatorio ? " *" : ""}<br><span class="mut">${esc(c.nombre_logico)}</span></td>
   <td><code>${esc(c.selector)}</code></td><td>${esc(c.categoria)}<br><span class="mut">${esc(c.tipo)}</span></td><td>${val || "—"}</td>
-  <td><select data-r="${i}" ${bloqueado ? "disabled" : ""}>${opts}</select>${fmt}</td>
+  <td><select data-r="${i}" ${bloqueado ? "disabled" : ""}>${opts}</select>${fmt}${fu}</td>
   <td class="d-${esc(c.decision)}">${esc(c.decision)}</td><td>${esc(c.motivo)}</td></tr>` + tabla;
 }).join("");
 function perfil() {
@@ -525,11 +551,18 @@ function perfil() {
   const incl = [];
   filas.forEach((c, i) => {
     const on = document.querySelector(`[data-i="${i}"]`).checked;
-    const ruta = document.querySelector(`[data-r="${i}"]`).value;
+    let ruta = document.querySelector(`[data-r="${i}"]`).value;
     if (!on || !ruta) return;
+    if (ruta === "@fuente") {
+      const n = ((document.querySelector(`[data-fu="${i}"]`) || {}).value || "identificadores").toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 40);
+      ruta = "@fuente:" + (n || "identificadores");
+    }
     if (ruta === "@manual") base.etiquetas[c.nombre_logico] = c.etiqueta || c.name || c.clave;
     const fsel = document.querySelector(`[data-fmt="${i}"]`);
-    if (fsel && ESQ[ruta] && ESQ[ruta].tipo === "fecha" && fsel.value !== "AAAA-MM-DD") base.formatos_fecha[c.nombre_logico] = fsel.value;
+    if (fsel && ESQ[ruta] && ESQ[ruta].tipo === "fecha") {
+      if (!fsel.value) return;            // formato ambiguo o no elegido: el campo queda para la persona
+      if (fsel.value !== "AAAA-MM-DD") base.formatos_fecha[c.nombre_logico] = fsel.value;
+    }
     if (ESQ[ruta] && ESQ[ruta].tipo === "codigo") {
       // Un código de Monitor solo entra con tabla: se toman las filas llenas
       const valores = {};

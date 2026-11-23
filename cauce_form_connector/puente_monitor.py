@@ -8,6 +8,7 @@ Qué no hace: no envía, no aprueba perfiles por sí solo (la aprobación es un 
 from __future__ import annotations
 
 import json
+import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,8 @@ _ID_PERFIL = re.compile(r"[a-z0-9_]{1,40}")
 _LOGICO = re.compile(r"[a-z][a-z0-9_]{0,39}")
 _CODIGO = re.compile(r"[A-Za-z0-9_\-]{1,40}")
 MANUAL = "@manual"            # campos_expediente: el dato lo escribe la persona en la ventana, para un solo uso
+FUENTE = "@fuente:"           # campos_expediente: "@fuente:<nombre>[:<columna>]" -> fuente de datos local configurada
+_FUENTE = re.compile(r"@fuente:([a-z0-9_]{1,40})(?::([a-z][a-z0-9_]{0,39}))?")
 # Conversión explícita AAAA-MM-DD -> formato que pide el formulario. Solo estos, y solo si el perfil lo declara.
 FORMATOS_FECHA = {"AAAA-MM-DD": "%Y-%m-%d", "DD/MM/AAAA": "%d/%m/%Y", "DD-MM-AAAA": "%d-%m-%Y",
                   "DD.MM.AAAA": "%d.%m.%Y", "MM/DD/AAAA": "%m/%d/%Y", "AAAA/MM/DD": "%Y/%m/%d"}
@@ -103,6 +106,32 @@ def formatos_normalizados(cfg: dict) -> dict:
     return {k: crudo[k] for k in sorted(crudo)}
 
 
+def leer_fuente(nombre: str, columna: str, expediente: dict, directorio: Optional[str | Path] = None) -> tuple[Optional[str], str]:
+    """Busca un identificador legítimo en una fuente local configurada por la persona: `<dir>/<nombre>.json` con
+    {"clave_expediente": "<campo de Monitor>", "registros": {"<valor de ese campo>": {"<columna>": "<dato>"}}}.
+    Devuelve (dato, "") o (None, motivo exacto). El motivo nunca incluye valores. Nada se inventa ni se guarda."""
+    ruta = Path(directorio or os.environ.get("CAUCE_FUENTES_DIR", "fuentes")) / f"{nombre}.json"
+    try:
+        fuente = json.loads(ruta.read_text(encoding="utf-8"))
+        clave, registros = fuente["clave_expediente"], fuente["registros"]
+        if clave not in M.ESQUEMA or not isinstance(registros, dict):
+            raise ValueError
+    except FileNotFoundError:
+        return None, f"no existe la fuente de datos «{nombre}» ({nombre}.json en la carpeta de fuentes)"
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, f"la fuente de datos «{nombre}» no tiene el formato esperado (clave_expediente y registros)"
+    k = expediente.get(clave)
+    if k in (None, ""):
+        return None, f"el expediente no trae «{clave}», que es la clave para buscar en «{nombre}»"
+    reg = registros.get(str(k))
+    if not isinstance(reg, dict):
+        return None, f"la fuente «{nombre}» no tiene registro para este expediente (buscado por «{clave}»)"
+    v = reg.get(columna)
+    if not isinstance(v, str) or not v.strip():
+        return None, f"el registro de la fuente «{nombre}» no tiene «{columna}»"
+    return v.strip(), ""
+
+
 def campos_manuales(cfg: dict) -> list[str]:
     return [l for l, r in cfg["campos_expediente"].items() if r == MANUAL]
 
@@ -116,7 +145,8 @@ def _obtener(expediente: dict, ruta: str) -> Any:
     return cur
 
 
-def extraer_campos(expediente: dict, cfg: dict, manuales: Optional[dict[str, str]] = None) -> tuple[dict[str, str], list[str]]:
+def extraer_campos(expediente: dict, cfg: dict, manuales: Optional[dict[str, str]] = None,
+                   motivos: Optional[dict[str, str]] = None) -> tuple[dict[str, str], list[str]]:
     """(valores a entregar, nombres lógicos sin dato). Solo se lee lo que el perfil declara; el resto del expediente
     no se toca. Un valor vacío o ausente NO se inventa: el campo queda para la persona. Los campos `@manual` toman el
     dato que la persona escribió para esta ejecución (`manuales`), que no se guarda en ningún sitio."""
@@ -124,8 +154,18 @@ def extraer_campos(expediente: dict, cfg: dict, manuales: Optional[dict[str, str
     equiv = cfg.get("equivalencias") or {}
     formatos = cfg.get("formatos_fecha") or {}
     manuales = manuales or {}
+    motivos = motivos if motivos is not None else {}
     for logico in cfg["campos_formulario"]:
         ruta = cfg["campos_expediente"][logico]
+        m = _FUENTE.fullmatch(ruta)
+        if m:
+            v, motivo = leer_fuente(m.group(1), m.group(2) or logico, expediente)
+            if v is None:
+                faltan.append(logico)
+                motivos[logico] = motivo
+            else:
+                valores[logico] = v
+            continue
         if ruta == MANUAL:
             v = str(manuales.get(logico) or "").strip()
             if not v or len(v) > 200 or "\n" in v:
@@ -149,6 +189,7 @@ def extraer_campos(expediente: dict, cfg: dict, manuales: Optional[dict[str, str
                 texto = datetime.strptime(texto, "%Y-%m-%d").strftime(FORMATOS_FECHA[formatos[logico]])
             except ValueError:            # fecha del expediente no válida: no se adivina
                 faltan.append(logico)
+                motivos[logico] = "la fecha del expediente no es AAAA-MM-DD; no se convierte"
                 continue
         valores[logico] = texto
     return valores, faltan
@@ -173,6 +214,9 @@ def aprobar_perfil(cfg: dict, settings: Settings, *, aprobado_por: str, autoriza
     with BrowserSession(settings, headless=True) as s:
         s.open_url(policy.check(cfg["url"], autorizado), policy.guard(autorizado))
         analisis = s.inspect()
+        if not analisis.safety.blocked:
+            from .listas import completar_opciones
+            completar_opciones(s.page, analisis.all_fields)
     if analisis.safety.blocked:
         raise ConfigInvalida("La página exige intervención humana; no se aprueba un perfil sobre ella.")
     equiv = cfg.get("equivalencias") or {}
@@ -243,7 +287,8 @@ def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = No
         return {"salida": 6, "respuesta": None, "informe": {"estado": "formatos_no_aprobados", "campos": [],
                 "sin_dato": [], "nota": "Los formatos de fecha del perfil de formulario no son los aprobados: "
                                         "una persona debe revisarlos y volver a aprobar el perfil."}}
-    valores, faltan = extraer_campos(expediente, cfg, manuales)
+    motivos: dict[str, str] = {}
+    valores, faltan = extraer_campos(expediente, cfg, manuales, motivos)
     sin_equiv = codigos_sin_equivalencia(expediente, cfg)
     if not valores:
         return {"salida": 6, "respuesta": None, "informe": {"estado": "expediente_sin_datos_utiles", "campos": [],
@@ -255,6 +300,7 @@ def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = No
     inf = informe_legible(resp, cfg, settings, [f for f in faltan if f not in sin_equiv and f not in manual])
     inf["sin_equivalencia"] = sin_equiv
     inf["manual_sin_dato"] = [f for f in faltan if f in manual]
+    inf["motivos"] = motivos
     return {"salida": salida, "respuesta": resp, "informe": inf}
 
 
@@ -286,7 +332,7 @@ def texto_informe(inf: dict) -> str:
     for c in inf.get("confirmaciones", []):
         L.append(f"  [{'OK' if c['coinciden'] else '!!'}] confirmación {c['campo']}: {'coincide' if c['coinciden'] else 'NO coincide'}")
     for s in inf.get("sin_dato", []):
-        L.append(f"  [--] {s}: el expediente no trae dato; lo completa la persona")
+        L.append(f"  [--] {s}: {inf.get('motivos', {}).get(s, 'el expediente no trae dato')}; lo completa la persona")
     for s in inf.get("manual_sin_dato", []):
         L.append(f"  [--] {s}: captura manual sin dato (no se escribió en la ventana); lo completa la persona")
     for s in inf.get("sin_equivalencia", []):

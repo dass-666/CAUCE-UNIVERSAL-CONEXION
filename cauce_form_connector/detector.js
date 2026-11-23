@@ -149,10 +149,34 @@
     d.disabled = el.getAttribute("aria-disabled") === "true";
     d.readonly = el.getAttribute("aria-readonly") === "true";
     const lb = listboxOf(el);
-    d.options = lb ? Array.from(lb.querySelectorAll("[role=option]")).map((o) => ({
-      value: optValue(o), label: textOf(o), selected: o.getAttribute("aria-selected") === "true" })) : [];
+    let xs = lb ? Array.from(lb.querySelectorAll("[role=option]")) : [];
+    if (!xs.length) {   // sin ARIA: opciones ya presentes en el contenedor (data-value, li, clase option/item)
+      const c = el.parentElement;
+      for (const s of ["[data-value]", "li", "[class*=option i]", "[class*=item i]"]) {
+        xs = c ? Array.from(c.querySelectorAll(s)).filter((o) => o !== el && !el.contains(o) && !o.contains(el)
+          && !o.matches("input,select,textarea") && textOf(o)) : [];
+        if (xs.length) break;
+      }
+    }
+    d.options = xs.map((o) => ({ value: optValue(o), label: textOf(o), selected: o.getAttribute("aria-selected") === "true" }));
     return d;
   };
+
+  // Sin ARIA: un input oculto con nombre cuyo contenedor (o su disparador) tiene clase de desplegable
+  // (select/dropdown/combo/picker). El disparador es el elemento que muestra la opción elegida.
+  const PARECE_LISTA = /select|dropdown|combo|picker/i;
+  const sinAria = (raiz) => Array.from(raiz.querySelectorAll("input[type=hidden][name]")).map((h) => {
+    const c = h.parentElement;
+    if (!c || c.querySelector("[role=combobox],select") || c.matches(CUSTOM)) return null;
+    const t = c.querySelector('[class*=toggle i],[class*=trigger i],[class*=selected i],[class*=display i],[class*=current i],button')
+      || Array.from(c.children).find((x) => x !== h && !/^(UL|OL|INPUT|LABEL)$/.test(x.tagName));
+    if (!t || t === h || !(PARECE_LISTA.test(c.className || "") || PARECE_LISTA.test(t.className || ""))) return null;
+    if (t.matches(CUSTOM) || t.closest("[role=listbox]")) return null;
+    const d = describeCustom(t);
+    d.label = labelFor(c) || labelFor(t) || d.label;
+    if (!t.id) d.id = "lista_" + h.name;
+    return d;
+  }).filter(Boolean);
 
   const controls = "input,select,textarea";
   const forms = Array.from(document.querySelectorAll("form"));
@@ -160,7 +184,7 @@
 
   forms.forEach((f, i) => {
     const fields = Array.from(f.elements).filter((e) => e.matches && e.matches(controls)).map(describe)
-      .concat(Array.from(f.querySelectorAll(CUSTOM)).map(describeCustom));
+      .concat(Array.from(f.querySelectorAll(CUSTOM)).map(describeCustom), sinAria(f));
     const submits = Array.from(f.querySelectorAll('button, input[type=submit], input[type=image]'))
       .filter((b) => (b.type || "submit").toLowerCase() === "submit" || b.tagName === "INPUT")
       .map((b) => clean(b.innerText || b.value || b.getAttribute("aria-label") || "Enviar"));

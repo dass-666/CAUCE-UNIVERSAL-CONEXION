@@ -253,7 +253,8 @@ def test_reglas_de_dato_incorrecto():
     c = _por_name(_informe_estatico(html, exp))
     assert c["n"]["decision"] == "revisar" and "completo" in c["n"]["motivo"]   # «Nombre» a secas: confirmar
     assert c["tel"]["decision"] == "revisar" and "patrón" in c["tel"]["motivo"]  # 10 dígitos de Monitor vs pattern 8
-    assert c["fn"]["decision"] == "revisar" and "AAAA-MM-DD" in c["fn"]["motivo"]
+    # formato detectado en el placeholder: se convierte explícitamente a DD/MM/AAAA (antes quedaba «revisar»)
+    assert c["fn"]["decision"] == "automatico" and "DD/MM/AAAA" in c["fn"]["motivo"]
     assert c["cl"]["decision"] == "humano" and c["cl"]["propuesta"] is None     # nunca id_externo por suposición
     assert c["estado"]["decision"] == "humano"
     assert c["pw"]["decision"] == "humano"

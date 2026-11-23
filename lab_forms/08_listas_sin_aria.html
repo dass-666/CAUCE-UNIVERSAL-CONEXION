@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 8 · Listas JavaScript sin ARIA</title>
+<link rel="stylesheet" href="lab.css">
+<style>
+.dropdown{position:relative;display:inline-block;min-width:220px}
+.dropdown-toggle{border:1px solid #888;padding:6px 10px;cursor:pointer;background:#fff;color:#111;border-radius:4px}
+.dropdown-menu,.flotante{list-style:none;margin:0;padding:0;background:#fff;color:#111;border:1px solid #888}
+.dropdown-menu{position:absolute;left:0;right:0;z-index:5;display:none}
+.dropdown.abierto .dropdown-menu{display:block}
+.dropdown-menu li,.flotante div{padding:6px 10px;cursor:pointer}
+.dropdown-menu li.active{background:#dbeafe}
+.flotante{position:absolute;z-index:9;min-width:220px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Laboratorio 8 · Solicitud con listas sin ARIA (simulado)</h1>
+  <p class="nota">Formulario de PRUEBA con datos ficticios. «Operación» es una lista hecha con JavaScript sin atributos
+    ARIA; «Trámite» solo crea sus opciones al abrirla (al final de la página). No envía nada.</p>
+  <form id="alta" action="#hecho" method="post">
+    <div class="fila">
+      <label>Operación</label>
+      <div class="dropdown" id="dd_operacion">
+        <div class="dropdown-toggle">Seleccione…</div>
+        <ul class="dropdown-menu">
+          <li data-value="1">Nueva cita</li>
+          <li data-value="2">Reprogramar cita</li>
+        </ul>
+        <input type="hidden" name="operacion">
+      </div>
+    </div>
+    <div class="fila">
+      <label for="num_cliente">Número de cliente</label>
+      <input id="num_cliente" name="num_cliente" type="text" required pattern="CL-\d{6}" maxlength="9">
+    </div>
+    <div class="fila">
+      <label for="f_nac">Fecha de nacimiento</label>
+      <input id="f_nac" name="f_nac" type="text" placeholder="dd/mm/aaaa" maxlength="10" required>
+    </div>
+    <div class="fila">
+      <label>Trámite</label>
+      <div class="custom-select" id="cs_tramite">
+        <span class="selected-text">Elija un trámite</span>
+        <input type="hidden" name="tramite">
+      </div>
+    </div>
+    <div class="fila"><label for="tel">Teléfono</label><input id="tel" name="tel" type="tel" required maxlength="10"></div>
+    <div class="fila"><label for="tel2">Repita el teléfono</label><input id="tel2" name="tel2" type="tel" required maxlength="10" data-confirm="tel"></div>
+    <div class="fila"><label for="mail">Correo electrónico</label><input id="mail" name="mail" type="email" required></div>
+    <div class="fila"><label for="mail2">Repita el correo</label><input id="mail2" name="mail2" type="email" required data-confirm="mail"></div>
+    <button type="submit">Enviar</button>
+  </form>
+</main>
+<script>
+// Lista 1: opciones en la página, sin ARIA; la opción elegida lleva la clase «active».
+(function () {
+  var dd = document.getElementById('dd_operacion'), t = dd.querySelector('.dropdown-toggle'), h = dd.querySelector('input');
+  t.addEventListener('click', function () { dd.classList.toggle('abierto'); });
+  dd.querySelectorAll('li').forEach(function (li) {
+    li.addEventListener('click', function () {
+      dd.querySelectorAll('li').forEach(function (x) { x.classList.remove('active'); });
+      li.classList.add('active'); t.textContent = li.textContent; h.value = li.dataset.value; dd.classList.remove('abierto');
+    });
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') dd.classList.remove('abierto'); });
+})();
+// Lista 2: las opciones se crean al abrir, fuera del formulario (como hacen muchas librerías).
+(function () {
+  var cs = document.getElementById('cs_tramite'), txt = cs.querySelector('.selected-text'), h = cs.querySelector('input'), menu = null;
+  var OPS = [['A1', 'Alta'], ['R2', 'Renovación'], ['C3', 'Constancia']];
+  function cerrar() { if (menu) { menu.remove(); menu = null; } }
+  txt.addEventListener('click', function () {
+    if (menu) return cerrar();
+    menu = document.createElement('div'); menu.className = 'flotante';
+    var r = cs.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + window.scrollY) + 'px';
+    OPS.forEach(function (o) {
+      var d = document.createElement('div'); d.className = 'option'; d.dataset.value = o[0]; d.textContent = o[1];
+      d.addEventListener('click', function () { h.value = o[0]; txt.textContent = o[1]; cerrar(); });
+      menu.appendChild(d);
+    });
+    document.body.appendChild(menu);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+})();
+document.getElementById('alta').addEventListener('submit', function (e) { e.preventDefault(); });
+</script>
+</body>
+</html>

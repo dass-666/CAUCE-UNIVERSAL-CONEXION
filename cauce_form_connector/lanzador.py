@@ -33,7 +33,7 @@ def carpeta_datos() -> Path:
     base = os.environ.get("CAUCE_DATOS") or os.environ.get("LOCALAPPDATA") or str(Path.home() / ".local" / "share")
     d = Path(base) / "CauceForms"
     nueva = not d.exists()
-    for sub in ("analisis", "perfiles", "logs", "config", "estado"):
+    for sub in ("analisis", "perfiles", "logs", "config", "estado", "fuentes", "formularios"):
         (d / sub).mkdir(parents=True, exist_ok=True)
     if nueva and os.name == "nt":   # acceso solo para el usuario actual
         usuario = os.environ.get("USERNAME", "")
@@ -54,6 +54,7 @@ def entorno(datos: Path) -> dict[str, str]:
         "CAUCE_PROFILES_DIR": str(datos / "perfiles"),
         "CAUCE_AUDIT_PATH": str(datos / "logs" / "audit.jsonl"),
         "CAUCE_STATE_DIR": str(datos / "estado"),
+        "CAUCE_FUENTES_DIR": str(datos / "fuentes"),      # fuentes de identificadores configuradas por la persona
         "PYTHONIOENCODING": "utf-8",
     })
     env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(RAIZ / ".pw-browsers"))
@@ -62,6 +63,10 @@ def entorno(datos: Path) -> dict[str, str]:
 
 def host_de(url: str) -> str:
     return (urlsplit(url).hostname or "").lower()
+
+
+def limpiar_url(url: str) -> str:
+    return (url or "").split("#")[0].split("?")[0].rstrip("/")
 
 
 def hosts_permitidos(datos: Path) -> list[str]:
@@ -170,6 +175,8 @@ class App:
         for x in self.botones[:3]:
             x.state(["disabled"])
 
+        self.salida: list[str] = []
+
         def hilo():
             try:
                 p = subprocess.Popen(args, cwd=str(RAIZ), env=entorno(self.datos), stdout=subprocess.PIPE,
@@ -181,6 +188,7 @@ class App:
                     p.stdin.close()
                 for linea in p.stdout:
                     self.cola.put(("linea", linea.rstrip("\n")))
+                    self.salida.append(linea)
                 rc = p.wait()
             except OSError as e:
                 self.cola.put(("linea", f"No se pudo ejecutar el conector: {e}"))
@@ -257,10 +265,7 @@ class App:
         if url is None:
             return
         externo = bool(url) and host_de(url) not in LOCALES
-        descargas = Path.home() / "Downloads"
-        perfil = self.filedialog.askopenfilename(title="Perfil revisado (perfil_….json)",
-                                                 initialdir=str(descargas if descargas.exists() else Path.home()),
-                                                 filetypes=[("Perfil JSON", "perfil_*.json"), ("JSON", "*.json")])
+        perfil, aprobar = self.elegir_perfil(url)
         if not perfil:
             return
         manuales = self.pedir_manuales(perfil)
@@ -268,10 +273,48 @@ class App:
             return
         self.escribir(f"\nPreparando autorrellenado con {perfil}…\nSe abrirá el navegador con los campos aprobados "
                       "rellenados y verificados. El conector NO envía: revise y envíe usted, o cierre la ventana.")
-        args = args_autorrellenar(perfil, self.exp.get(), url, REVISOR, externo, "")
+        args = args_autorrellenar(perfil, self.exp.get(), url, REVISOR if aprobar else "", externo, "")
         if manuales:
             args.append("--manuales-stdin")
-        self.ejecutar(args, entrada=json.dumps(manuales) if manuales else None)
+
+        def fin(rc):
+            texto = "".join(self.salida)
+            if aprobar and "Perfil aprobado:" in texto:          # se guarda para las siguientes ejecuciones
+                destino = self.datos / "formularios" / Path(perfil).name
+                if Path(perfil).resolve() != destino.resolve():
+                    destino.write_bytes(Path(perfil).read_bytes())
+                self.escribir(f"Perfil aprobado guardado: las próximas veces se usará sin volver a configurarlo.")
+            if "ESTRUCTURA_CAMBIADA" in texto:
+                self.escribir("El formulario cambió desde que se aprobó el perfil: pulse «Analizar formulario», "
+                              "revise el perfil y descárguelo de nuevo.")
+
+        self.ejecutar(args, fin, entrada=json.dumps(manuales) if manuales else None)
+
+    def elegir_perfil(self, url: str) -> tuple[str, bool]:
+        """(ruta, aprobar). Reutiliza el perfil aprobado guardado para esta URL; si en Descargas hay uno revisado más
+        reciente para la misma URL, usa ese y lo aprueba. Si no hay ninguno, lo pregunta."""
+        def url_de(p: Path) -> str:
+            try:
+                return limpiar_url(json.loads(p.read_text(encoding="utf-8")).get("url", ""))
+            except (OSError, ValueError, AttributeError):
+                return ""
+        descargas = Path.home() / "Downloads"
+        if url:
+            u = limpiar_url(url)
+            guardado = next((p for p in sorted((self.datos / "formularios").glob("*.json")) if url_de(p) == u), None)
+            t0 = guardado.stat().st_mtime if guardado else 0
+            nuevos = sorted((p for p in descargas.glob("perfil_*.json") if p.stat().st_mtime > t0 and url_de(p) == u),
+                            key=lambda p: p.stat().st_mtime) if descargas.exists() else []
+            if nuevos:
+                self.escribir(f"Perfil revisado nuevo en Descargas: {nuevos[-1].name} (se aprobará y guardará).")
+                return str(nuevos[-1]), True
+            if guardado:
+                self.escribir(f"Usando el perfil aprobado guardado para esta URL: {guardado.name}.")
+                return str(guardado), False
+        p = self.filedialog.askopenfilename(title="Perfil revisado (perfil_….json)",
+                                            initialdir=str(descargas if descargas.exists() else Path.home()),
+                                            filetypes=[("Perfil JSON", "perfil_*.json"), ("JSON", "*.json")])
+        return (p, True) if p else ("", False)
 
     def pedir_manuales(self, perfil: str) -> dict[str, str] | None:
         """Datos que el expediente no tiene (p. ej. un identificador): la persona los escribe para ESTA ejecución.
