@@ -65,6 +65,18 @@ jobs:
           call analizar_formulario_windows.bat "https://tramites.ejemplo.invalid/reserva"
           if not errorlevel 3 (echo ERROR: una URL externa no autorizada debia rechazarse & exit /b 1)
           echo OK: URL externa rechazada sin abrir el navegador
+          REM Recorrido Monitor -^> Forms con tablas de equivalencias (lab 06, datos sinteticos, sin ventana, sin envio)
+          start "lab" /b .venv\Scripts\python.exe -m http.server 8765 --bind 127.0.0.1 --directory lab_forms
+          set "CAUCE_HEADLESS=1"
+          set "PYTHONIOENCODING=utf-8"
+          set "CAUCE_PROFILES_DIR=%CD%\informes\perfiles_ci"
+          .venv\Scripts\python.exe -m cauce_form_connector autorrellenar --formulario config\formularios\lab_cita_monitor.json --expediente sample_data\expediente_monitor_sintetico.json --puerto 8765 --aprobar-perfil rev_ci --espera-s 0 > informes\autorrellenar_lab06.txt
+          set "RC=%ERRORLEVEL%"
+          type informes\autorrellenar_lab06.txt
+          if not "%RC%"=="7" (echo ERROR: se esperaba revision_caducada [7] y salio %RC% & exit /b 1)
+          findstr /l /c:"[!!]" informes\autorrellenar_lab06.txt && (echo ERROR: hay campos incorrectos & exit /b 1)
+          findstr /l /c:"[OK] Tipo de tr" informes\autorrellenar_lab06.txt || exit /b 1
+          echo OK: 8 campos con tablas de equivalencias rellenados y verificados, sin envio
           mkdir evidence\out
           xcopy /e /i /y informes evidence\out\bat_windows
       - uses: actions/upload-artifact@v4

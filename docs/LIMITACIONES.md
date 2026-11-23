@@ -58,14 +58,15 @@ Límites:
 1. **Modelo de Monitor:** se usa la estructura recuperada por auditoría (15 campos planos). El expediente es SINTÉTICO
    (`sample_data/expediente_monitor_sintetico.json`); no se ha probado con un expediente real ni con la vista enmascarada
    (que no es contrato de intercambio).
-2. **Tablas de equivalencias:** el analizador genera la plantilla (`equivalencias_pendientes`) pero el motor actual NO
-   traduce códigos al rellenar; por eso esos campos nunca entran al perfil. Aplicar una tabla aprobada requiere un
-   cambio en `puente_monitor` (pendiente de decisión).
+2. **Tablas de equivalencias:** se llenan en la vista previa y se aprueban con el perfil; el puente traduce el código
+   antes de llamar al motor (el motor no cambia). Solo cubren correspondencias 1 código → 1 opción; no hay reglas
+   condicionales (p. ej. «si modo es POR_DIA, usar fecha_solicitada»).
 3. **Catálogos de región y sucursal:** desconocidos; los códigos `R01`/`S001` del sintético son inventados.
 4. **Solo lo que se ve al cargar:** campos que aparecen al interactuar, pasar de página o iniciar sesión no se ven.
 5. **Mensajes de validación:** solo `aria-describedby`, `title` y atributos HTML; las reglas solo en JavaScript no.
-6. **Perfil del PR #3:** `config/formularios/lab_validaciones.json` sigue usando rutas anidadas (`titular.*`,
-   `contacto.*`) que Monitor no tiene; no se modificó en esta rama.
+6. **Perfiles de laboratorio:** `lab_validaciones.json` usa ya campos planos (5 campos; código postal, ciudad y aviso de
+   privacidad quedan para la persona) y `lab_cita_monitor.json` muestra tablas de equivalencias con códigos inventados.
+   Un perfil aprobado antes de este cambio tiene otra huella y debe aprobarse de nuevo.
 7. **Windows:** verificado en GitHub Actions (`windows-latest`, incluido el instalador sin `py`); no en el PC Windows 11.
 
 ## 4. Riesgos legales y de uso (cuestionamiento del requisito de URL)

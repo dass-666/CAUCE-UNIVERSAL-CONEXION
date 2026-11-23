@@ -111,6 +111,12 @@ def _cargar_perfil(sol: dict, settings: Settings) -> dict:
         raise _Parar("rechazado_no_autorizado", "PERFIL_NO_COINCIDE")
     if not set(sol["campos"]) <= set(integ["campos"]):
         raise _Parar("rechazado_solicitud_invalida", "CAMPO_NO_DECLARADO")
+    # Campos con tabla de equivalencias aprobada: solo se admiten los valores de opción de esa tabla. Un código
+    # de Monitor sin traducir (o cualquier otro texto) no llega al formulario, donde podría casar por parecido.
+    equiv = integ.get("equivalencias") or {}
+    for logico, valor in sol["campos"].items():
+        if logico in equiv and valor not in set(equiv[logico].get("valores", {}).values()):
+            raise _Parar("rechazado_solicitud_invalida", "SOLICITUD_MAL_FORMADA")
     return perfil
 
 

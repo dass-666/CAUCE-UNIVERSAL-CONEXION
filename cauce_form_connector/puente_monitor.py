@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import contrato_v1 as C
+from . import esquema_monitor as M
 from .config_store import ProfileStore
 from .integracion import ejecutar
 from .page_inspector import BrowserSession
@@ -25,6 +26,7 @@ from .url_policy import UrlPolicy
 _ID_FRM = re.compile(r"frm_[a-z0-9_]{1,40}")
 _ID_PERFIL = re.compile(r"[a-z0-9_]{1,40}")
 _LOGICO = re.compile(r"[a-z][a-z0-9_]{0,39}")
+_CODIGO = re.compile(r"[A-Za-z0-9_\-]{1,40}")
 
 
 class ConfigInvalida(ValueError):
@@ -45,6 +47,7 @@ def cargar_formulario(ruta: str | Path, *, url: Optional[str] = None, puerto: Op
     if not ok:
         raise ConfigInvalida("Perfil de formulario inválido (revise version, formulario_id, perfil y que campos_formulario "
                              "y campos_expediente tengan los mismos nombres).")
+    cfg["equivalencias"] = equivalencias_normalizadas(cfg)
     if url:
         cfg["url"] = url
     elif puerto is not None:
@@ -52,6 +55,34 @@ def cargar_formulario(ruta: str | Path, *, url: Optional[str] = None, puerto: Op
     if "{" in cfg["url"]:
         raise ConfigInvalida("La URL del formulario necesita --url o --puerto.")
     return cfg
+
+
+def equivalencias_normalizadas(cfg: dict) -> dict:
+    """Valida y normaliza las tablas `equivalencias` del perfil de formulario:
+    {nombre_logico: {"campo_monitor": "tipo_tramite", "valores": {"<código de Monitor>": "<valor de la opción>"}}}.
+    Reglas: el campo lógico existe y apunta a ese campo de Monitor; el campo de Monitor es un código; los códigos son
+    del catálogo de Monitor (si se conoce) y cada valor es texto no vacío. Además, todo campo lógico que lea un código
+    de Monitor DEBE tener tabla: un código nunca se escribe tal cual. Otras claves (comentarios) se ignoran."""
+    crudo = cfg.get("equivalencias") or {}
+    if not isinstance(crudo, dict):
+        raise ConfigInvalida("«equivalencias» debe ser un objeto.")
+    out: dict[str, dict] = {}
+    for logico, t in crudo.items():
+        campo = t.get("campo_monitor") if isinstance(t, dict) else None
+        valores = t.get("valores") if isinstance(t, dict) else None
+        spec = M.ESQUEMA.get(campo or "")
+        if (logico not in cfg["campos_formulario"] or cfg["campos_expediente"].get(logico) != campo or not spec
+                or spec["tipo"] != "codigo" or not isinstance(valores, dict) or not valores
+                or not all(isinstance(k, str) and _CODIGO.fullmatch(k) and isinstance(v, str) and v.strip()
+                           for k, v in valores.items())
+                or (spec["codigos"] and not set(valores) <= set(spec["codigos"]))):
+            raise ConfigInvalida(f"Tabla de equivalencias inválida para «{logico}» (revise campo_monitor, que coincida "
+                                 "con campos_expediente y que los códigos existan en Monitor).")
+        out[logico] = {"campo_monitor": campo, "valores": {k: valores[k] for k in sorted(valores)}}
+    for logico, ruta in cfg["campos_expediente"].items():
+        if ruta in M.ESQUEMA and M.ESQUEMA[ruta]["tipo"] == "codigo" and logico not in out:
+            raise ConfigInvalida(f"«{logico}» lee el código de Monitor «{ruta}» y no tiene tabla de equivalencias.")
+    return {k: out[k] for k in sorted(out)}
 
 
 def _obtener(expediente: dict, ruta: str) -> Any:
@@ -67,13 +98,31 @@ def extraer_campos(expediente: dict, cfg: dict) -> tuple[dict[str, str], list[st
     """(valores a entregar, nombres lógicos sin dato). Solo se lee lo que el perfil declara; el resto del expediente
     no se toca. Un valor vacío o ausente NO se inventa: el campo queda para la persona."""
     valores, faltan = {}, []
+    equiv = cfg.get("equivalencias") or {}
     for logico in cfg["campos_formulario"]:
         v = _obtener(expediente, cfg["campos_expediente"][logico])
         if v is None or (isinstance(v, str) and not v.strip()):
             faltan.append(logico)
-        else:
-            valores[logico] = ("si" if v else "no") if isinstance(v, bool) else str(v)
+            continue
+        texto = ("si" if v else "no") if isinstance(v, bool) else str(v)
+        if logico in equiv:
+            # Código de Monitor -> valor de opción SOLO por la tabla aprobada; un código sin fila no se adivina
+            texto = equiv[logico]["valores"].get(texto)
+            if texto is None:
+                faltan.append(logico)
+                continue
+        valores[logico] = texto
     return valores, faltan
+
+
+def codigos_sin_equivalencia(expediente: dict, cfg: dict) -> list[str]:
+    """Campos lógicos cuyo código de Monitor no está en la tabla aprobada (los completa la persona)."""
+    out = []
+    for logico, t in (cfg.get("equivalencias") or {}).items():
+        v = _obtener(expediente, cfg["campos_expediente"][logico])
+        if v not in (None, "") and str(v) not in t["valores"]:
+            out.append(logico)
+    return out
 
 
 def aprobar_perfil(cfg: dict, settings: Settings, *, aprobado_por: str, autorizado: bool = False) -> dict:
@@ -87,11 +136,21 @@ def aprobar_perfil(cfg: dict, settings: Settings, *, aprobado_por: str, autoriza
         analisis = s.inspect()
     if analisis.safety.blocked:
         raise ConfigInvalida("La página exige intervención humana; no se aprueba un perfil sobre ella.")
+    equiv = cfg.get("equivalencias") or {}
+    por_clave = {f.key: f for f in analisis.all_fields}
+    for logico, t in equiv.items():
+        campo = por_clave.get(cfg["campos_formulario"][logico])
+        opciones = {o.value for o in campo.options} if campo else set()
+        if not campo or set(t["valores"].values()) - opciones:
+            raise ConfigInvalida(f"La tabla de «{logico}» usa valores que no son opciones del formulario actual.")
     ruta, sha = ProfileStore(settings.profiles_dir).save_integration(
         cfg["perfil"], analisis, cfg["campos_formulario"], formulario_id=cfg["formulario_id"],
-        url=cfg["url"].split("?")[0].split("#")[0], aprobado_por_ref=aprobado_por)
+        url=cfg["url"].split("?")[0].split("#")[0], aprobado_por_ref=aprobado_por, equivalencias=equiv or None)
+    cobertura = {l: {"codigos_cubiertos": sorted(t["valores"]),
+                     "codigos_sin_fila": sorted(set(M.ESQUEMA[t["campo_monitor"]]["codigos"] or []) - set(t["valores"]))}
+                 for l, t in equiv.items()}
     return {"perfil": cfg["perfil"], "perfil_sha256": sha, "firma": structure_signature_v2(analisis.all_fields),
-            "archivo": str(ruta), "aprobado_por": aprobado_por}
+            "archivo": str(ruta), "aprobado_por": aprobado_por, "equivalencias": cobertura}
 
 
 def info_perfil(cfg: dict, settings: Settings) -> Optional[dict]:
@@ -101,7 +160,8 @@ def info_perfil(cfg: dict, settings: Settings) -> Optional[dict]:
         path = store.path_of(cfg["perfil"])
         perfil = json.loads(path.read_bytes().decode("utf-8"))
         return {"perfil_sha256": store.sha256_of_file(path), "firma": perfil["structure_signature_v2"],
-                "aprobado_por": perfil["integracion"]["aprobado_por_ref"]}
+                "aprobado_por": perfil["integracion"]["aprobado_por_ref"],
+                "equivalencias": perfil["integracion"].get("equivalencias") or {}}
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -134,14 +194,21 @@ def autorrellenar(cfg: dict, expediente: dict, settings: Optional[Settings] = No
     if info is None:
         return {"salida": 6, "respuesta": None, "informe": {"estado": "perfil_no_aprobado", "campos": [], "sin_dato": [],
                 "nota": "No hay perfil aprobado: una persona debe revisar y aprobar el perfil primero."}}
+    if (cfg.get("equivalencias") or {}) != info["equivalencias"]:
+        return {"salida": 6, "respuesta": None, "informe": {"estado": "equivalencias_no_aprobadas", "campos": [],
+                "sin_dato": [], "nota": "Las tablas de equivalencias del perfil de formulario no son las aprobadas: "
+                                        "una persona debe revisarlas y volver a aprobar el perfil."}}
     valores, faltan = extraer_campos(expediente, cfg)
+    sin_equiv = codigos_sin_equivalencia(expediente, cfg)
     if not valores:
         return {"salida": 6, "respuesta": None, "informe": {"estado": "expediente_sin_datos_utiles", "campos": [],
                 "sin_dato": faltan, "nota": "El expediente no trae ninguno de los campos del perfil."}}
     sol = construir_solicitud(cfg, info, valores, autorizacion_ref=autorizacion_ref, otorgada_por=otorgada_por,
                               espera_revision_s=espera_revision_s, pausa_tecla_ms=pausa_tecla_ms)
     resp, salida = ejecutar(json.dumps(sol), settings=settings, state_dir=state_dir, **kw)
-    return {"salida": salida, "respuesta": resp, "informe": informe_legible(resp, cfg, settings, faltan)}
+    inf = informe_legible(resp, cfg, settings, [f for f in faltan if f not in sin_equiv])
+    inf["sin_equivalencia"] = sin_equiv
+    return {"salida": salida, "respuesta": resp, "informe": inf}
 
 
 def informe_legible(resp: Optional[dict], cfg: dict, settings: Settings, sin_dato: list[str]) -> dict:
@@ -173,6 +240,8 @@ def texto_informe(inf: dict) -> str:
         L.append(f"  [{'OK' if c['coinciden'] else '!!'}] confirmación {c['campo']}: {'coincide' if c['coinciden'] else 'NO coincide'}")
     for s in inf.get("sin_dato", []):
         L.append(f"  [--] {s}: el expediente no trae dato; lo completa la persona")
+    for s in inf.get("sin_equivalencia", []):
+        L.append(f"  [--] {s}: el código de Monitor no está en la tabla aprobada; lo completa la persona")
     if "revision_humana" in inf:
         L.append(f"Revisión humana: {inf['revision_humana']}. El conector no envía (envío por conector: "
                  f"{inf['envio_realizado_por_conector']}).")

@@ -192,6 +192,10 @@ def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
         if args.aprobar_perfil:
             info = P.aprobar_perfil(cfg, settings, aprobado_por=args.aprobar_perfil, autorizado=args.authorized)
             print(f"Perfil aprobado: {info['perfil']} (sha256 {info['perfil_sha256'][:12]}…, firma {info['firma']})", file=sys.stderr)
+            for logico, cob in info.get("equivalencias", {}).items():
+                print(f"  Tabla «{logico}» aprobada: {len(cob['codigos_cubiertos'])} códigos"
+                      + (f"; sin fila (los completa la persona): {', '.join(cob['codigos_sin_fila'])}" if cob["codigos_sin_fila"] else ""),
+                      file=sys.stderr)
         r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s)
     except (P.ConfigInvalida, OSError, ValueError) as exc:
         print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)

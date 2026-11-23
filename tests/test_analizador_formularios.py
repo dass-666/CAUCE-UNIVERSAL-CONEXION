@@ -293,3 +293,47 @@ def test_perfil_borrador_respeta_formato_de_config_formularios(tmp_path):
     valores, faltan = P.extraer_campos(EXP_MONITOR, cfg)
     assert faltan == [] and set(valores) == set(perfil["campos_formulario"])
     _sin_secretos(json.dumps(inf) + A.informe_markdown(inf) + A.vista_previa_html(inf))
+
+
+@pytest.mark.browser
+def test_vista_previa_llena_tablas_y_el_perfil_funciona(sitio_registro, tmp_path):
+    """Análisis del lab 06 → una persona llena las tablas en la vista previa → perfil → aprobación → autorrellenar."""
+    from cauce_form_connector.page_inspector import BrowserSession
+    st = settings_para(tmp_path)
+    url = sitio_registro + "/06_cita_monitor.html"
+    inf = A.analizar_url(url, autorizado=False, settings=st, expediente=EXP_MONITOR)
+    rutas = A.guardar(inf, tmp_path / "s")
+    filas = [c for c in inf["campos"] if c["nombre_logico"]]
+    i_tr = next(i for i, c in enumerate(filas) if c["name"] == "tipo_tramite")
+    i_of = next(i for i, c in enumerate(filas) if c["name"] == "oficina")
+    i_mo = next(i for i, c in enumerate(filas) if c["name"] == "modo")
+    with BrowserSession(st, headless=True) as s:
+        s.open_url(Path(rutas["vista_previa"]).resolve().as_uri())
+        sin_tabla = json.loads(s.page.text_content("#json"))
+        s.page.check(f'[data-i="{i_tr}"]')                       # marcado pero sin filas: no entra
+        assert "tipo_tramite" not in json.loads(s.page.text_content("#json"))["campos_formulario"]
+        for k, v in enumerate(["alta", "renovacion", "constancia"]):
+            s.page.select_option(f'[data-eqv="{i_tr}-{k}"]', v)
+        s.page.check(f'[data-i="{i_mo}"]')
+        s.page.select_option(f'[data-eqv="{i_mo}-0"]', "dia")      # POR_DIA -> dia; POR_HORARIO sin fila
+        s.page.check(f'[data-i="{i_of}"]')                       # catálogo desconocido: se escribe el código
+        s.page.fill(f'[data-eqc="{i_of}-0"]', "S001")
+        s.page.select_option(f'[data-eqv="{i_of}-0"]', "101")
+        perfil = json.loads(s.page.text_content("#json"))
+    assert "equivalencias" not in sin_tabla
+    eq = perfil["equivalencias"]
+    assert eq[filas[i_tr]["nombre_logico"]] == {"campo_monitor": "tipo_tramite",
+                                                  "valores": {"alta": "alta", "renovacion": "renovacion", "constancia": "constancia"}}
+    assert eq[filas[i_mo]["nombre_logico"]]["valores"] == {"POR_DIA": "dia"}
+    assert eq[filas[i_of]["nombre_logico"]]["valores"] == {"S001": "101"}
+
+    ruta = tmp_path / "perfil_revisado.json"
+    ruta.write_text(json.dumps(perfil, ensure_ascii=False), encoding="utf-8")
+    cfg = P.cargar_formulario(ruta)
+    P.aprobar_perfil(cfg, st, aprobado_por="rev_prueba")
+    r = P.autorrellenar(cfg, EXP_MONITOR, st, espera_revision_s=0, state_dir=tmp_path / "e", fabrica_sesion=fabrica_espia)
+    assert r["informe"]["campos"] and all(c["correcto"] for c in r["informe"]["campos"]), r["informe"]
+    assert Espia.ultimo.valores["tipo_tramite"] == "renovacion" and Espia.ultimo.valores["oficina"] == "101"
+    r2 = P.autorrellenar(cfg, dict(EXP_MONITOR, modo="POR_HORARIO"), st, espera_revision_s=0,
+                         state_dir=tmp_path / "e", fabrica_sesion=fabrica_espia)
+    assert r2["informe"]["sin_equivalencia"] == [filas[i_mo]["nombre_logico"]]   # sin fila: lo decide la persona

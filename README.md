@@ -56,7 +56,7 @@ Salida en JSON por stdout. Códigos de salida: `0` correcto, `2` terminado con i
 ```bash
 python scripts/recorrido_monitor.py          # demo visible con datos ficticios; no envía
 python -m cauce_form_connector autorrellenar --formulario config/formularios/lab_validaciones.json \
-    --expediente sample_data/expediente_ficticio.json --puerto 8765 --aprobar-perfil rev_demo
+    --expediente sample_data/expediente_monitor_sintetico.json --puerto 8765 --aprobar-perfil rev_demo
 ```
 
 Detalle y límites en [docs/CONTRATO_CAUCE_CONECTOR_V1.md](docs/CONTRATO_CAUCE_CONECTOR_V1.md) §8.
@@ -84,7 +84,8 @@ Las correspondencias usan el **modelo real del Expediente de Monitor** (campos p
 Solo `nombre` (si el formulario pide el nombre completo), `fecha_nacimiento`, `telefono` y `correo` pueden ser
 automáticos. Nombre/apellidos separados, fechas de cita, folios e identificadores van a «revisar»; los códigos
 (`tipo_tramite`, `operacion`, `region`, `sucursal`, `modo`) exigen una tabla de equivalencias aprobada
-(`_borrador.equivalencias_pendientes`); CURP, RFC y consentimientos nunca se proponen.
+que se llena en `vista_previa.html` y se aprueba junto con el perfil; CURP, RFC y consentimientos nunca se proponen.
+Ejemplo con tablas: `config/formularios/lab_cita_monitor.json`.
 
 El perfil sigue siendo un borrador: `autorrellenar --formulario <perfil> --expediente <exp> --aprobar-perfil rev_xxx`
 es el paso humano que lo aprueba. Códigos de salida: `0` informe generado, `3` URL no autorizada (no se abre),

@@ -28,7 +28,7 @@ def main() -> int:
     ap.add_argument("--espera-s", type=int, default=120)
     ap.add_argument("--captura", help="PNG de la ventana tras el relleno (solo datos ficticios)")
     ap.add_argument("--formulario", default=str(ROOT / "config/formularios/lab_validaciones.json"))
-    ap.add_argument("--expediente", default=str(ROOT / "sample_data/expediente_ficticio.json"))
+    ap.add_argument("--expediente", default=str(ROOT / "sample_data/expediente_monitor_sintetico.json"))
     a = ap.parse_args()
     os.environ.setdefault("CAUCE_PROFILES_DIR", str(ROOT / "evidence" / "out" / "perfiles"))
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(ROOT / "lab_forms"))

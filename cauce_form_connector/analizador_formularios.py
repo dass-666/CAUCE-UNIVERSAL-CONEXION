@@ -267,8 +267,9 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
                                      "etiqueta": r["etiqueta"],
                                      "ruta_expediente_propuesta": (r.get("propuesta") or {}).get("ruta_expediente"),
                                      "motivo": r["motivo"]} for r in revisar],
-            "nota": "Borrador NO aprobado. Revise cada correspondencia en vista_previa.html; para aprobarlo use "
-                    "`autorrellenar --formulario <este archivo> --expediente <exp> --aprobar-perfil rev_xxx`.",
+            "nota": "Borrador NO aprobado. Revise cada correspondencia y llene las tablas de equivalencias en "
+                    "vista_previa.html; para aprobarlo (perfil y tablas juntos) use `autorrellenar --formulario <este "
+                    "archivo> --expediente <exp> --aprobar-perfil rev_xxx`.",
         },
     }
 
@@ -291,7 +292,9 @@ def construir_informe(analisis: AnalysisResult, extra: dict, url: str, *, expedi
         "resumen": {"campos": len(filas), "automatico": conteo.get("automatico", 0),
                     "revisar": conteo.get("revisar", 0), "humano": conteo.get("humano", 0),
                     "ignorado": conteo.get("ignorado", 0)},
-        "expediente": {"rutas_disponibles": rutas, "modelo": "Expediente de Cauce Monitor (plano, 15 campos)",
+        "expediente": {"rutas_disponibles": rutas,
+                       "esquema": {k: {"tipo": v["tipo"], "codigos": v.get("codigos")} for k, v in M.ESQUEMA.items()},
+                       "modelo": "Expediente de Cauce Monitor (plano, 15 campos)",
                        "sintetico": True,
                        "nota": "Correspondencias contra el modelo real del Expediente de Monitor (campos planos), "
                                "comprobadas con un expediente SINTÉTICO. Solo se informa si hay dato y si encaja, nunca "
@@ -466,6 +469,7 @@ code{font-size:12px;word-break:break-all} select,input[type=text]{font:inherit;m
 .d-automatico{color:var(--auto);font-weight:600}.d-revisar{color:var(--rev);font-weight:600}.d-humano{color:var(--hum);font-weight:600}.d-ignorado{color:var(--ign)}
 .barra{position:sticky;bottom:0;background:var(--bg);padding:12px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 button{font:inherit;padding:8px 14px;border-radius:6px;border:1px solid var(--line);background:var(--fg);color:var(--bg);cursor:pointer}
+tr.eq td{background:var(--bg);font-size:13px} tr.eq div{margin:4px 0}
 pre{white-space:pre-wrap;background:var(--card);border:1px solid var(--line);padding:8px;border-radius:8px;max-height:300px;overflow:auto}
 </style></head><body><main>
 <h1>Revisión del perfil de autorrellenado</h1>
@@ -488,35 +492,60 @@ $("#avisos").innerHTML = (INF.bloqueo_humano.blocked ? INF.bloqueo_humano.reason
   .map((a) => `<div class="aviso">${esc(a)}</div>`).join("");
 const rutas = INF.expediente.rutas_disponibles;
 const filas = INF.campos.filter((c) => c.nombre_logico);
+const EQ = Object.fromEntries((INF.perfil_borrador._borrador.equivalencias_pendientes || []).map((e) => [e.clave_campo, e]));
+const ESQ = INF.expediente.esquema;
 $("#filas").innerHTML = filas.map((c, i) => {
   const p = c.propuesta || {};
   const opts = ['<option value="">— sin dato —</option>'].concat(rutas.map((r) => `<option ${r === p.ruta_expediente ? "selected" : ""}>${esc(r)}</option>`)).join("");
   const val = Object.entries(c.validaciones).map(([k, v]) => `${esc(k)}=${esc(Array.isArray(v) ? v.join("; ") : v)}`)
     .concat(c.opciones.length ? [`${c.opciones.length} opciones`] : [], Object.keys(c.dinamico).filter((k) => k !== "oculto_por").map((k) => k.replace(/_/g, " "))).join("<br>");
   const bloqueado = c.decision === "humano" && ["archivo", "contrasena"].includes(c.categoria) || INF.bloqueo_humano.blocked;
+  const eq = EQ[c.clave];
+  let tabla = "";
+  if (eq) {
+    const opsF = ['<option value="">— sin fila —</option>'].concat(eq.opciones_formulario.map((o) => `<option value="${esc(o.valor)}">${esc(o.etiqueta)} (${esc(o.valor)})</option>`)).join("");
+    const cods = Array.isArray(eq.codigos_monitor) ? eq.codigos_monitor : ["", "", ""];
+    tabla = `<tr class="eq"><td></td><td colspan="7"><b>Tabla de equivalencias</b> (${esc(eq.campo_monitor)} de Monitor → opción del formulario). Solo las filas llenas se usan; un código sin fila lo completa la persona.<br>` +
+      cods.map((cd, k) => `<div>${Array.isArray(eq.codigos_monitor) ? `<code>${esc(cd)}</code>` : `<input type="text" placeholder="código de Monitor" data-eqc="${i}-${k}">`} → <select data-eqv="${i}-${k}" data-cod="${esc(cd)}">${opsF}</select></div>`).join("") + `</td></tr>`;
+  }
   return `<tr><td><input type="checkbox" data-i="${i}" ${c.decision === "automatico" ? "checked" : ""} ${bloqueado ? "disabled" : ""}></td>
   <td><b>${esc(c.etiqueta || c.name || c.clave)}</b>${c.obligatorio ? " *" : ""}<br><span class="mut">${esc(c.nombre_logico)}</span></td>
   <td><code>${esc(c.selector)}</code></td><td>${esc(c.categoria)}<br><span class="mut">${esc(c.tipo)}</span></td><td>${val || "—"}</td>
   <td><select data-r="${i}" ${bloqueado ? "disabled" : ""}>${opts}</select></td>
-  <td class="d-${esc(c.decision)}">${esc(c.decision)}</td><td>${esc(c.motivo)}</td></tr>`;
+  <td class="d-${esc(c.decision)}">${esc(c.decision)}</td><td>${esc(c.motivo)}</td></tr>` + tabla;
 }).join("");
 function perfil() {
   const base = JSON.parse(JSON.stringify(INF.perfil_borrador));
-  base.campos_formulario = {}; base.campos_expediente = {};
+  base.campos_formulario = {}; base.campos_expediente = {}; base.equivalencias = {};
   const incl = [];
   filas.forEach((c, i) => {
     const on = document.querySelector(`[data-i="${i}"]`).checked;
     const ruta = document.querySelector(`[data-r="${i}"]`).value;
-    if (on && ruta) { base.campos_formulario[c.nombre_logico] = c.clave; base.campos_expediente[c.nombre_logico] = ruta; incl.push(c.nombre_logico); }
+    if (!on || !ruta) return;
+    if (ESQ[ruta] && ESQ[ruta].tipo === "codigo") {
+      // Un código de Monitor solo entra con tabla: se toman las filas llenas
+      const valores = {};
+      document.querySelectorAll(`[data-eqv^="${i}-"]`).forEach((sel) => {
+        const k = sel.dataset.eqv.split("-")[1];
+        const inp = document.querySelector(`[data-eqc="${i}-${k}"]`);
+        const cod = (inp ? inp.value : sel.dataset.cod).trim();
+        if (cod && sel.value) valores[cod] = sel.value;
+      });
+      if (!Object.keys(valores).length) return;
+      base.equivalencias[c.nombre_logico] = {campo_monitor: ruta, valores};
+    }
+    base.campos_formulario[c.nombre_logico] = c.clave; base.campos_expediente[c.nombre_logico] = ruta; incl.push(c.nombre_logico);
   });
   base._borrador.estado = "revisado_pendiente_aprobacion";
   base._borrador.revisado_en_vista_previa = new Date().toISOString();
   base._borrador.pendientes_revision = [];
+  base._borrador.equivalencias_pendientes = [];
+  if (!Object.keys(base.equivalencias).length) delete base.equivalencias;
   $("#cuenta").textContent = `${incl.length} campos incluidos`;
   return base;
 }
 function refrescar() { $("#json").textContent = JSON.stringify(perfil(), null, 2); }
-document.addEventListener("change", refrescar); refrescar();
+document.addEventListener("change", refrescar); document.addEventListener("input", refrescar); refrescar();
 $("#descargar").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(perfil(), null, 2) + "\n"], {type: "application/json"});
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
