@@ -100,7 +100,7 @@ def args_autorrellenar(perfil: str, expediente: str, url: str, revisor: str, aut
     return a
 
 
-SALIDAS = {0: "Terminado.", 3: "URL no autorizada: no se abrió la página.", 4: "La página pide CAPTCHA: no se continúa.",
+SALIDAS = {0: "Terminado.", 2: "Hubo campos por revisar (vea [REVISAR] arriba). Nada se envió.", 3: "URL no autorizada: no se abrió la página.", 4: "La página pide CAPTCHA: no se continúa.",
            6: "Configuración o expediente no válido (vea el detalle arriba).",
            7: "Ventana cerrada sin revisión dentro del plazo. Nada se envió."}
 

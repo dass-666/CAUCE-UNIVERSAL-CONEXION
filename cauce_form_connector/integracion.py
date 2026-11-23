@@ -152,6 +152,24 @@ def _esperar_revision(sesion: BrowserSession, espera_s: int, desde: float,
                 return "error", time.monotonic() - ini
 
 
+def _mostrar_verificacion(campos: list, confirmaciones: list, por_clave: dict, a_clave: dict) -> None:
+    """Resultado de la verificación por stderr MIENTRAS la ventana sigue abierta. Sin valores: solo campo, estado y
+    el tipo de transformación que aplicó la página (p. ej. «convirtió a minúsculas»)."""
+    lineas = ["Verificación (la ventana sigue abierta; ciérrela usted al terminar de revisar):"]
+    for c in campos:
+        r = por_clave.get(a_clave[c["campo"]])
+        nota = ""
+        if c["estado"] in ("ok_normalizado", "diferente") and r is not None and r.detail:
+            nota = f" — {r.detail}"
+        elif c["estado"] == "invalido":
+            nota = " — la página marca el campo como no válido"
+        lineas.append(f"  [{'OK' if c['estado'].startswith('ok') else 'REVISAR'}] {c['campo']}: {c['estado']}{nota}")
+    for c in confirmaciones:
+        lineas.append(f"  [{'OK' if c['coinciden'] else 'REVISAR'}] confirmación de {c['campo']}: "
+                      f"{'coincide' if c['coinciden'] else 'NO coincide'}")
+    print("\n".join(lineas), file=sys.stderr, flush=True)
+
+
 def ejecutar(texto: str, *, ahora: Optional[datetime] = None, settings: Optional[Settings] = None,
              state_dir: Optional[str | Path] = None,
              fabrica_sesion: Optional[Callable[[Settings], BrowserSession]] = None,
@@ -268,14 +286,17 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
         fin_relleno = time.monotonic()
         huella = C.huella_preparacion(sol["solicitud_id"], form["firma_estructura_esperada"], sol["campos"])
         base = dict(campos=campos, confirmaciones=confirmaciones, huella=huella)
-        if hay_incidencia:                  # no se espera revisión: hay que corregir antes
-            return _cerrar(run.respuesta("preparado_con_incidencias", ("CAMPO_NO_VERIFICADO",), **base), sol)
+        _mostrar_verificacion(campos, confirmaciones, por_clave, a_clave)
 
-        # --- revisión humana en la ventana visible; el conector solo observa ---
+        # --- revisión humana en la ventana visible; el conector solo observa. También con incidencias: la ventana
+        # queda abierta (sin borrar ni tocar los valores) para que la persona inspeccione y la cierre ella misma. ---
         espera = op["espera_revision_max_s"]
         resultado, dur = ("caducada", 0) if espera == 0 else _esperar_revision(sesion, espera, fin_relleno, gancho)
         if resultado == "error":
             raise _Parar("error_interno", "ERROR_INTERNO")
+        if hay_incidencia:
+            return _cerrar(run.respuesta("preparado_con_incidencias", ("CAMPO_NO_VERIFICADO",),
+                                         revision=(resultado, dur), observado=resultado == "envio_humano", **base), sol)
         if resultado == "envio_humano":
             r = run.respuesta("enviado_por_persona_observado", (), revision=("envio_humano", dur), observado=True, **base)
         elif resultado == "cerrada_sin_envio":

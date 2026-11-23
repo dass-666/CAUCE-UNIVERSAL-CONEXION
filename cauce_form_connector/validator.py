@@ -60,15 +60,36 @@ def compare(f: FieldDescriptor, expected: str, actual: str) -> tuple[str, str]:
     if f.type in ("tel", "number") or f.inputmode in ("tel", "numeric"):
         if _digits(actual) and _digits(actual) == _digits(expected):
             return "ok_normalizado", "la página aplicó un formato (máscara); los dígitos coinciden"
-    if f.type == "email" and actual.strip().lower() == expected.strip().lower():
-        return "ok_normalizado", "difiere solo en mayúsculas/espacios"
+    if (f.type == "email" or "@" in expected) and actual.strip().lower() == expected.strip().lower():
+        return "ok_normalizado", "correo: la página " + transformacion(expected, actual)
     if actual.strip() == expected.strip():
         return "ok_normalizado", "difiere solo en espacios al inicio/fin"
     if f.maxlength is not None and expected.startswith(actual) and len(actual) == f.maxlength:
         return "diferente", f"el campo limita a {f.maxlength} caracteres (maxlength) y truncó el dato"
     if strip_accents(actual) == strip_accents(expected) and actual != expected:
         return "diferente", "se perdieron acentos u otros caracteres especiales"
-    return "diferente", "el valor registrado no coincide con el esperado"
+    return "diferente", "el valor registrado no coincide: la página " + transformacion(expected, actual)
+
+
+def transformacion(expected: str, actual: str) -> str:
+    """Describe qué cambió la página, SIN mostrar ningún valor (solo tipo de cambio y longitudes)."""
+    if not actual:
+        return "dejó el campo vacío"
+    if actual == expected.lower():
+        return "convirtió el texto a minúsculas"
+    if actual == expected.upper():
+        return "convirtió el texto a mayúsculas"
+    if actual.lower() == expected.lower():
+        return "cambió mayúsculas/minúsculas"
+    if actual.strip() == expected.strip():
+        return "quitó espacios al inicio o al final"
+    if actual.lower().strip() == expected.lower().strip():
+        return "cambió mayúsculas/minúsculas y quitó espacios al inicio o al final"
+    if re.sub(r"\s+", "", actual) == re.sub(r"\s+", "", expected):
+        return "cambió los espacios internos"
+    if _digits(actual) and _digits(actual) == _digits(expected):
+        return "cambió el formato (mismos dígitos)"
+    return f"cambió el valor ({len(expected)} → {len(actual)} caracteres)"
 
 
 def read_state(page: Any, f: FieldDescriptor) -> dict[str, Any]:
@@ -108,7 +129,10 @@ def check_confirmations(fields: list[FieldDescriptor], results: dict[str, FieldR
         if a is None or b is None:
             entry.update(match=False, detail="uno de los dos campos no se rellenó")
         else:
-            entry.update(match=(a.actual == b.actual and a.actual != ""),
-                         detail="coinciden" if a.actual == b.actual and a.actual else "NO coinciden")
+            correo = "@" in a.actual and "@" in b.actual      # los correos no distinguen mayúsculas en la práctica
+            igual = a.actual.strip().lower() == b.actual.strip().lower() if correo else a.actual == b.actual
+            entry.update(match=(igual and a.actual != ""),
+                         detail=("coinciden" if a.actual == b.actual else "coinciden salvo mayúsculas/espacios")
+                         if igual and a.actual else "NO coinciden")
         out.append(entry)
     return out

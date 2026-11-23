@@ -40,7 +40,7 @@ Variables: `CAUCE_PROFILES_DIR` (perfiles), `CAUCE_STATE_DIR` (por omisión `sta
 |---|---|---|---|
 | Revisada y cerrada sin enviar | `preparado_revisado_sin_envio` | — | 0 |
 | Persona pulsó enviar (observado) | `enviado_por_persona_observado` | — | 0 |
-| Campo `diferente/invalido` o confirmación que no coincide | `preparado_con_incidencias` | `CAMPO_NO_VERIFICADO` | 2 |
+| Campo `diferente/invalido` o confirmación que no coincide | `preparado_con_incidencias` | `CAMPO_NO_VERIFICADO` | 2 (la ventana queda abierta hasta que la persona la cierra o vence la espera) |
 | Autorización/formulario/perfil no válido o alterado | `rechazado_no_autorizado` | `FORMULARIO_NO_AUTORIZADO`, `AUTORIZACION_CADUCADA`, `PERFIL_NO_COINCIDE` | 3 |
 | CAPTCHA | `detenido_intervencion_humana` | `INTERVENCION_HUMANA_REQUERIDA` | 4 |
 | Estructura distinta | `detenido_estructura_cambiada` | `ESTRUCTURA_CAMBIADA` | 5 |
