@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 9 · Listas con la estructura de las librerías habituales</title>
+<link rel="stylesheet" href="lab.css">
+<style>
+/* <select> real escondido «para accesibilidad» (1 px recortado), como hacen las librerías que lo sustituyen */
+.oculto-accesible{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;
+  clip:rect(0 0 0 0)!important;clip-path:inset(50%)!important;border:0!important;padding:0!important;margin:-1px!important}
+.sel-container{display:inline-block;min-width:240px}
+.sel-selection{display:block;border:1px solid #888;border-radius:4px;padding:6px 10px;cursor:pointer;background:#fff;color:#111}
+.sel-results,.auto-popper ul{list-style:none;margin:0;padding:0;background:#fff;color:#111;border:1px solid #888}
+.sel-dropdown,.auto-popper{position:absolute;z-index:9;min-width:240px}
+.sel-results li,.auto-popper li{padding:6px 10px;cursor:pointer}
+.auto-root{display:inline-block;min-width:240px}
+.auto-root input{width:100%}
+</style>
+</head>
+<body>
+<main>
+  <h1>Laboratorio 9 · Solicitud con listas «de librería» (simulado)</h1>
+  <p class="nota">Formulario de PRUEBA con datos ficticios. «Operación» es un &lt;select&gt; real escondido y sustituido por
+    un componente con identificadores que cambian en cada carga; «Trámite» es un cuadro de texto con lista que se filtra al
+    escribir y se dibuja al final de la página. La fecha declara su formato en un atributo, no en el texto de ayuda.
+    No envía nada.</p>
+  <form id="alta" action="#hecho" method="post">
+    <div class="fila">
+      <label for="operacion">Operación</label>
+      <select id="operacion" name="operacion" class="oculto-accesible" tabindex="-1" aria-hidden="true">
+        <option value=""></option>
+        <option value="1">Nueva cita</option>
+        <option value="2">Reprogramar cita</option>
+      </select>
+      <span class="sel-container" id="sel_operacion"></span>
+    </div>
+    <div class="fila">
+      <label for="num_cliente">Número de cliente</label>
+      <input id="num_cliente" name="num_cliente" type="text" required pattern="CL-\d{6}" maxlength="9">
+    </div>
+    <div class="fila">
+      <label for="f_nac">Fecha de nacimiento</label>
+      <input id="f_nac" name="f_nac" type="text" data-date-format="dd/mm/yyyy" maxlength="10" required>
+    </div>
+    <div class="fila">
+      <label id="lbl_tramite">Trámite</label>
+      <div class="auto-root" id="auto_tramite"></div>
+    </div>
+    <div class="fila">
+      <label for="f_cita">Fecha de la cita</label>
+      <input id="f_cita" name="f_cita" type="text" class="datepicker" data-date-format="dd/mm/yyyy" readonly>
+    </div>
+    <div class="fila"><label for="tel">Teléfono</label><input id="tel" name="tel" type="tel" required maxlength="10"></div>
+    <div class="fila"><label for="tel2">Repita el teléfono</label><input id="tel2" name="tel2" type="tel" required maxlength="10" data-confirm="tel"></div>
+    <div class="fila"><label for="mail">Correo electrónico</label><input id="mail" name="mail" type="email" required></div>
+    <div class="fila"><label for="mail2">Repita el correo</label><input id="mail2" name="mail2" type="email" required data-confirm="mail"></div>
+    <button type="submit">Enviar</button>
+  </form>
+</main>
+<script>
+var azar = function () { return Math.random().toString(36).slice(2, 8); };
+
+// Lista 1: sustituye al <select> escondido. Identificadores aleatorios; las opciones se crean al abrir, al final de la
+// página, con identificadores también aleatorios; al elegir se escribe en el <select> y se lanza «change».
+(function () {
+  var sel = document.getElementById('operacion'), cont = document.getElementById('sel_operacion'), menu = null;
+  var caja = document.createElement('span');
+  caja.className = 'sel-selection'; caja.setAttribute('role', 'combobox'); caja.setAttribute('aria-haspopup', 'true');
+  caja.setAttribute('tabindex', '0'); caja.id = 'sel-' + azar() + '-container';
+  var texto = document.createElement('span'); texto.className = 'sel-rendered'; texto.textContent = 'Seleccione…';
+  caja.appendChild(texto); cont.appendChild(caja);
+  function cerrar() { if (menu) { menu.remove(); menu = null; } }
+  caja.addEventListener('click', function () {
+    if (menu) return cerrar();
+    menu = document.createElement('span'); menu.className = 'sel-dropdown';
+    var r = caja.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + window.scrollY) + 'px';
+    var ul = document.createElement('ul'); ul.className = 'sel-results'; ul.setAttribute('role', 'listbox');
+    [].slice.call(sel.options).forEach(function (o) {
+      if (!o.value) return;
+      var li = document.createElement('li'); li.className = 'sel-results__option'; li.setAttribute('role', 'option');
+      li.id = 'sel-' + azar() + '-result-' + azar(); li.textContent = o.textContent;
+      li.addEventListener('click', function () {
+        sel.value = o.value; sel.dispatchEvent(new Event('change', {bubbles: true})); texto.textContent = o.textContent; cerrar();
+      });
+      ul.appendChild(li);
+    });
+    menu.appendChild(ul); document.body.appendChild(menu);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+})();
+
+// Lista 2: cuadro de texto con lista (autocompletar). El valor elegido solo queda como texto del cuadro; la lista se
+// filtra con lo que se escribe y se dibuja al final de la página.
+(function () {
+  var raiz = document.getElementById('auto_tramite'), menu = null, elegido = '';
+  var OPS = ['Alta', 'Renovación', 'Constancia'];
+  var inp = document.createElement('input');
+  inp.type = 'text'; inp.id = ':r' + azar() + ':'; inp.setAttribute('role', 'combobox'); inp.setAttribute('aria-autocomplete', 'list');
+  inp.setAttribute('aria-expanded', 'false'); inp.setAttribute('aria-labelledby', 'lbl_tramite'); inp.autocomplete = 'off';
+  raiz.appendChild(inp);
+  var plano = function (s) { return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+  function cerrar() { if (menu) { menu.remove(); menu = null; } inp.setAttribute('aria-expanded', 'false'); }
+  function pintar() {
+    cerrar();
+    var q = inp.value === elegido ? '' : plano(inp.value);
+    menu = document.createElement('div'); menu.className = 'auto-popper';
+    var r = inp.getBoundingClientRect(); menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + window.scrollY) + 'px';
+    var ul = document.createElement('ul'); ul.setAttribute('role', 'listbox'); ul.id = ':r' + azar() + ':-listbox';
+    OPS.filter(function (o) { return plano(o).indexOf(q) >= 0; }).forEach(function (o, i) {
+      var li = document.createElement('li'); li.setAttribute('role', 'option'); li.id = ul.id + '-option-' + i; li.textContent = o;
+      li.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      li.addEventListener('click', function () { elegido = o; inp.value = o; cerrar(); });
+      ul.appendChild(li);
+    });
+    menu.appendChild(ul); document.body.appendChild(menu); inp.setAttribute('aria-expanded', 'true');
+  }
+  inp.addEventListener('click', function () { if (menu) cerrar(); else pintar(); });
+  inp.addEventListener('input', pintar);
+  inp.addEventListener('blur', function () { inp.value = elegido; cerrar(); });   // texto que no es una opción: se descarta
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrar(); });
+})();
+document.getElementById('alta').addEventListener('submit', function (e) { e.preventDefault(); });
+</script>
+</body>
+</html>

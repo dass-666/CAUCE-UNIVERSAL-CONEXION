@@ -110,10 +110,31 @@ def agregar_host(datos: Path, host: str) -> None:
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def args_analizar(url: str, autorizado: bool, expediente: str, salida: Path) -> list[str]:
+def args_analizar(url: str, autorizado: bool, expediente: str, salida: Path, previo: str = "") -> list[str]:
     a = [sys.executable, "-m", "cauce_form_connector", "analizar-formulario", "--url", url,
          "--expediente", expediente, "--salida", str(salida)]
+    if previo:
+        a += ["--perfil-previo", previo]
     return a + (["--authorized"] if autorizado else [])
+
+
+def perfil_previo_de(url: str, carpetas: list[tuple[Path, str]]) -> str:
+    """El perfil revisado más reciente de esta URL (guardado al aprobar, o descargado), para no repetir la configuración."""
+    u, mejor = limpiar_url(url), None
+    for carpeta, patron in carpetas:
+        try:
+            archivos = list(carpeta.glob(patron))
+        except OSError:
+            continue
+        for p in archivos:
+            try:
+                d = json.loads(p.read_text(encoding="utf-8"))
+                if isinstance(d, dict) and limpiar_url(d.get("url", "")) == u and d.get("campos_expediente"):
+                    if mejor is None or p.stat().st_mtime > mejor.stat().st_mtime:
+                        mejor = p
+            except (OSError, ValueError, AttributeError):
+                continue
+    return str(mejor) if mejor else ""
 
 
 def args_autorrellenar(perfil: str, expediente: str, url: str, revisor: str, autorizado: bool,
@@ -271,8 +292,14 @@ class App:
             if (salida / "vista_previa.html").exists():
                 self.ultimo_analisis = salida
                 self.escribir("Pulse «Revisar perfil» para revisar y descargar el perfil.")
+                if (salida / "diagnostico_controles.json").exists():
+                    self.escribir("Si algún desplegable no se reconoció, envíe «diagnostico_controles.json» de esa carpeta: "
+                                  "describe la estructura de los controles, sin datos personales.")
 
-        self.ejecutar(args_analizar(url, host_de(url) not in LOCALES, self.exp.get(), salida), fin)
+        previo = perfil_previo_de(url, [(self.datos / "formularios", "*.json"), (Path.home() / "Downloads", "perfil_*.json")])
+        if previo:
+            self.escribir(f"Se conservará la configuración ya revisada de esta URL ({Path(previo).name}).")
+        self.ejecutar(args_analizar(url, host_de(url) not in LOCALES, self.exp.get(), salida, previo), fin)
 
     def revisar(self) -> None:
         d = self.ultimo_analisis

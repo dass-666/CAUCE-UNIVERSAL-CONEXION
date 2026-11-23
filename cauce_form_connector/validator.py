@@ -98,8 +98,8 @@ def read_state(page: Any, f: FieldDescriptor) -> dict[str, Any]:
     if f.type == "radio":
         return page.evaluate(READ_RADIO_JS, f.name)
     if f.type == "custom-select":
-        from .listas import LEER_SELECCION_JS
-        return page.locator(f.selector).first.evaluate(LEER_SELECCION_JS)
+        from .listas import leer_seleccion
+        return leer_seleccion(page, f)
     return page.locator(f.selector).first.evaluate(READ_STATE_JS)
 
 

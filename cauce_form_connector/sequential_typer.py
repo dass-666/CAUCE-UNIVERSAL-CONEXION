@@ -151,20 +151,30 @@ class SequentialTyper:
             return "select_option", "|".join(chosen)
         if f.type == "custom-select":
             # Lista hecha con JavaScript: se abre con un clic y se elige la opción con otro clic, como una persona.
-            # Si sus opciones solo aparecen al abrirla, se leen en ese momento.
             from . import listas as LJ
             loc = self.locator(f)
-            LJ.abrir(self.page, loc)
-            opciones = f.options or [FieldOption(**o) for o in loc.evaluate(LJ.OPCIONES_VISIBLES_JS)]
+            visibles = LJ.abrir(self.page, loc)
+            opciones = LJ.opciones_conocidas(self.page, f) or visibles
+            LJ.recordar(self.page, f.key, opciones)
             opt = next((o for o in opciones if o.value == value), None) or choose_option(opciones, value)
             if opt is None:
                 LJ.cerrar(self.page, loc)
-                raise FillError("Ninguna opción de la lista personalizada coincide con el dato")
-            el = self.page.evaluate_handle(LJ.BUSCAR_OPCION_JS, [loc.element_handle(), opt.value, opt.label]).as_element()
+                raise FillError("Ninguna opción de la lista coincide con el dato" if opciones
+                                else "La lista no mostró opciones al abrirla")
+            el = LJ.buscar_opcion(self.page, loc, opt)
+            if el is None and self.page.evaluate(LJ.FOCO_ESCRIBIBLE_JS):
+                # lista con buscador (o virtualizada): se teclea el texto de la opción para que aparezca
+                for ch in opt.label:
+                    self._press_char(ch)
+                self.page.wait_for_timeout(600)
+                el = LJ.buscar_opcion(self.page, loc, opt)
             if el is None:
                 LJ.cerrar(self.page, loc)
-                raise FillError("La lista personalizada no muestra la opción esperada al abrirla")
-            el.click()
+                raise FillError("La lista no muestra la opción esperada al abrirla")
+            el.scroll_into_view_if_needed()
+            LJ.clic(self.page, el)
+            self.page.wait_for_timeout(150)
+            LJ.cerrar(self.page, loc)        # algunas listas no se cierran solas tras elegir
             return "clic_lista_personalizada", opt.value
         if f.type == "checkbox":
             b = to_bool(value)

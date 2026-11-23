@@ -121,3 +121,37 @@ Abra `abrir_cauce_forms.bat` con doble clic. La primera vez instala lo necesario
 - Ejemplo sintético: `lab_forms/07_listas_personalizadas.html` con `config/formularios/lab_listas_personalizadas.json`.
 - **Identificadores desde una fuente local**: en la vista previa elija «fuente de datos local» e indique su nombre (por defecto `identificadores`). La fuente es un archivo que usted configura en `%LOCALAPPDATA%\CauceForms\fuentes\<nombre>.json` (formato en `sample_data/fuente_identificadores_sintetica.json`). Si no hay registro, el informe dice exactamente qué falta; nada se inventa.
 - **Reutilización**: tras la primera aprobación, el perfil se guarda en `%LOCALAPPDATA%\CauceForms\formularios`. Las siguientes veces, «Preparar autorrellenado» con la misma URL lo usa sin preguntar nada. Si en Descargas hay un perfil revisado más reciente para esa URL, se usa y se aprueba ese. Si el formulario cambió, se detiene (ESTRUCTURA_CAMBIADA) y pide volver a analizar.
+
+### Desplegables hechos con JavaScript (cualquier librería)
+
+El conector no depende de cómo se llame la librería: actúa como una persona y observa. Abre la lista con un clic normal,
+toma como opciones lo que aparece en pantalla en ese momento, elige con un clic (si la lista tiene buscador, escribe el
+texto de la opción) y comprueba que el formulario registró el valor: en el `<select>` real escondido, en el campo oculto,
+en la opción marcada o en el texto que muestra la lista. Reconoce cuatro formas: `<select>` real sustituido por un
+componente, controles con ARIA (`combobox`), campo oculto dentro de un contenedor de lista y elementos con clase de lista.
+Los identificadores que cambian en cada carga no se usan como clave del campo.
+
+Comprobado en local con las librerías reales Select2, Chosen, Tom Select, Choices, SlimSelect, MUI (Select y
+Autocomplete), Ant Design y Element Plus. **No cubierto todavía:** controles dentro de un `iframe` o de Shadow DOM
+(el diagnóstico los cuenta para saber si es el caso).
+
+### Diagnóstico de controles
+
+Cada «Analizar formulario» deja en la carpeta del análisis `diagnostico_controles.json` y `diagnostico_controles.md`.
+Contienen solo la estructura de la página (etiquetas HTML, clases, roles y los rótulos de las opciones), qué controles se
+reconocieron, cuáles parecen controles y no se reconocieron y qué apareció al hacer clic en cada lista. No incluyen
+valores escritos, cookies ni parámetros de la URL. Si un desplegable de un sitio real no se reconoce, ese archivo es la
+evidencia necesaria para corregirlo sin adivinar.
+
+### Fechas
+
+El formato se toma de lo que declara el propio campo: texto de ayuda, atributos de las librerías de calendario
+(`data-date-format`, `data-format`, máscaras), `title`, el texto de ayuda asociado o un ejemplo inequívoco (`31/12/2024`).
+Un ejemplo como `05/06/2024` o una máscara `99/99/9999` no deciden nada: el campo queda en «revisar» y el formato se elige
+en la vista previa. Las fechas de solo lectura que se eligen en un calendario quedan para la persona.
+
+### Volver a analizar sin repetir la configuración
+
+Si ya existe un perfil revisado para la misma URL, «Analizar formulario» lo usa como punto de partida: la vista previa
+aparece con las mismas rutas, formatos de fecha y tablas de equivalencias. Una equivalencia cuya opción ya no existe en el
+formulario queda sin fila (no se sustituye por otra). En consola: `analizar-formulario --perfil-previo <perfil.json>`.

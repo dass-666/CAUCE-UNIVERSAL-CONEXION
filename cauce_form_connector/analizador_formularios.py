@@ -108,17 +108,49 @@ def categoria(f: FieldDescriptor) -> str:
     if t == "number" or t == "range":
         return "numerico"
     texto = " ".join([f.label, f.placeholder, f.name, f.id])
-    if DATE_TEXT_RE.search(texto) or (field_concept(f)[0] in ("fecha", "fecha_nacimiento")):
+    if DATE_TEXT_RE.search(texto) or _formatos_en(f.placeholder + " " + getattr(f, "format_hint", "")) or (field_concept(f)[0] in ("fecha", "fecha_nacimiento")):
         return "fecha_texto"
     if f.inputmode in ("numeric", "decimal") or re.fullmatch(r"\\d\{\d+(,\d+)?\}|\[0-9\]\{\d+(,\d+)?\}", f.pattern or ""):
         return "numerico_texto"
     return "texto"
 
 
+_PARTE = {"d": "dd", "dd": "dd", "j": "dd", "m": "mm", "mm": "mm", "n": "mm", "y": "aaaa", "yyyy": "aaaa", "aaaa": "aaaa"}
+_FMT_RE = re.compile(r"(?<![a-z%])%?(dd?|mm?|j|n|y|yyyy|aaaa)([/\-.])%?(dd?|mm?|j|n|y|yyyy|aaaa)\2%?(dd?|mm?|j|n|y|yyyy|aaaa)(?![a-z])", re.I)
+_EJEMPLO_RE = re.compile(r"(?<!\d)(\d{1,4})([/\-.])(\d{1,2})\2(\d{1,4})(?!\d)")
+
+
+def _formatos_en(texto: str) -> set[str]:
+    """Formatos de fecha que el texto declara sin ambigüedad: por letras (dd/mm/aaaa, d/m/Y, %d/%m/%Y) o por un ejemplo
+    cuyo día es mayor que 12 (31/12/2024). Un ejemplo como 05/06/2024 no decide nada y no se cuenta."""
+    out: set[str] = set()
+    for m in _FMT_RE.finditer(texto):
+        partes = [_PARTE[g.lower()] for g in (m.group(1), m.group(3), m.group(4))]
+        if sorted(partes) == ["aaaa", "dd", "mm"]:
+            out.add(m.group(2).join(partes))
+    for m in _EJEMPLO_RE.finditer(texto):
+        a, sep, b, c = m.group(1), m.group(2), int(m.group(3)), m.group(4)
+        if len(a) == 4 and len(c) <= 2:
+            if 1 <= b <= 12 and 1 <= int(c) <= 31:
+                out.add(sep.join(["aaaa", "mm", "dd"]))
+        elif len(c) == 4 and len(a) <= 2:
+            x = int(a)
+            if x > 12 and x <= 31 and 1 <= b <= 12:
+                out.add(sep.join(["dd", "mm", "aaaa"]))
+            elif b > 12 and b <= 31 and 1 <= x <= 12:
+                out.add(sep.join(["mm", "dd", "aaaa"]))
+    return out
+
+
 def _formato_fecha_texto(f: FieldDescriptor) -> str:
-    m = re.search(r"(dd|mm|aaaa|yyyy)([/\-.])(dd|mm|aaaa|yyyy)\2(dd|mm|aaaa|yyyy)", f.placeholder + " " + f.label, re.I)
-    if m:
-        return m.group(0).lower()
+    """Formato que el propio campo declara. Se mira primero lo más cercano al campo; si dos pistas del mismo nivel se
+    contradicen, no se elige ninguna (se informa como ambiguo)."""
+    for texto in (f.placeholder, getattr(f, "format_hint", ""), f.label + " " + f.aria_label):
+        fs = _formatos_en(texto or "")
+        if len(fs) == 1:
+            return fs.pop()
+        if len(fs) > 1:
+            return ""
     # pattern AAAA-MM-DD es inequívoco; \d{2}/\d{2}/\d{4} NO (día/mes o mes/día): no se adivina
     if re.fullmatch(r"\\d\{4\}-\\d\{2\}-\\d\{2\}|\[0-9\]\{4\}-\[0-9\]\{2\}-\[0-9\]\{2\}", f.pattern or ""):
         return "aaaa-mm-dd"
@@ -170,6 +202,11 @@ def analizar_url(url: str, *, autorizado: bool, settings: Optional[Settings] = N
         if not analisis.safety.blocked:   # listas JavaScript que solo muestran sus opciones al abrirlas (clic normal)
             from .listas import completar_opciones
             completar_opciones(s.page, analisis.all_fields)
+        try:                              # evidencia de cómo están hechos los controles (lo último: puede abrir listas)
+            from . import diagnostico_controles as DC
+            diagnostico = DC.recoger(s, analisis)
+        except Exception as exc:
+            diagnostico = {"formato": "cauce.diagnostico_controles.v1", "errores": [type(exc).__name__]}
         inicial = s.initial_html
         if inicial is None and urlsplit(url_ok).scheme == "file":
             from urllib.request import url2pathname
@@ -178,7 +215,9 @@ def analizar_url(url: str, *, autorizado: bool, settings: Optional[Settings] = N
             except OSError:
                 inicial = None
     estatico = analyze_html(inicial) if inicial is not None else None
-    return construir_informe(analisis, extra, url_ok, expediente=expediente, estatico=estatico, nombre=nombre)
+    inf = construir_informe(analisis, extra, url_ok, expediente=expediente, estatico=estatico, nombre=nombre)
+    inf["_diagnostico_controles"] = dict(diagnostico, url=inf["url"])       # se guarda en un archivo aparte
+    return inf
 
 
 # --------------------------------------------------------------------------- informe (puro, sin navegador)
@@ -336,6 +375,9 @@ def _decidir(r: dict, f: FieldDescriptor, rec: dict, plano: dict, analisis: Anal
 
     if cat == "archivo" and not (f.disabled or f.readonly):
         return fija("humano", "adjuntar archivos lo hace la persona")
+    if cat in ("fecha", "fecha_texto") and f.readonly and not f.disabled and f.visible:
+        return fija("humano", "fecha de solo lectura: se elige en el calendario de la página y no admite escritura; "
+                              "la completa la persona")
     if cat in ("oculto_tecnico", "boton") or not f.fillable:
         return fija("ignorado", "no editable por la persona (oculto, botón, deshabilitado o solo lectura)")
     if cat == "contrasena":
@@ -459,12 +501,36 @@ def vista_previa_html(inf: dict) -> str:
     return PLANTILLA_HTML.replace("__TITULO__", titulo).replace("__DATOS__", datos)
 
 
+def adjuntar_perfil_previo(inf: dict, perfil: Any) -> bool:
+    """Añade al informe la configuración de un perfil ya revisado para la MISMA URL (rutas, formatos y equivalencias) para
+    que la vista previa la proponga ya rellenada. No contiene datos del expediente. Devuelve si se adjuntó."""
+    if not isinstance(perfil, dict):
+        return False
+    limpia = lambda u: str(u or "").split("#")[0].split("?")[0].rstrip("/")
+    if limpia(perfil.get("url")) != limpia(inf.get("perfil_borrador", {}).get("url")):
+        return False
+    previo = {k: perfil[k] for k in ("campos_formulario", "campos_expediente", "equivalencias", "formatos_fecha")
+              if isinstance(perfil.get(k), dict)}
+    if not previo.get("campos_formulario") or not previo.get("campos_expediente"):
+        return False
+    inf["perfil_previo"] = previo
+    return True
+
+
 def guardar(inf: dict, carpeta: str | Path) -> dict[str, str]:
     d = Path(carpeta)
     d.mkdir(parents=True, exist_ok=True)
     rutas = {"informe_json": d / "informe.json", "informe_md": d / "informe.md",
              "perfil": d / "perfil_borrador.json", "vista_previa": d / "vista_previa.html"}
     b = lambda s: s.encode("utf-8")
+    inf = dict(inf)
+    diag = inf.pop("_diagnostico_controles", None)
+    if diag:                    # estructura de los controles, sin valores: sirve para terminar una corrección
+        from . import diagnostico_controles as DC
+        rutas["diagnostico_json"] = d / "diagnostico_controles.json"
+        rutas["diagnostico_md"] = d / "diagnostico_controles.md"
+        rutas["diagnostico_json"].write_bytes(b(json.dumps(diag, ensure_ascii=False, indent=2) + "\n"))
+        rutas["diagnostico_md"].write_bytes(b(DC.resumen_markdown(diag)))
     rutas["informe_json"].write_bytes(b(json.dumps(inf, ensure_ascii=False, indent=2) + "\n"))
     rutas["informe_md"].write_bytes(b(informe_markdown(inf)))
     rutas["perfil"].write_bytes(b(json.dumps(inf["perfil_borrador"], ensure_ascii=False, indent=2) + "\n"))
@@ -519,13 +585,28 @@ const filas = INF.campos.filter((c) => c.nombre_logico);
 const EQ = Object.fromEntries((INF.perfil_borrador._borrador.equivalencias_pendientes || []).map((e) => [e.clave_campo, e]));
 const ESQ = INF.expediente.esquema;
 const FORMATOS = ["AAAA-MM-DD", "DD/MM/AAAA", "DD-MM-AAAA", "DD.MM.AAAA", "MM/DD/AAAA", "AAAA/MM/DD"];
+// Perfil ya aprobado para esta misma URL: se conservan sus rutas, formatos y equivalencias para no repetir la
+// configuración. Se empareja por clave de campo o por nombre lógico; lo que ya no exista en el formulario no se rellena.
+const PREV = INF.perfil_previo || null;
+const previo = (c) => {
+  if (!PREV) return null;
+  const cf = PREV.campos_formulario || {};
+  const n = Object.keys(cf).find((k) => cf[k] === c.clave) || (cf[c.nombre_logico] !== undefined ? c.nombre_logico : null);
+  if (!n || !(PREV.campos_expediente || {})[n]) return null;
+  return {ruta: PREV.campos_expediente[n], formato: (PREV.formatos_fecha || {})[n] || "", eq: (PREV.equivalencias || {})[n] || null};
+};
 $("#filas").innerHTML = filas.map((c, i) => {
   const p = c.propuesta || {};
-  const opts = ['<option value="">— sin dato —</option>'].concat(rutas.map((r) => `<option ${r === p.ruta_expediente ? "selected" : ""}>${esc(r)}</option>`),
-    ['<option value="@manual">captura manual (se escribe al rellenar, un solo uso)</option>',
-     '<option value="@fuente">fuente de datos local (identificador configurado)</option>']).join("");
-  const fu = ["texto", "numerico_texto"].includes(c.categoria) ? `<br><label class="mut">fuente: <input type="text" data-fu="${i}" value="identificadores" size="14"></label>` : "";
-  const fmtDet = String(c.validaciones.formato_fecha || "").toUpperCase().replace(/YYYY/g, "AAAA");
+  const pv = previo(c);
+  const rutaPv = pv ? (pv.ruta.startsWith("@fuente") ? "@fuente" : pv.ruta) : "";
+  const usaPv = !!pv && (rutas.includes(rutaPv) || rutaPv === "@manual" || rutaPv === "@fuente");
+  const rutaSel = usaPv ? rutaPv : p.ruta_expediente;
+  const opts = ['<option value="">— sin dato —</option>'].concat(rutas.map((r) => `<option ${r === rutaSel ? "selected" : ""}>${esc(r)}</option>`),
+    [`<option value="@manual" ${rutaSel === "@manual" ? "selected" : ""}>captura manual (se escribe al rellenar, un solo uso)</option>`,
+     `<option value="@fuente" ${rutaSel === "@fuente" ? "selected" : ""}>fuente de datos local (identificador configurado)</option>`]).join("");
+  const fuPv = usaPv && rutaPv === "@fuente" ? pv.ruta.split(":").slice(1).join(":") : "";
+  const fu = ["texto", "numerico_texto"].includes(c.categoria) || fuPv ? `<br><label class="mut">fuente: <input type="text" data-fu="${i}" value="${esc(fuPv || "identificadores")}" size="14"></label>` : "";
+  const fmtDet = (usaPv && pv.formato) || String(c.validaciones.formato_fecha || "").toUpperCase().replace(/YYYY/g, "AAAA");
   const fmt = c.categoria === "fecha_texto" ? `<br><label class="mut">formato: <select data-fmt="${i}">` +
     ['<option value="">— no detectado: elija —</option>'].concat(FORMATOS.map((f) => `<option ${f === fmtDet ? "selected" : ""}>${f}</option>`)).join("") + `</select></label>` : "";
   const val = Object.entries(c.validaciones).map(([k, v]) => `${esc(k)}=${esc(Array.isArray(v) ? v.join("; ") : v)}`)
@@ -534,16 +615,24 @@ $("#filas").innerHTML = filas.map((c, i) => {
   const eq = EQ[c.clave];
   let tabla = "";
   if (eq) {
-    const opsF = ['<option value="">— sin fila —</option>'].concat(eq.opciones_formulario.map((o) => `<option value="${esc(o.valor)}">${esc(o.etiqueta)} (${esc(o.valor)})</option>`)).join("");
-    const cods = Array.isArray(eq.codigos_monitor) ? eq.codigos_monitor : ["", "", ""];
-    tabla = `<tr class="eq"><td></td><td colspan="7"><b>Tabla de equivalencias</b> (${esc(eq.campo_monitor)} de Monitor → opción del formulario). Solo las filas llenas se usan; un código sin fila lo completa la persona.<br>` +
-      cods.map((cd, k) => `<div>${Array.isArray(eq.codigos_monitor) ? `<code>${esc(cd)}</code>` : `<input type="text" placeholder="código de Monitor" data-eqc="${i}-${k}">`} → <select data-eqv="${i}-${k}" data-cod="${esc(cd)}">${opsF}</select></div>`).join("") + `</td></tr>`;
+    // Equivalencias ya aprobadas: solo se conservan si son del mismo campo de Monitor y la opción sigue existiendo
+    const ant = usaPv && pv.eq && pv.eq.campo_monitor === eq.campo_monitor ? (pv.eq.valores || {}) : {};
+    const existe = new Set(eq.opciones_formulario.map((o) => String(o.valor)));
+    const opsF = (sel) => ['<option value="">— sin fila —</option>'].concat(eq.opciones_formulario.map((o) => `<option value="${esc(o.valor)}" ${sel !== undefined && String(o.valor) === String(sel) ? "selected" : ""}>${esc(o.etiqueta)} (${esc(o.valor)})</option>`)).join("");
+    const fijos = Array.isArray(eq.codigos_monitor);
+    const cods = fijos ? eq.codigos_monitor : Object.keys(ant).concat(["", "", ""]);
+    const perdidas = Object.keys(ant).filter((k) => !existe.has(String(ant[k]))).length;
+    tabla = `<tr class="eq"><td></td><td colspan="7"><b>Tabla de equivalencias</b> (${esc(eq.campo_monitor)} de Monitor → opción del formulario). Solo las filas llenas se usan; un código sin fila lo completa la persona.` +
+      (Object.keys(ant).length ? ` <span class="mut">Se conservaron ${Object.keys(ant).length - perdidas} equivalencias del perfil aprobado${perdidas ? `; ${perdidas} ya no tienen su opción en el formulario y quedan sin fila` : ""}.</span>` : "") + `<br>` +
+      cods.map((cd, k) => `<div>${fijos ? `<code>${esc(cd)}</code>` : `<input type="text" placeholder="código de Monitor" data-eqc="${i}-${k}" value="${esc(cd)}">`} → <select data-eqv="${i}-${k}" data-cod="${esc(cd)}">${opsF(cd !== "" ? ant[cd] : undefined)}</select></div>`).join("") + `</td></tr>`;
   }
-  return `<tr><td><input type="checkbox" data-i="${i}" ${c.decision === "automatico" ? "checked" : ""} ${bloqueado ? "disabled" : ""}></td>
+  const marcado = c.decision === "automatico" || (usaPv && c.decision !== "ignorado" && !bloqueado);
+  const motivo = usaPv ? "configuración conservada del perfil aprobado para esta URL · " + c.motivo : c.motivo;
+  return `<tr><td><input type="checkbox" data-i="${i}" ${marcado ? "checked" : ""} ${bloqueado ? "disabled" : ""}></td>
   <td><b>${esc(c.etiqueta || c.name || c.clave)}</b>${c.obligatorio ? " *" : ""}<br><span class="mut">${esc(c.nombre_logico)}</span></td>
   <td><code>${esc(c.selector)}</code></td><td>${esc(c.categoria)}<br><span class="mut">${esc(c.tipo)}</span></td><td>${val || "—"}</td>
   <td><select data-r="${i}" ${bloqueado ? "disabled" : ""}>${opts}</select>${fmt}${fu}</td>
-  <td class="d-${esc(c.decision)}">${esc(c.decision)}</td><td>${esc(c.motivo)}</td></tr>` + tabla;
+  <td class="d-${esc(c.decision)}">${esc(c.decision)}</td><td>${esc(motivo)}</td></tr>` + tabla;
 }).join("");
 function perfil() {
   const base = JSON.parse(JSON.stringify(INF.perfil_borrador));

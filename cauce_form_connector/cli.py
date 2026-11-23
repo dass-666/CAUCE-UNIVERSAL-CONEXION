@@ -103,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
                       help="expediente SINTÉTICO con el modelo de Monitor (solo se mira si hay dato, nunca se muestra)")
     p_az.add_argument("--salida", help="carpeta de resultados (por defecto informes/analisis_<formulario>_<fecha>)")
     p_az.add_argument("--nombre", default="", help="nombre legible del formulario")
+    p_az.add_argument("--perfil-previo", help="perfil ya revisado de esta misma URL: la vista previa conserva sus rutas, "
+                                              "formatos de fecha y equivalencias para no repetir la configuración")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")
     source(p_fi)
     p_fi.add_argument("--data", required=True)
@@ -260,6 +262,15 @@ def _analizar_formulario(args: argparse.Namespace, settings: Any) -> int:
         return 3
     carpeta = args.salida or str(Path("informes") / ("analisis_" + inf["perfil_borrador"]["perfil"].removeprefix("perfil_")
                                                      + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")))
+    if args.perfil_previo:
+        try:
+            previo = json.loads(Path(args.perfil_previo).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            previo = None
+        if A.adjuntar_perfil_previo(inf, previo):
+            print("Se conservó la configuración del perfil anterior de esta URL (revísela en la vista previa).")
+        else:
+            print("Aviso: el perfil anterior no es de esta URL o no se pudo leer; no se usó.")
     rutas = A.guardar(inf, carpeta)
     r = inf["resumen"]
     print(f"Formulario: {inf['url']}")

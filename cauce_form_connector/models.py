@@ -55,6 +55,7 @@ class FieldDescriptor:
     form_key: str = ""
     confirms: str = ""            # key del campo que este campo confirma (email2 -> email)
     blocks_paste: bool = False    # el campo tiene onpaste (solo informativo)
+    format_hint: str = ""         # pistas de formato de la página (data-date-format, máscara, ayuda); no entra en la firma
 
     @property
     def is_text(self) -> bool:
