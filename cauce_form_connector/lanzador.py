@@ -20,12 +20,13 @@ import sys
 import threading
 import webbrowser
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlsplit
 
 RAIZ = Path(__file__).resolve().parents[1]
 EXPEDIENTE_SINTETICO = RAIZ / "sample_data" / "expediente_monitor_sintetico.json"
 LOCALES = {"localhost", "127.0.0.1"}
+ES_WINDOWS = os.name == "nt"
 REVISOR = "rev_usuario_local"   # quien usa la ventana revisa el perfil en la vista previa antes de autorrellenar
 
 
@@ -33,7 +34,7 @@ def paquete_python_store() -> str:
     """Nombre de familia del paquete si este Python es el de Microsoft Store (p. ej.
     «PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0»); "" en otro caso."""
     for ruta in (sys.base_prefix, getattr(sys, "_base_executable", ""), sys.executable):
-        for parte in Path(ruta or "").parts:
+        for parte in PureWindowsPath(ruta or "").parts:   # rutas de Windows, también al probar en Linux
             if parte.startswith("PythonSoftwareFoundation.") and "_" in parte:
                 trozos = parte.split("_")          # Nombre_Versión_Arq__Editor o Nombre_Editor
                 return f"{trozos[0]}_{trozos[-1]}"
@@ -45,7 +46,7 @@ def localappdata_real() -> str:
     %LOCALAPPDATA% a %LOCALAPPDATA%\\Packages\\<paquete>\\LocalCache\\Local, así que Chromium o el Explorador no
     encontrarían la ruta «normal». Si existe la carpeta redirigida, se usa esa (los datos siguen donde están)."""
     base = os.environ.get("LOCALAPPDATA", "")
-    paquete = paquete_python_store() if (base and os.name == "nt") else ""
+    paquete = paquete_python_store() if (base and ES_WINDOWS) else ""
     if paquete:
         real = Path(base) / "Packages" / paquete / "LocalCache" / "Local"
         if (real / "CauceForms").exists() or not (Path(base) / "CauceForms").exists():

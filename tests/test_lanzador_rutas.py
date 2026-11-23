@@ -22,6 +22,6 @@ def test_usa_carpeta_redirigida_existente(monkeypatch, tmp_path):
     real = tmp_path / "Packages" / paquete / "LocalCache" / "Local"
     (real / "CauceForms").mkdir(parents=True)
     monkeypatch.setattr(lanzador, "paquete_python_store", lambda: paquete)
-    monkeypatch.setattr(lanzador.os, "name", "nt")
+    monkeypatch.setattr(lanzador, "ES_WINDOWS", True)   # no se cambia os.name: rompería pathlib en Linux
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     assert Path(lanzador.localappdata_real()) == real
