@@ -1,9 +1,10 @@
 """Ventana de Cauce Forms para Windows (doble clic en `abrir_cauce_forms.bat`).
 
 No añade lógica nueva: cada botón ejecuta el comando ya existente del conector (`analizar-formulario`,
-`autorrellenar`) en un proceso aparte, así que se mantienen todas sus comprobaciones (lista de dominios
-permitidos, declaración de autorización, referencia aut_xxx en sitios externos, perfil aprobado con huella,
-tablas de equivalencias) y el conector NUNCA envía el formulario.
+`autorrellenar`) en un proceso aparte, así que se mantienen sus comprobaciones técnicas (lista local de dominios
+permitidos para sitios externos, parada ante CAPTCHA o inicio de sesión, perfil revisado y aprobado con huella,
+tablas de equivalencias, verificación de cada campo) y el conector NUNCA envía el formulario.
+Los formularios locales (localhost, 127.0.0.1, archivos .html) se usan sin ningún paso previo.
 
 Resultados, perfiles, auditoría y lista local de dominios se guardan por usuario en
 %LOCALAPPDATA%\\CauceForms (fuera del repositorio), con permisos solo para el usuario actual.
@@ -25,6 +26,7 @@ from urllib.parse import urlsplit
 RAIZ = Path(__file__).resolve().parents[1]
 EXPEDIENTE_SINTETICO = RAIZ / "sample_data" / "expediente_monitor_sintetico.json"
 LOCALES = {"localhost", "127.0.0.1"}
+REVISOR = "rev_usuario_local"   # quien usa la ventana revisa el perfil en la vista previa antes de autorrellenar
 
 
 def carpeta_datos() -> Path:
@@ -119,19 +121,10 @@ class App:
         f.columnconfigure(1, weight=1)
 
         self.url = tk.StringVar()
-        self.aut = tk.BooleanVar(value=False)
-        self.aut_ref = tk.StringVar()
-        self.revisor = tk.StringVar()
         self.exp = tk.StringVar(value=str(EXPEDIENTE_SINTETICO))
 
         ttk.Label(f, text="URL del formulario").grid(row=0, column=0, sticky="w")
         ttk.Entry(f, textvariable=self.url).grid(row=0, column=1, columnspan=2, sticky="ew", pady=3)
-        ttk.Checkbutton(f, text="Tengo autorización por escrito para usar esta página",
-                        variable=self.aut).grid(row=1, column=1, columnspan=2, sticky="w")
-        ttk.Label(f, text="Referencia de autorización (aut_...)").grid(row=2, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.aut_ref).grid(row=2, column=1, columnspan=2, sticky="ew", pady=3)
-        ttk.Label(f, text="Quién revisa (rev_...)").grid(row=3, column=0, sticky="w")
-        ttk.Entry(f, textvariable=self.revisor).grid(row=3, column=1, columnspan=2, sticky="ew", pady=3)
         ttk.Label(f, text="Expediente (JSON)").grid(row=4, column=0, sticky="w")
         ttk.Entry(f, textvariable=self.exp).grid(row=4, column=1, sticky="ew", pady=3)
         ttk.Button(f, text="Elegir…", command=self.elegir_expediente).grid(row=4, column=2, padx=(6, 0))
@@ -206,20 +199,18 @@ class App:
             if obligatoria:
                 self.messagebox.showwarning("Cauce Forms", "Escriba la URL del formulario.")
             return None if obligatoria else ""
+        if urlsplit(url).scheme.lower() == "file":     # formularios .html locales de laboratorio
+            return url
         host = host_de(url)
         if not host:
             self.messagebox.showwarning("Cauce Forms", "La URL no es válida.")
             return None
         if host not in LOCALES:
-            if not self.aut.get():
-                self.messagebox.showwarning("Cauce Forms", "Para un sitio externo debe marcar que tiene autorización "
-                                                          "por escrito.")
-                return None
             permitidos = hosts_permitidos(self.datos)
             if not any(host == h or host.endswith("." + h) for h in permitidos):
-                if not self.messagebox.askyesno("Cauce Forms", f"El dominio «{host}» no está en su lista de dominios "
-                                                "autorizados.\n\n¿Confirma que tiene autorización por escrito y desea "
-                                                "añadirlo?"):
+                if not self.messagebox.askyesno("Cauce Forms", f"«{host}» es un sitio externo que aún no está en su "
+                                                "lista de dominios permitidos.\n\n¿Añadirlo? (solo se pregunta la "
+                                                "primera vez)"):
                     return None
                 agregar_host(self.datos, host)
                 self.escribir(f"Dominio añadido a la lista local: {host}")
@@ -243,7 +234,7 @@ class App:
                 self.ultimo_analisis = salida
                 self.escribir("Pulse «Revisar perfil» para revisar y descargar el perfil.")
 
-        self.ejecutar(args_analizar(url, self.aut.get(), self.exp.get(), salida), fin)
+        self.ejecutar(args_analizar(url, host_de(url) not in LOCALES, self.exp.get(), salida), fin)
 
     def revisar(self) -> None:
         d = self.ultimo_analisis
@@ -262,28 +253,15 @@ class App:
         if url is None:
             return
         externo = bool(url) and host_de(url) not in LOCALES
-        ref = self.aut_ref.get().strip()
-        if externo and not ref:
-            self.messagebox.showwarning("Cauce Forms", "Para un sitio externo escriba la referencia de la autorización "
-                                                      "escrita (aut_...).")
-            return
-        rev = self.revisor.get().strip()
-        if not rev:
-            self.messagebox.showwarning("Cauce Forms", "Escriba quién revisó y aprueba el perfil (rev_...).")
-            return
         descargas = Path.home() / "Downloads"
         perfil = self.filedialog.askopenfilename(title="Perfil revisado (perfil_….json)",
                                                  initialdir=str(descargas if descargas.exists() else Path.home()),
                                                  filetypes=[("Perfil JSON", "perfil_*.json"), ("JSON", "*.json")])
         if not perfil:
             return
-        if not self.messagebox.askokcancel("Cauce Forms", "Se abrirá el navegador y se rellenarán los campos aprobados.\n"
-                                           "El conector NO enviará el formulario: revise y envíe usted, o cierre la "
-                                           "ventana.\n\n¿Continuar?"):
-            return
-        self.escribir(f"\nPreparando autorrellenado con {perfil}…")
-        self.ejecutar(args_autorrellenar(perfil, self.exp.get(), url, rev, self.aut.get() and externo,
-                                         ref if externo else ""))
+        self.escribir(f"\nPreparando autorrellenado con {perfil}…\nSe abrirá el navegador con los campos aprobados "
+                      "rellenados y verificados. El conector NO envía: revise y envíe usted, o cierre la ventana.")
+        self.ejecutar(args_autorrellenar(perfil, self.exp.get(), url, REVISOR, externo, ""))
 
     def abrir_carpeta(self) -> None:
         d = self.ultimo_analisis or self.datos

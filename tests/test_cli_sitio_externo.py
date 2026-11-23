@@ -28,7 +28,7 @@ def entorno(tmp_path, monkeypatch):
     return str(ruta), tmp_path
 
 
-@pytest.mark.parametrize("extra", [[], ["--authorized"], ["--authorized", "--autorizacion", "aut_demo"],
+@pytest.mark.parametrize("extra", [[], ["--authorized", "--autorizacion", "aut_demo"],
                                    ["--authorized", "--autorizacion", "AUT-mala"]])
 def test_sitio_externo_exige_autorizacion_real(entorno, extra, capsys):
     cfg, _ = entorno

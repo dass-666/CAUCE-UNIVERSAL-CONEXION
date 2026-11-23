@@ -106,4 +106,9 @@ Ejemplo en `cmd`: `set CAUCE_TYPING_DELAY_MS=80` antes de `iniciar_windows.bat`.
 
 ## Programa con ventana (doble clic)
 
-Abra `abrir_cauce_forms.bat` con doble clic. La primera vez instala lo necesario. La ventana tiene la URL y los botones «Analizar formulario», «Revisar perfil» y «Preparar autorrellenado». Los resultados se guardan en `%LOCALAPPDATA%\CauceForms` (solo para su usuario, fuera de esta carpeta). El conector nunca envía el formulario.
+Abra `abrir_cauce_forms.bat` con doble clic. La primera vez instala lo necesario. Escriba la URL y use «Analizar formulario», «Revisar perfil» y «Preparar autorrellenado»; no pide referencias aut_ ni rev_.
+
+- Formularios locales (localhost, 127.0.0.1, archivos .html): sin pasos previos.
+- Sitios externos: la primera vez que use un dominio, la ventana pregunta una sola vez si añadirlo a su lista local de dominios permitidos. Se siguen deteniendo ante CAPTCHA o inicio de sesión.
+- El perfil se revisa en la vista previa (campos y tablas de equivalencias) y se aprueba al pulsar «Preparar autorrellenado». Cada campo se verifica tras rellenarlo y el conector nunca envía el formulario.
+- Resultados, perfiles y lista de dominios en `%LOCALAPPDATA%\CauceForms` (solo su usuario, fuera de esta carpeta).
