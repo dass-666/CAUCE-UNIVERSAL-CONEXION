@@ -40,7 +40,8 @@ POLL_S = 0.2
 # Un `submit` ocurrido durante esa ventana tras el relleno no se atribuye a una persona (sub-reporta; nunca sobre-reporta).
 GRACIA_ACTIVACION_S = 6.0
 _METODO = {"teclado_secuencial": "teclado_secuencial", "check": "check", "uncheck": "check",
-           "select_option": "seleccion", "fill_nativo": "fecha_nativa", "omitido": "teclado_secuencial"}
+           "select_option": "seleccion", "fill_nativo": "fecha_nativa", "omitido": "teclado_secuencial",
+           "combo_texto": "teclado_secuencial", "combo_opcion": "teclado_secuencial"}   # el combo SIEMPRE se teclea
 
 
 class _Parar(Exception):
@@ -242,7 +243,8 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
         a_clave = {l: integ["campos"][l] for l in sol["campos"]}
         mapping = {clave: logico for logico, clave in a_clave.items()}
         informe = fill_form(sesion, mapping, dict(sol["campos"]), delay_ms=op["pausa_tecla_ms"],
-                            audit=AuditLog(None), allow_late_fields=False)
+                            audit=AuditLog(None), allow_late_fields=False,
+                            equivalences=integ.get("equivalencias") or None)
         if informe.blocked:
             raise _Parar("detenido_intervencion_humana", "INTERVENCION_HUMANA_REQUERIDA")
         por_clave = {r.field_key: r for r in informe.results}
@@ -250,6 +252,8 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
         for logico in sorted(sol["campos"]):
             r = por_clave.get(a_clave[logico])
             estado = r.status if r and r.status in ("ok", "ok_normalizado", "diferente", "invalido") else "invalido"
+            if r and r.status == "pendiente_revision":      # el contrato no tiene este estado: «no confirmado» = diferente
+                estado = "diferente"
             hay_incidencia |= estado not in ("ok", "ok_normalizado")
             campos.append({"campo": logico, "estado": estado, "metodo": _METODO.get(r.method if r else "", "teclado_secuencial"),
                            "caracteres": min(1000, r.keystrokes if r else 0)})

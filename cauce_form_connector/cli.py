@@ -89,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     p_au.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
     p_au.add_argument("--espera-s", type=int, default=300, help="segundos que se mantiene la ventana para la revisión")
     p_au.add_argument("--json", action="store_true", help="salida JSON (respuesta del contrato + informe) en vez de texto")
+    p_ap.add_argument("--equivalencias", help="archivo JSON {clave_de_campo: {dato: opción_de_la_lista}} aprobado por una persona "
+                                              "(combos editables); forma parte del perfil y de su huella SHA-256")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")
     source(p_fi)
     p_fi.add_argument("--data", required=True)
@@ -214,9 +216,10 @@ def _aprobar_perfil(args: argparse.Namespace, settings: Any, policy: UrlPolicy) 
     if analysis.safety.blocked:
         print("La página exige intervención humana; no se aprueba un perfil sobre ella.", file=sys.stderr)
         return 4
+    equivalencias = json.loads(Path(args.equivalencias).read_text(encoding="utf-8")) if args.equivalencias else None
     path, digest = ProfileStore(settings.profiles_dir).save_integration(
         args.perfil, analysis, campos, formulario_id=args.formulario_id, url=args.url.split("?")[0].split("#")[0],
-        aprobado_por_ref=args.aprobado_por)
+        aprobado_por_ref=args.aprobado_por, equivalencias=equivalencias)
     from .signature import structure_signature_v2
     _emit({"perfil": args.perfil, "archivo": str(path), "perfil_sha256": digest,
            "firma_estructura_esperada": structure_signature_v2(analysis.all_fields), "campos": sorted(campos)})

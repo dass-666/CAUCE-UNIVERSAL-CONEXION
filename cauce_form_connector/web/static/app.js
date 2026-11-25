@@ -1,6 +1,6 @@
 // Interfaz de revisión. JavaScript sin dependencias.
 const $ = (s) => document.querySelector(s);
-const state = { tab: "lab", analysis: null, proposals: [], columns: [], rows: 0, mapping: {} };
+const state = { tab: "lab", analysis: null, proposals: [], columns: [], rows: 0, mapping: {}, equivalences: {}, catalog: {} };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -125,7 +125,7 @@ async function loadProfiles() {
 
 $("#btn-guardar").addEventListener("click", async () => {
   try {
-    const r = await postJSON("/api/profiles", { name: $("#perfil-nombre").value, mapping: state.mapping });
+    const r = await postJSON("/api/profiles", { name: $("#perfil-nombre").value, mapping: state.mapping, equivalences: state.equivalences });
     msg($("#perfil-msg"), `Guardado en profiles/${r.saved}`, "ok");
     loadProfiles();
   } catch (e) { msg($("#perfil-msg"), e.message, "error"); }
@@ -137,6 +137,7 @@ $("#btn-cargar").addEventListener("click", async () => {
   try {
     const r = await api("/api/profiles/" + encodeURIComponent(name));
     Object.assign(state.mapping, r.mapping);
+    state.equivalences = r.equivalences || {};
     renderMapping();
     const extra = r.same_structure === false ? ` · El formulario cambió: faltan ${r.missing_fields.length}, nuevos ${r.new_fields.length}.` : "";
     msg($("#perfil-msg"), `Configuración «${name}» aplicada${extra}`, r.same_structure === false ? "aviso" : "ok");
@@ -148,7 +149,7 @@ $("#btn-fill").addEventListener("click", async () => {
   msg($("#fill-msg"), "Escribiendo en el navegador… no toque esa ventana hasta que termine.");
   $("#resultados").innerHTML = "";
   try {
-    const r = await postJSON("/api/fill", { mapping: state.mapping, row_index: +$("#row-sel").value || 0, delay_ms: +$("#delay").value });
+    const r = await postJSON("/api/fill", { mapping: state.mapping, row_index: +$("#row-sel").value || 0, delay_ms: +$("#delay").value, equivalences: state.equivalences });
     const rep = r.report;
     if (rep.blocked) { msg($("#fill-msg"), "No se rellenó: " + rep.blocked_reasons.join(" "), "error"); return; }
     msg($("#fill-msg"), rep.ok ? `Completado y verificado en ${rep.duration_ms} ms. Detenido antes del envío.`
@@ -158,10 +159,52 @@ $("#btn-fill").addEventListener("click", async () => {
         <td>${esc(x.method)}</td><td>${x.keystrokes || ""}</td><td>${esc(x.expected)}</td><td>${esc(x.actual)}</td>
         <td><span class="estado ${esc(x.status)}">${esc(x.status)}</span></td><td><small>${esc(x.detail || x.validation_message || x.page_error)}</small></td></tr>`).join("")}
       </tbody></table>
+      ${renderPendientes(rep.results)}
       ${rep.confirmations.length ? `<h3>Confirmaciones</h3><ul>${rep.confirmations.map((c) => `<li class="${c.match ? "ok" : "error"}">${esc(c.label)}: ${esc(c.detail)}</li>`).join("")}</ul>` : ""}
       ${rep.submit_buttons.length ? `<p>Botón de envío detectado (no pulsado): <strong>${rep.submit_buttons.map(esc).join(", ")}</strong></p>` : ""}`;
     $("#captura").innerHTML = `<img alt="Captura del formulario rellenado" src="/api/screenshot?t=${Date.now()}">`;
   } catch (e) { msg($("#fill-msg"), e.message, "error"); }
+});
+
+// Combos editables: pendientes de revisión y aprobación de equivalencias (dato → opción de la lista)
+function renderPendientes(results) {
+  const pend = results.filter((x) => x.status === "pendiente_revision");
+  if (!pend.length) return "";
+  return `<h3>Pendientes de revisión (listas editables)</h3>
+    <p class="ayuda">El motor probó escribir el dato y no pudo confirmar su valor interno. Si la lista tiene la opción equivalente, elíjala: se guardará como equivalencia aprobada en la configuración.</p>
+    <table><thead><tr><th>Campo</th><th>Dato</th><th>Opción equivalente</th></tr></thead><tbody>
+    ${pend.map((x) => {
+      const ops = (state.catalog[x.field_key] && state.catalog[x.field_key].length ? state.catalog[x.field_key] : x.options_seen) || [];
+      return `<tr><td>${esc(x.label || x.field_key)}</td><td>${esc(x.expected)}</td><td>
+        <select class="eq" data-key="${esc(x.field_key)}" data-val="${esc(x.expected)}"><option value="">— sin equivalencia —</option>
+        ${ops.map((o) => `<option>${esc(o)}</option>`).join("")}</select></td></tr>`;
+    }).join("")}</tbody></table>
+    <button id="btn-equiv">Aprobar equivalencias y volver a rellenar</button>`;
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target && e.target.id === "btn-equiv") {
+    document.querySelectorAll("select.eq").forEach((s) => {
+      if (!s.value) return;
+      (state.equivalences[s.dataset.key] = state.equivalences[s.dataset.key] || {})[s.dataset.val] = s.value;
+    });
+    $("#btn-fill").click();
+  }
+});
+
+$("#btn-catalogo").addEventListener("click", async () => {
+  msg($("#catalogo-msg"), "Abriendo las listas… no toque la ventana del navegador.");
+  try {
+    const r = await postJSON("/api/catalog", {});
+    state.catalog = r.catalog;
+    const keys = Object.keys(r.catalog);
+    msg($("#catalogo-msg"), keys.length ? `${keys.length} lista(s) editable(s) encontrada(s). No se eligió ni escribió nada.` : "No se detectaron listas editables.", keys.length ? "ok" : "aviso");
+    $("#catalogo").innerHTML = keys.map((k) => {
+      const f = fieldByKey(k) || {};
+      const ops = r.catalog[k];
+      return `<details><summary>${esc(f.label || k)} · ${ops.length} opción(es)</summary><small>${ops.map(esc).join(" | ") || "La lista no mostró opciones (puede cargarlas al escribir)."}</small></details>`;
+    }).join("");
+  } catch (e) { msg($("#catalogo-msg"), e.message, "error"); }
 });
 
 $("#btn-enviar").addEventListener("click", async () => {

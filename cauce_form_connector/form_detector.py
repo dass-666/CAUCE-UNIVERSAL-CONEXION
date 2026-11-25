@@ -42,6 +42,8 @@ def _field_from_raw(raw: dict[str, Any], form_key: str) -> FieldDescriptor:
         maxlength=raw.get("maxlength"), min=raw.get("min", ""), max=raw.get("max", ""),
         step=raw.get("step", ""), inputmode=raw.get("inputmode", ""), options=opts,
         form_key=form_key, blocks_paste=bool(raw.get("blocks_paste")),
+        widget=raw.get("widget", "") or "", trigger_selector=raw.get("trigger_selector", "") or "",
+        value_selector=raw.get("value_selector", "") or "",
     )
 
 
@@ -50,7 +52,11 @@ def _group_fields(raw_fields: list[dict[str, Any]], form_key: str) -> list[Field
     out: list[FieldDescriptor] = []
     radio_groups: dict[str, FieldDescriptor] = {}
     hints: dict[int, str] = {}
+    # El campo oculto que guarda el valor interno de un combo es parte del combo: no es un campo propio
+    internos = {r.get("value_selector") for r in raw_fields if r.get("widget") == "combo" and r.get("value_selector")}
     for raw in raw_fields:
+        if raw.get("type") == "hidden" and raw.get("selector") in internos:
+            continue
         if raw.get("type") == "radio" and raw.get("name"):
             name = raw["name"]
             opt = FieldOption(value=raw.get("value", "on"), label=raw.get("label", ""),
@@ -78,10 +84,14 @@ def _group_fields(raw_fields: list[dict[str, Any]], form_key: str) -> list[Field
     return out
 
 
+AUTO_ID_RE = re.compile(r"^(ext-(comp|gen)-?\d+|ember\d+|:r[0-9a-z]+:|react-select-\d+.*)$", re.I)
+
+
 def _assign_keys(fields: list[FieldDescriptor], form_key: str) -> None:
     seen: dict[str, int] = {}
     for i, f in enumerate(fields):
-        base = f.name or f.id or f"campo{i + 1}"
+        stable_id = "" if AUTO_ID_RE.match(f.id or "") else f.id      # un id autogenerado no es una clave estable
+        base = f.name or stable_id or f"campo{i + 1}"
         if f.type == "checkbox" and f.name and sum(1 for x in fields if x.name == f.name) > 1:
             base = f"{f.name}[{f.id or i}]"
         n = seen.get(base, 0)

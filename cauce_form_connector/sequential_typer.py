@@ -118,7 +118,17 @@ class SequentialTyper:
         return self.page.locator(f.selector).first
 
     def type_text(self, f: FieldDescriptor, value: str) -> int:
-        """Escribe `value` tecla a tecla. Devuelve el nº de caracteres enviados."""
+        """Escribe `value` tecla a tecla y sale del campo con Tab. Devuelve el nº de caracteres enviados."""
+        n = self.type_chars(f, value)
+        self.leave_field(f)
+        return n
+
+    def leave_field(self, f: FieldDescriptor) -> None:
+        # Salir del campo con Tab dispara blur/change como haría una persona
+        self.locator(f).press("Tab")
+
+    def type_chars(self, f: FieldDescriptor, value: str) -> int:
+        """Foco, limpieza con teclado y escritura carácter a carácter (sin salir del campo)."""
         loc = self.locator(f)
         if f.tag != "textarea":
             value = re.sub(r"[\r\n]+", " ", value)
@@ -133,8 +143,6 @@ class SequentialTyper:
             self._press_char(ch)
             if self.delay_ms and i < len(value) - 1:
                 self.page.wait_for_timeout(self.delay_ms)
-        # Salir del campo con Tab dispara blur/change como haría una persona
-        loc.press("Tab")
         return len(value)
 
     def set_choice(self, f: FieldDescriptor, value: str) -> tuple[str, str]:
@@ -170,6 +178,9 @@ class SequentialTyper:
         return v
 
     def apply(self, f: FieldDescriptor, value: str) -> dict[str, Any]:
+        if f.is_text and f.widget == "combo":
+            from .combo import fill_combo
+            return fill_combo(self, f, re.sub(r"[\r\n]+", " ", value))
         if f.is_text:
             n = self.type_text(f, value)
             applied = value if f.tag == "textarea" else re.sub(r"[\r\n]+", " ", value)

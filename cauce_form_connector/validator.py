@@ -77,7 +77,30 @@ def read_state(page: Any, f: FieldDescriptor) -> dict[str, Any]:
     return page.locator(f.selector).first.evaluate(READ_STATE_JS)
 
 
+def _verify_combo(page: Any, f: FieldDescriptor, result: FieldResult, expected_applied: str) -> FieldResult:
+    from .combo import judge_combo, read_combo
+    try:
+        st = read_combo(page, f)
+        base = read_state(page, f)
+    except Exception as exc:
+        result.status, result.detail = "error", f"no se pudo leer el campo: {type(exc).__name__}"
+        return result
+    result.actual = st["text"]
+    result.valid_html5, result.validation_message = base["valid"], base["message"]
+    result.page_error = base["pageError"]
+    status, detail, internal = judge_combo(f, st, expected_applied, result.selection, result.option_value)
+    result.internal = internal
+    if status.startswith("ok") and (base["valid"] is False or base["pageError"] or base["ariaInvalid"]):
+        status, detail = "invalido", base["pageError"] or base["message"] or "la página marca el campo como no válido"
+    if status.startswith("ok") and result.pending:       # el motor ya dudó (sin coincidencia exacta): sigue pendiente
+        status, detail = "pendiente_revision", result.pending
+    result.status, result.detail = status, detail      # el detalle de una verificación anterior no se arrastra
+    return result
+
+
 def verify_field(page: Any, f: FieldDescriptor, result: FieldResult, expected_applied: str) -> FieldResult:
+    if f.widget == "combo":
+        return _verify_combo(page, f, result, expected_applied)
     try:
         st = read_state(page, f)
     except Exception as exc:  # el campo desapareció tras otra interacción

@@ -69,3 +69,28 @@ Analizar y rellenar páginas de terceros por URL es la parte de mayor riesgo del
 | Baja | Resolvedor de IA opcional (modelo local p. ej. vía Ollama, o API de pago) | Reduce correcciones manuales en formularios raros | Bajo de programar; coste por uso si es de pago | Solo si las correcciones manuales resultan frecuentes; los perfiles guardados ya cubren formularios repetidos |
 | Baja | Controles personalizados (React-Select, datepickers) mediante «adaptadores» por librería | Cobertura | Alto (uno por librería) | Bajo demanda |
 | Baja | Empaquetado `.exe` (PyInstaller) | Instalación sin Python | Medio; Chromium pesa | Solo si hay usuarios no técnicos |
+
+## Combos editables (cuadro de texto + lista) — añadido en esta rama
+
+Qué hace el motor (genérico, sin reglas por URL): detecta controles con ARIA `combobox`, `list=`/datalist o una flecha/botón
+junto al cuadro (Ext JS 3.x `x-form-trigger`, etc.), **teclea** el dato, elige la opción exacta si aparece una lista, o
+conserva texto libre si no hay lista, y verifica el **valor interno** (campo oculto hermano; en Ext JS también
+`getValue()`/`findRecord` del componente). Texto visible sin valor interno ⇒ `pendiente_revision`, nunca éxito.
+
+Estado de la verificación **[V]** = con prueba en este repositorio; **[P]** = pendiente:
+- [V] Emulación del DOM/comportamiento de `Ext.form.ComboBox` 3.4 (`lab_forms/05_combos_extjs.html`): `hiddenName`,
+  `forceSelection` verdadero/falso, `typeAhead`, consulta remota con retardo, combo no editable, y un combo ARIA sin campo oculto.
+- **[P] No se probó con la biblioteca Ext JS real** (no había red ni copia local; además es GPL y no se incluye). La emulación
+  puede diferir de la biblioteca en detalles (estructura exacta de la lista, eventos, paginación). Hay que validar en la MSI.
+- [P] Listas que cargan por páginas o solo tras acciones adicionales: el catálogo descubierto puede ser parcial.
+- [P] Controles personalizados sin campo oculto ni componente legible: solo se comprueba que el texto se conserva tras salir
+  del campo y sin marca de error; no hay forma genérica de saber si el modelo interno lo registró.
+- [P] Iframes y Shadow DOM siguen sin analizarse.
+- Los campos de **autenticación** (contraseña, OTP, token) nunca se escriben. Los de **consentimiento** no se marcan en la
+  estrategia automática (campos sin correspondencia aprobada); una correspondencia aprobada por una persona sí los marca, como antes.
+- Una equivalencia aprobada (dato → opción) se guarda en el perfil. En perfiles de integración cambia la huella SHA-256:
+  Monitor debe fijar la nueva. Contienen valores de catálogo (p. ej. «DF» → «Ciudad de México»): revíselos antes de compartir un perfil.
+- `preparar` sigue cerrando el navegador cuando hay incidencias (`preparado_con_incidencias`): un combo pendiente no se puede
+  corregir en esa ventana. Cambiarlo altera el contrato con Monitor y se deja como decisión.
+- Los ids autogenerados (`ext-comp-1002`, etc.) ya no se usan para claves ni selectores; los perfiles de formularios que
+  dependían de ellos tendrían que aprobarse de nuevo.

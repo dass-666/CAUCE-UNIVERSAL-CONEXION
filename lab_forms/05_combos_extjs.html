@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Laboratorio 5 · Combos editables (emulación de Ext JS 3.4)</title>
+<link rel="stylesheet" href="lab.css">
+<style>
+  .x-form-item{margin:.6rem 0} .x-form-item-label{display:block;font-weight:600}
+  .x-form-field-wrap{position:relative;display:inline-block}
+  .x-form-text{width:260px;padding:.35rem} .x-form-trigger{display:inline-block;width:22px;height:26px;background:#ccd;vertical-align:middle;cursor:pointer}
+  .x-form-invalid{border-color:#c00!important;background:#fee}
+  .x-combo-list{position:absolute;background:#fff;border:1px solid #888;z-index:9000;min-width:260px}
+  .x-combo-list-item{padding:3px 6px;cursor:pointer} .x-combo-selected{background:#cde}
+  ul.opciones{position:absolute;margin:0;padding:0;list-style:none;border:1px solid #888;background:#fff;z-index:9000;min-width:260px}
+  ul.opciones li{padding:3px 6px;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+  <h1>Laboratorio 5 · Combos editables</h1>
+  <p>Emulación fiel del DOM y del comportamiento de <code>Ext.form.ComboBox</code> 3.4 (campo oculto <code>hiddenName</code>,
+  flecha <code>x-form-trigger</code>, lista <code>x-combo-list-item</code> añadida a <code>body</code>, <code>forceSelection</code>,
+  <code>typeAhead</code>, consulta remota con retardo). No es la biblioteca Ext JS.</p>
+  <form id="ext_form" method="post" action="/enviar" onsubmit="document.getElementById('resultado').textContent='ENVIADO'; return false;">
+    <div class="x-form-item"><label for="nombre" class="x-form-item-label">Nombre completo:</label>
+      <input type="text" id="nombre" name="nombre" class="x-form-text x-form-field" autocomplete="off"></div>
+    <div class="x-form-item"><label for="correo" class="x-form-item-label">Correo electrónico:</label>
+      <input type="text" id="correo" name="correo" class="x-form-text x-form-field" autocomplete="off"></div>
+
+    <div class="x-form-item"><label for="ext-comp-1002" class="x-form-item-label">País:</label>
+      <div class="x-form-field-wrap x-form-field-trigger-wrap" data-combo="pais"></div></div>
+    <div class="x-form-item"><label for="ext-comp-1003" class="x-form-item-label">Estado o provincia:</label>
+      <div class="x-form-field-wrap x-form-field-trigger-wrap" data-combo="estado"></div></div>
+
+    <div class="x-form-item"><label for="municipio" class="x-form-item-label">Municipio (ARIA combobox):</label>
+      <div style="position:relative;display:inline-block"><input type="text" id="municipio" name="municipio" role="combobox" aria-autocomplete="list" aria-expanded="false" class="x-form-text" autocomplete="off"></div></div>
+
+    <div class="x-form-item"><label for="tipo" class="x-form-item-label">Tipo de trámite:</label>
+      <select id="tipo" name="tipo"><option value="">—</option><option value="alta">Alta</option><option value="baja">Baja</option></select></div>
+    <div class="x-form-item"><label for="cp" class="x-form-item-label">Código postal:</label>
+      <input type="text" id="cp" name="cp" class="x-form-text x-form-field" maxlength="5" autocomplete="off"></div>
+    <div class="x-form-item"><label for="notas" class="x-form-item-label">Observaciones:</label>
+      <textarea id="notas" name="notas" rows="2" class="x-form-text"></textarea></div>
+
+    <div class="x-form-item"><label for="region" class="x-form-item-label">Región (combo no editable):</label>
+      <div class="x-form-field-wrap x-form-field-trigger-wrap" data-combo="region"></div></div>
+    <div class="x-form-item"><label for="clave" class="x-form-item-label">Contraseña:</label>
+      <input type="password" id="clave" name="clave" class="x-form-text"></div>
+    <div class="x-form-item"><label><input type="checkbox" id="acepta" name="acepta"> Acepto los términos y condiciones</label></div>
+    <input type="hidden" name="token_csrf" value="zz-no-tocar">
+    <button type="submit" id="enviar">Guardar</button>
+    <div id="resultado" role="status"></div>
+  </form>
+</main>
+<script>
+(function () {
+  const q = new URLSearchParams(location.search);
+  const remote = q.get('remote') === '1', typeAhead = q.get('typeahead') === '1';
+  const PAISES = [['MX','México'],['US','Estados Unidos'],['ES','España'],['CO','Colombia'],['MX2','México (antiguo)']];
+  const ESTADOS = [['JAL','Jalisco'],['NL','Nuevo León'],['YUC','Yucatán'],['CDMX','Ciudad de México']];
+  const REGIONES = [['N','Norte'],['S','Sur']];
+  let seq = 1001;
+  const lists = [];
+  const exact = (store, txt) => store.find(r => r[1] === txt);        // Ext findRecord: igualdad exacta
+
+  function combo(host, cfg) {
+    const id = 'ext-comp-' + (++seq);
+    const hidden = cfg.hiddenName ? Object.assign(document.createElement('input'), {type: 'hidden', name: cfg.hiddenName, id: cfg.hiddenName}) : null;
+    const el = document.createElement('input');
+    Object.assign(el, {type: 'text', size: 24, id, autocomplete: 'off', className: 'x-form-text x-form-field'});
+    if (!cfg.hiddenName) el.name = cfg.name;
+    if (!cfg.editable) { el.readOnly = true; el.className += ' x-trigger-noedit'; }
+    const trig = Object.assign(document.createElement('img'), {src: 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==', className: 'x-form-trigger x-form-arrow-trigger'});
+    if (hidden) host.appendChild(hidden);
+    host.appendChild(el); host.appendChild(trig);
+    const list = document.createElement('div'); list.className = 'x-layer x-combo-list'; list.style.display = 'none';
+    list.innerHTML = '<div class="x-combo-list-inner"></div>'; document.body.appendChild(list); lists.push(list);
+    let value = '', lastText = '', timer = null;
+    const set = (v, txt) => { value = v; el.value = txt; lastText = txt; if (hidden) hidden.value = v; el.classList.remove('x-form-invalid'); };
+    function collapse() { list.style.display = 'none'; }
+    function expand(items) {
+      lists.forEach(l => { if (l !== list) l.style.display = 'none'; });
+      const inner = list.firstChild; inner.innerHTML = '';
+      items.forEach(r => {
+        const d = document.createElement('div'); d.className = 'x-combo-list-item'; d.textContent = r[1];
+        d.addEventListener('click', () => { set(r[0], r[1]); collapse(); el.dispatchEvent(new Event('change', {bubbles: true})); });
+        inner.appendChild(d);
+      });
+      const b = el.getBoundingClientRect();
+      Object.assign(list.style, {display: 'block', left: (b.left + scrollX) + 'px', top: (b.bottom + scrollY) + 'px'});
+    }
+    function query(txt) {
+      const items = cfg.store.filter(r => r[1].toLowerCase().startsWith(txt.toLowerCase()));
+      if (!items.length) { collapse(); return; }
+      expand(items);
+      if (typeAhead && txt && items[0][1].toLowerCase().startsWith(txt.toLowerCase())) {    // typeAhead: autocompleta y selecciona el resto
+        el.value = items[0][1]; el.setSelectionRange(txt.length, items[0][1].length);
+      }
+    }
+    if (cfg.editable) {
+      el.addEventListener('keyup', (e) => {
+        if (['Tab','Escape','Shift','Control'].includes(e.key)) return;
+        clearTimeout(timer);
+        const txt = el.value.substring(0, el.selectionStart === el.selectionEnd ? el.value.length : el.selectionStart);
+        timer = setTimeout(() => query(txt), cfg.remote ? 500 : 10);
+      });
+      el.addEventListener('keydown', (e) => { if (e.key === 'Escape') collapse(); });
+    }
+    trig.addEventListener('click', () => { el.focus(); expand(cfg.store); });
+    el.addEventListener('blur', () => {
+      setTimeout(() => {     // Ext: assertValue en beforeBlur
+        const raw = el.value, rec = exact(cfg.store, raw);
+        if (!rec && cfg.forceSelection) {
+          if (raw.length > 0) el.value = lastText; else set('', '');
+        } else if (rec) { set(rec[0], rec[1]); }
+        else { value = raw; lastText = raw; if (hidden) hidden.value = raw; }
+        if (cfg.allowBlank === false && !el.value) el.classList.add('x-form-invalid');
+        collapse();
+      }, 30);
+    });
+    // API mínima del componente, como Ext.getCmp(id)
+    window.Ext = window.Ext || {}; Ext.__cmps = Ext.__cmps || {};
+    Ext.__cmps[id] = {getValue: () => value, getRawValue: () => el.value, isValid: () => !el.classList.contains('x-form-invalid'),
+      store: cfg.store, displayField: 'label', valueField: 'value', forceSelection: cfg.forceSelection,
+      findRecord: (f, v) => { const r = exact(cfg.store, v); return r ? {get: (k) => k === 'value' ? r[0] : r[1]} : null; }};
+    return {el};
+  }
+  window.Ext = window.Ext || {};
+  Ext.getCmp = (id) => (Ext.__cmps || {})[id];
+
+  const cfgs = {
+    pais:   {store: PAISES, hiddenName: 'pais', forceSelection: true, editable: true, remote, allowBlank: false},
+    estado: {store: ESTADOS, hiddenName: 'estado', forceSelection: false, editable: true, remote},
+    region: {store: REGIONES, hiddenName: 'region', forceSelection: true, editable: false},
+  };
+  document.querySelectorAll('[data-combo]').forEach(h => combo(h, cfgs[h.dataset.combo]));
+
+  // Combo ARIA sin campo oculto: filtro «contiene», conserva el texto libre
+  const MUN = ['Guadalajara','Zapopan','Tlaquepaque','Tonalá'];
+  const mun = document.getElementById('municipio'); const ul = document.createElement('ul'); ul.className = 'opciones'; ul.setAttribute('role', 'listbox'); ul.style.display = 'none';
+  mun.parentElement.appendChild(ul);
+  mun.addEventListener('input', () => {
+    const items = MUN.filter(m => m.toLowerCase().includes(mun.value.toLowerCase()) && mun.value);
+    ul.innerHTML = ''; items.forEach(m => { const li = document.createElement('li'); li.setAttribute('role', 'option'); li.textContent = m;
+      li.addEventListener('click', () => { mun.value = m; ul.style.display = 'none'; }); ul.appendChild(li); });
+    ul.style.display = items.length ? 'block' : 'none';
+  });
+  mun.addEventListener('blur', () => setTimeout(() => { ul.style.display = 'none'; }, 50));
+})();
+</script>
+</body>
+</html>

@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from ..audit import AuditLog
+from ..combo import discover_catalogs
 from ..config_store import ProfileStore
 from ..data_adapter import DataError, columns_of, load_data
 from ..engine import fill_form, submit_with_human_confirmation
@@ -49,6 +50,7 @@ class FillIn(BaseModel):
     delay_ms: Optional[int] = None
     reload_first: bool = True
     form_key: Optional[str] = None
+    equivalences: dict[str, dict[str, str]] = {}     # {campo: {valor del dato: etiqueta de la opción}} aprobadas por la persona
 
 
 class SubmitIn(BaseModel):
@@ -58,6 +60,7 @@ class SubmitIn(BaseModel):
 class ProfileIn(BaseModel):
     name: str
     mapping: dict[str, Optional[str]]
+    equivalences: dict[str, dict[str, str]] = {}
 
 
 class Workspace:
@@ -230,11 +233,21 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             if body.reload_first:
                 s.reload_source()
             return fill_form(s, dict(body.mapping), row, delay_ms=body.delay_ms, audit=ws.audit,
-                             form_key=body.form_key)
+                             form_key=body.form_key, equivalences=body.equivalences or None)
 
         with ws.lock:
             report = ws.worker.run(job)
         return {"report": report.to_dict()}
+
+    @app.post("/api/catalog")
+    def catalog() -> dict[str, Any]:
+        """Descubre las opciones de los combos editables de la página cargada. Solo abre listas: no elige ni escribe."""
+        if ws.session is None or not ws.session.loaded:
+            raise HTTPException(400, "Analice un formulario con navegador primero.")
+        with ws.lock:
+            cat = ws.worker.run(discover_catalogs, ws.session)
+        ws.audit.log("catalog_discovered", fields=len(cat), options=sum(len(v) for v in cat.values()))
+        return {"catalog": cat}
 
     @app.post("/api/submit")
     def submit(body: SubmitIn) -> dict[str, Any]:
@@ -266,7 +279,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         if not ws.analysis:
             raise HTTPException(400, "Analice un formulario primero.")
         try:
-            path = ws.profiles.save(body.name, ws.analysis, body.mapping)
+            path = ws.profiles.save(body.name, ws.analysis, body.mapping, body.equivalences)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
         ws.audit.log("profile_saved", profile=body.name, fields=len(ws.analysis.all_fields))
@@ -283,6 +296,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             out.update(ProfileStore.reconcile(prof, ws.analysis))
         else:
             out["mapping"] = prof["mapping"]
+            out["equivalences"] = prof.get("equivalences", {})
         ws.audit.log("profile_loaded", profile=name)
         return out
 

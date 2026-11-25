@@ -142,3 +142,26 @@ def test_ui_escapes_labels_from_imported_html(live):
         assert "<img src=z" in pg.text_content("#campos")
         assert pg.evaluate("window.__xss") is None
         b.close()
+
+
+def test_api_combos_catalogo_equivalencias_y_perfil(live):
+    """Combos editables en la interfaz: pendiente → catálogo → equivalencia aprobada → perfil reutilizable."""
+    c = httpx.Client(base_url=live["base"], timeout=90)
+    csv = "pais,estado\nMé,Jal\n".encode("utf-8")
+    assert c.post("/api/data", files={"file": ("c.csv", csv)}).status_code == 200
+    r = c.post("/api/analyze", json={"mode": "lab", "lab": "05_combos_extjs.html"})
+    assert r.status_code == 200, r.text
+    mapping = {"ext_form::pais": "pais", "ext_form::estado": "estado"}
+    rep = c.post("/api/fill", json={"mapping": mapping, "row_index": 0, "delay_ms": 0}).json()["report"]
+    por = {x["field_key"]: x for x in rep["results"]}
+    assert not rep["ok"] and {por[k]["status"] for k in mapping} == {"pendiente_revision"}
+    cat = c.post("/api/catalog").json()["catalog"]
+    assert "México" in cat["ext_form::pais"] and "Jalisco" in cat["ext_form::estado"]
+    eq = {"ext_form::pais": {"Mé": "México"}, "ext_form::estado": {"Jal": "Jalisco"}}
+    rep = c.post("/api/fill", json={"mapping": mapping, "row_index": 0, "delay_ms": 0, "equivalences": eq}).json()["report"]
+    por = {x["field_key"]: x for x in rep["results"]}
+    assert all(por[k]["status"] == "ok" and por[k]["equivalence_used"] for k in mapping)
+    # La equivalencia aprobada se guarda y se recupera con el perfil
+    assert c.post("/api/profiles", json={"name": "combos", "mapping": mapping, "equivalences": eq}).status_code == 200
+    prof = c.get("/api/profiles/combos").json()
+    assert prof["same_structure"] and prof["equivalences"] == eq

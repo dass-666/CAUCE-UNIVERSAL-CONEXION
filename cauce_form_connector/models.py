@@ -55,6 +55,9 @@ class FieldDescriptor:
     form_key: str = ""
     confirms: str = ""            # key del campo que este campo confirma (email2 -> email)
     blocks_paste: bool = False    # el campo tiene onpaste (solo informativo)
+    widget: str = ""              # "combo": cuadro de texto con lista desplegable (Ext JS, ARIA, datalist...)
+    trigger_selector: str = ""    # flecha/botón que abre la lista (solo para descubrir opciones; no escribe)
+    value_selector: str = ""      # campo oculto que guarda el valor interno (SOLO se lee, nunca se escribe)
 
     @property
     def is_text(self) -> bool:
@@ -147,7 +150,7 @@ class FieldResult:
     label: str
     type: str
     method: str              # teclado_secuencial | select_option | check | uncheck | fill_nativo | omitido
-    status: str              # ok | ok_normalizado | diferente | error | omitido | invalido
+    status: str              # ok | ok_normalizado | diferente | error | omitido | invalido | pendiente_revision
     expected: str = ""
     actual: str = ""
     keystrokes: int = 0      # caracteres enviados uno a uno
@@ -156,6 +159,12 @@ class FieldResult:
     page_error: str = ""     # mensaje de error visible que la página asoció al campo
     detail: str = ""
     discovered_late: bool = False
+    selection: str = ""           # combos: "opcion" (elegida de la lista) | "texto_libre"
+    options_seen: list[str] = field(default_factory=list)   # combos: opciones visibles (etiquetas, máx. 50)
+    option_value: str = ""        # combos: valor declarado por la opción elegida (data-value), si lo hay
+    internal: str = ""            # combos: valor interno registrado por el control (campo oculto / componente)
+    equivalence_used: bool = False
+    pending: str = ""             # motivo por el que el campo queda pendiente de revisión humana
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

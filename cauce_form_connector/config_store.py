@@ -30,6 +30,11 @@ def structure_signature(fields: list[FieldDescriptor]) -> str:
     return hashlib.sha256(sig.encode()).hexdigest()[:16]
 
 
+def _clean_equivalences(eq: dict[str, dict[str, str]], keys: set[str]) -> dict[str, dict[str, str]]:
+    return {k: {str(a)[:200]: str(b)[:200] for a, b in v.items() if a and b} for k, v in eq.items()
+            if k in keys and isinstance(v, dict)}
+
+
 def _safe_name(name: str) -> str:
     n = re.sub(r"[^\w\-]+", "_", name.strip())[:80].strip("_")
     if not n:
@@ -41,7 +46,8 @@ class ProfileStore:
     def __init__(self, directory: str | Path = "profiles"):
         self.dir = Path(directory)
 
-    def save(self, name: str, analysis: AnalysisResult, mapping: dict[str, Optional[str]]) -> Path:
+    def save(self, name: str, analysis: AnalysisResult, mapping: dict[str, Optional[str]],
+             equivalences: Optional[dict[str, dict[str, str]]] = None) -> Path:
         self.dir.mkdir(parents=True, exist_ok=True)
         fields = analysis.all_fields
         profile = {
@@ -55,6 +61,8 @@ class ProfileStore:
             "fields": [{k: v for k, v in f.to_dict().items()} for f in fields],
             "mapping": {k: v for k, v in mapping.items() if k in {f.key for f in fields}},
         }
+        if equivalences:     # aprobadas por una persona: {campo: {valor del dato: etiqueta de la opción}}
+            profile["equivalences"] = _clean_equivalences(equivalences, {f.key for f in fields})
         path = self.dir / f"{_safe_name(name)}.json"
         path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
@@ -75,7 +83,8 @@ class ProfileStore:
         return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
     def save_integration(self, name: str, analysis: AnalysisResult, campos: dict[str, str], *,
-                         formulario_id: str, url: str, aprobado_por_ref: str) -> tuple[Path, str]:
+                         formulario_id: str, url: str, aprobado_por_ref: str,
+                         equivalencias: Optional[dict[str, dict[str, str]]] = None) -> tuple[Path, str]:
         """Guarda un perfil APROBADO para el modo de integración. `campos` = {nombre lógico: clave del campo}.
         Lo escribe una persona (o un proceso que ella ejecuta) tras revisar el formulario real: nada se
         completa con sugerencias. Devuelve (ruta, sha256 del archivo)."""
@@ -96,6 +105,8 @@ class ProfileStore:
             "integracion": {"aprobado": True, "formulario_id": formulario_id, "url": url,
                             "aprobado_por_ref": aprobado_por_ref, "campos": dict(campos)},
         }
+        if equivalencias:    # parte del perfil aprobado: cambiarlas cambia la huella SHA-256 y exige nueva aprobación
+            profile["integracion"]["equivalencias"] = _clean_equivalences(equivalencias, set(campos.values()))
         path = self.path_of(name)
         # Bytes explícitos (LF, UTF-8): la huella no debe depender del sistema operativo (en Windows write_text() usa CRLF)
         path.write_bytes((json.dumps(profile, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8"))
@@ -128,4 +139,5 @@ class ProfileStore:
                                if profile.get("structure_signature_v2")
                                else structure_signature(analysis.all_fields) == profile.get("structure_signature")),
             "legacy_signature": not profile.get("structure_signature_v2"),
+            "equivalences": {k: v for k, v in profile.get("equivalences", {}).items() if k in current},
         }

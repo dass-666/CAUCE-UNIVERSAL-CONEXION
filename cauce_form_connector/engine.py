@@ -12,6 +12,7 @@ import time
 from typing import Any, Optional
 
 from .audit import AuditLog
+from .combo import norm as _norm_value, protected_reason
 from .matcher import AUTO_THRESHOLD, match_fields
 from .models import CHOICE_TYPES, FieldDescriptor, FieldResult, FillReport
 from .page_inspector import BrowserSession
@@ -24,11 +25,15 @@ MAX_PASSES = 12
 def fill_form(session: BrowserSession, mapping: dict[str, Optional[str]], row: dict[str, str],
               *, delay_ms: Optional[int] = None, audit: Optional[AuditLog] = None,
               form_key: Optional[str] = None, allow_late_fields: bool = True,
-              screenshot_path: Optional[str] = None) -> FillReport:
+              screenshot_path: Optional[str] = None,
+              equivalences: Optional[dict[str, dict[str, str]]] = None) -> FillReport:
     """Rellena la página cargada en `session` con `row` según `mapping` {field_key: columna}.
 
     No pulsa ningún botón de envío ni la tecla Enter en campos de una línea.
+    `equivalences` = {field_key: {valor del dato: etiqueta de la opción}} aprobadas por una persona para combos.
+    Nunca escribe en campos de autenticación; los de consentimiento solo si hay correspondencia aprobada.
     """
+    equivalences = {k: {_norm_value(a): b for a, b in v.items()} for k, v in (equivalences or {}).items()}
     audit = audit or AuditLog(None)
     t0 = time.monotonic()
     typer = SequentialTyper(session.page, session.settings.typing_delay_ms if delay_ms is None else delay_ms)
@@ -81,15 +86,24 @@ def fill_form(session: BrowserSession, mapping: dict[str, Optional[str]], row: d
             if not f.visible:
                 continue  # puede hacerse visible más adelante
             value = row.get(col, "")
+            motivo = protected_reason(f, automatic=late)
+            if motivo:
+                done[f.key] = FieldResult(f.key, f.label, f.type, "omitido", "omitido", detail=motivo, discovered_late=late)
+                continue
             res = FieldResult(f.key, f.label, f.type, "omitido", "omitido", expected=value, discovered_late=late)
             if value == "" and f.type != "checkbox":
                 res.detail = "la fila no tiene dato para esta columna"
                 done[f.key] = res
                 continue
             try:
-                out = typer.apply(f, value)
+                eq = equivalences.get(f.key, {}).get(_norm_value(value)) if f.widget == "combo" else None
+                out = typer.apply(f, eq or value)
                 res.method, res.keystrokes = out["method"], out["keystrokes"]
                 res.expected = out["applied"]
+                res.equivalence_used = bool(eq)
+                if f.widget == "combo":
+                    res.selection, res.options_seen = out["selection"], out["options_seen"]
+                    res.option_value, res.pending = out["option_value"], out["pending"]
                 if out.get("insert_text_fallbacks"):
                     res.detail = (f"{out['insert_text_fallbacks']} carácter(es) enviados con insertText "
                                   "(sin keydown/keyup): navegador sin CDP")
@@ -102,7 +116,7 @@ def fill_form(session: BrowserSession, mapping: dict[str, Optional[str]], row: d
             progressed = True
             audit.log("field_filled", field_key=f.key, type=f.type, method=res.method,
                       status=res.status, chars=res.keystrokes)
-            if f.type in CHOICE_TYPES:
+            if f.type in CHOICE_TYPES or f.widget == "combo":
                 if session.settle() > 0:
                     rescan = True
                     break

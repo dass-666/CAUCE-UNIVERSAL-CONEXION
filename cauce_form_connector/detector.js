@@ -16,11 +16,14 @@
     return r.width > 0 || r.height > 0 || el.getClientRects().length > 0;
   };
 
+  // Ids generados por la biblioteca (ext-comp-1002, ember123, :r1:) cambian entre cargas: no sirven de ancla estable.
+  const autoId = (id) => /^(ext-(comp|gen)-?\d+|ember\d+|:r[0-9a-z]+:|react-select-\d+.*)$/i.test(id || "");
+
   const cssPath = (el) => {
     const parts = [];
     let node = el;
     while (node && node.nodeType === 1 && node !== document.documentElement) {
-      if (node.id && document.querySelectorAll("#" + esc(node.id)).length === 1) {
+      if (node.id && !autoId(node.id) && document.querySelectorAll("#" + esc(node.id)).length === 1) {
         parts.unshift("#" + esc(node.id));
         break;
       }
@@ -37,7 +40,7 @@
   };
 
   const selectorFor = (el) => {
-    if (el.id && document.querySelectorAll("#" + esc(el.id)).length === 1) return "#" + esc(el.id);
+    if (el.id && !autoId(el.id) && document.querySelectorAll("#" + esc(el.id)).length === 1) return "#" + esc(el.id);
     const tag = el.tagName.toLowerCase();
     if (el.name) {
       const s = `${tag}[name="${el.name.replace(/"/g, '\\"')}"]`;
@@ -93,14 +96,42 @@
     return n >= 0 ? n : null;
   };
 
+  // Controles «cuadro de texto + lista» (combos editables): ARIA, datalist o una flecha/botón junto al cuadro.
+  const TRIGGER = '[class*="trigger" i],[class*="arrow" i],[class*="caret" i],[class*="chevron" i],[class*="dropdown-toggle" i],[class*="combo-btn" i]';
+  const comboInfo = (el) => {
+    if (el.tagName.toLowerCase() !== "input") return null;
+    const type = (el.getAttribute("type") || "text").toLowerCase();
+    if (type !== "text" && type !== "search") return null;
+    const role = (el.getAttribute("role") || "").toLowerCase();
+    const popup = (el.getAttribute("aria-haspopup") || "").toLowerCase();
+    let trigger = null;
+    const parent = el.parentElement;
+    if (parent) {
+      trigger = Array.from(parent.children).find((c) => c !== el && c.matches(TRIGGER) &&
+        !/^(input|textarea|select)$/i.test(c.tagName) && !(c.tagName === "BUTTON" && (c.type || "") === "submit")) || null;
+    }
+    const aria = role === "combobox" || (popup && popup !== "false" && popup !== "dialog") ||
+      el.hasAttribute("aria-autocomplete") || el.hasAttribute("list");
+    if (!aria && !trigger) return null;
+    // Campo oculto hermano con nombre: guarda el valor interno (en Ext JS: hiddenName). Solo se LEE.
+    let hidden = null;
+    if (parent) hidden = Array.from(parent.querySelectorAll('input[type="hidden"][name]')).find((h) => h.name) || null;
+    return { trigger: trigger ? selectorFor(trigger) : "", hiddenSel: hidden ? selectorFor(hidden) : "",
+             hiddenName: hidden ? hidden.name : "" };
+  };
+
   const describe = (el) => {
     const tag = el.tagName.toLowerCase();
+    const combo = comboInfo(el);
     let type = tag === "input" ? (el.getAttribute("type") || "text").toLowerCase() : tag;
     if (tag === "select") type = el.multiple ? "select-multiple" : "select";
     const d = {
       tag, type,
-      name: el.getAttribute("name") || "",
+      name: el.getAttribute("name") || (combo ? combo.hiddenName : "") || "",
       id: el.id || "",
+      widget: combo ? "combo" : "",
+      trigger_selector: combo ? combo.trigger : "",
+      value_selector: combo ? combo.hiddenSel : "",
       selector: selectorFor(el),
       label: labelFor(el),
       placeholder: el.getAttribute("placeholder") || "",
