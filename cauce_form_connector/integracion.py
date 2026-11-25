@@ -132,33 +132,35 @@ def _cargar_perfil(sol: dict, settings: Settings) -> dict:
 
 def _esperar_revision(sesion: BrowserSession, espera_s: int, desde: float,
                       gancho: Optional[Callable[[BrowserSession], None]] = None) -> tuple[str, float]:
-    """(resultado, segundos). Observa; nunca hace clic. Resultados: envio_humano | cerrada_sin_envio | caducada | error."""
+    """(resultado, segundos). Observa; nunca hace clic. Resultados: envio_humano | cerrada_sin_envio | caducada | error.
+
+    Un envío de la persona NO cierra la ventana: la persona sigue en ella (elige el día, confirma y lee el folio) sin
+    volver a teclear los datos que Forms ya escribió. La revisión termina cuando la persona cierra la ventana o vence
+    el plazo; si hubo envío humano, el resultado es `envio_humano` en ambos casos (también si el navegador se cierra
+    entero o se cae después del envío: lo observado ya ocurrió)."""
     page = sesion.page
     estado = {"cerrada": False, "crash": False}
     page.on("close", lambda *_: estado.__setitem__("cerrada", True))
     page.on("crash", lambda *_: estado.__setitem__("crash", True))
     ini = time.monotonic()
+    envio: Optional[float] = None
     while True:
         t = time.monotonic() - ini
-        if any(g and t >= desde + GRACIA_ACTIVACION_S for g, t in sesion.submit_events):   # gesto de usuario real
-            try:
-                sesion.settle(100, 500)
-            except Exception:
-                pass
-            return "envio_humano", time.monotonic() - ini
+        if envio is None and any(g and ts >= desde + GRACIA_ACTIVACION_S for g, ts in sesion.submit_events):
+            envio = t                                                    # gesto de usuario real: se anota y se sigue
         if estado["crash"] or not sesion._browser.is_connected():
-            return "error", t
+            return ("envio_humano", t) if envio is not None else ("error", t)
         if estado["cerrada"]:
-            return "cerrada_sin_envio", t
+            return ("envio_humano" if envio is not None else "cerrada_sin_envio"), t
         if t >= espera_s:
-            return "caducada", float(espera_s)
+            return ("envio_humano" if envio is not None else "caducada"), float(espera_s)
         try:
             if gancho:
                 gancho(sesion)             # solo pruebas: simula a la persona
             page.wait_for_timeout(int(POLL_S * 1000))
         except Exception:
             estado["cerrada"] = estado["cerrada"] or page.is_closed()
-            if not estado["cerrada"] and not estado["crash"]:
+            if not estado["cerrada"] and not estado["crash"] and envio is None:
                 return "error", time.monotonic() - ini
 
 

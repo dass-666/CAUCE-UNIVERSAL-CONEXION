@@ -92,6 +92,29 @@ def test_envio_humano_se_observa_pero_no_es_confirmacion(ent, monkeypatch):
     assert resp["revision_humana"]["resultado"] == "envio_humano"
 
 
+def test_tras_el_envio_humano_la_ventana_sigue_abierta_para_la_persona(ent, monkeypatch):
+    """La persona envía y sigue en la MISMA ventana (elige día, confirma, lee el folio) sin volver a teclear nada:
+    Forms no la cierra al ver el envío; termina cuando la persona la cierra."""
+    monkeypatch.setattr(I, "GRACIA_ACTIVACION_S", 0.5)
+    visto = {"llamadas_tras_envio": 0}
+
+    def persona(s):
+        if "envio" not in visto:
+            s.page.wait_for_timeout(800)
+            s.page.locator("button[type=submit]").first.click()
+            visto["envio"] = True
+            return
+        visto["llamadas_tras_envio"] += 1          # el conector ya vio el envío y la ventana sigue disponible
+        if visto["llamadas_tras_envio"] == 5:
+            s.page.close()
+
+    resp, salida = correr(ent, solicitud(ent["info"], espera=30), gancho_revision=persona)
+    assert (resp["estado"], salida) == ("enviado_por_persona_observado", 0)
+    assert visto["llamadas_tras_envio"] == 5
+    assert resp["revision_humana"]["resultado"] == "envio_humano" and resp["revision_humana"]["duracion_s"] < 30
+    assert resp["envio"] == {"realizado_por_conector": False, "envio_humano_observado": True}
+
+
 def test_submit_forzado_por_la_pagina_no_cuenta_como_persona(ent):
     """requestSubmit() desde un script (dentro de la ventana de activación y después de ella) no es envío humano."""
     pasos = {"n": 0}
