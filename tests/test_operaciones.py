@@ -175,3 +175,24 @@ def test_sin_poder_escribir_no_se_inicia_la_operacion_simulado(tmp_path, monkeyp
     with pytest.raises(OSError):
         r.iniciar(r.huella(FILA), "x", None, None)
     assert r.lista() == []
+
+
+def test_revision_del_operador_desde_otro_proceso_no_se_pierde(tmp_path):
+    """Forms (en marcha) y la orden de operador escriben el mismo archivo: lo revisado no vuelve a «incierta»."""
+    import subprocess
+    forms = _reg(tmp_path)
+    op = forms.iniciar(forms.huella(FILA), "x", None, None)
+    forms.cerrar(op["id"], INCIERTA, "resultado_desconocido")
+    env = dict(os.environ, CAUCE_FORMS_DATA_DIR=str(tmp_path / "datos"), CAUCE_AUDIT_PATH=str(tmp_path / "audit.jsonl"))
+    r = subprocess.run([sys.executable, "-m", "cauce_form_connector", "operaciones", "revisar", op["id"], "--nota",
+                        "Comprobado en el portal: no consta", "--confirmar", op["id"]], env=env, capture_output=True,
+                       text=True, cwd=str(Path(__file__).resolve().parents[1]))
+    assert r.returncode == 0, r.stderr
+    assert forms.get(op["id"])["estado"] == REVISADA          # Forms adopta la versión del operador
+    otra = forms.iniciar(forms.huella(dict(FILA, expediente="EXP-0002")), "x", None, None)   # y escribe encima
+    assert _reg(tmp_path).get(op["id"])["estado"] == REVISADA
+    assert _reg(tmp_path).get(otra["id"]) is not None
+    r = subprocess.run([sys.executable, "-m", "cauce_form_connector", "operaciones", "revisar", op["id"], "--nota",
+                        "otra vez", "--confirmar", "op_mal"], env=env, capture_output=True, text=True,
+                       cwd=str(Path(__file__).resolve().parents[1]))
+    assert r.returncode == 1 and "No se revisó nada" in r.stderr

@@ -132,7 +132,7 @@ class CauceSessionClient:
         return cls(read_secret(token_path), port=port, **kw)
 
     def register(self, label: str, connection_id: Optional[str] = None, heartbeat_timeout_s: float = 30.0) -> dict:
-        body: dict[str, Any] = {"label": label, "authorized_by_user": True, "heartbeat_timeout_s": heartbeat_timeout_s}
+        body = {"label": label, "authorized_by_user": True, "heartbeat_timeout_s": heartbeat_timeout_s}
         if connection_id is not None:
             body["connection_id"] = connection_id
         out = self._c.call("POST", "/sessions", body)

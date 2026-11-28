@@ -31,7 +31,9 @@ import os
 import re
 import secrets
 import shutil
+import sys
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -91,8 +93,11 @@ class RegistroOperaciones:
         self.general: Optional[dict] = None      # marca general: bloquea todo envío hasta revisión humana
         self.estado_carga = "nuevo"              # nuevo | ok | respaldo | ilegible
         self.eventos: list[dict] = []            # para la auditoría del llamador
+        self._sha_conocido: Optional[str] = None # resumen de lo último leído o escrito por ESTE proceso
+        self._profundidad = 0
         self._clave = self._leer_clave()
-        self._cargar()
+        with self._candado():
+            self._cargar()
 
     # ------------------------------------------------------------------ clave de huella
     def _leer_clave(self) -> bytes:
@@ -134,7 +139,7 @@ class RegistroOperaciones:
             return None
         if d.get("sha256") != _resumen(ops, g):
             return None                              # editado a mano o escrito a medias: no vale
-        return {"operaciones": ops, "general": g}
+        return {"operaciones": ops, "general": g, "sha256": d["sha256"]}
 
     def _cargar(self) -> None:
         if not self.path.exists() and not self.bak.exists():
@@ -160,6 +165,7 @@ class RegistroOperaciones:
             self._guardar()
             return
         self.ops, self.general = doc["operaciones"], doc["general"]
+        self._sha_conocido = doc["sha256"]
         cambio = False
         for o in self.ops:
             if o["estado"] == EN_CURSO:
@@ -185,6 +191,7 @@ class RegistroOperaciones:
                 self.ops = [o for o in self.ops if o["id"] not in quitar]
             doc = {"esquema": ESQUEMA, "operaciones": self.ops, "general": self.general,
                    "sha256": _resumen(self.ops, self.general)}
+            self._sha_conocido = doc["sha256"]
             self.dir.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_name(f"{ARCHIVO}.{os.getpid()}.{threading.get_ident()}.tmp")
             fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -200,26 +207,79 @@ class RegistroOperaciones:
                 if tmp.exists():
                     tmp.unlink()
 
+    @contextmanager
+    def _candado(self):
+        """Candado ENTRE PROCESOS (Forms y la orden de operador pueden escribir el mismo archivo)."""
+        with self._lock:
+            if self._profundidad:                   # reentrante en el mismo hilo (iniciar → comprobar)
+                self._profundidad += 1
+                try:
+                    yield
+                finally:
+                    self._profundidad -= 1
+                return
+            self.dir.mkdir(parents=True, exist_ok=True)
+            fh = open(self.dir / "operaciones.lock", "a+b")
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    fh.seek(0)
+                    while True:
+                        try:
+                            msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+                            break
+                        except OSError:
+                            continue
+                else:
+                    import fcntl
+                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+                self._profundidad = 1
+                yield
+            finally:
+                self._profundidad = 0
+                try:
+                    if sys.platform == "win32":
+                        import msvcrt
+                        fh.seek(0)
+                        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+                finally:
+                    fh.close()
+
+    def _recargar(self) -> None:
+        """Si OTRO proceso cambió el archivo (p. ej. un operador revisó una operación), se adopta su versión válida.
+        Un archivo ilegible durante la ejecución NO se adopta: lo de memoria es más reciente y se reescribirá."""
+        doc = self._leer(self.path)
+        if doc is not None and doc["sha256"] != self._sha_conocido:
+            self.ops, self.general, self._sha_conocido = doc["operaciones"], doc["general"], doc["sha256"]
+
     # ------------------------------------------------------------------ consultas
     def get(self, oid: str) -> Optional[dict]:
-        with self._lock:
+        with self._candado():
+            self._recargar()
             return next((dict(o) for o in self.ops if o["id"] == oid), None)
 
     def abiertas(self) -> list[dict]:
-        with self._lock:
+        with self._candado():
+            self._recargar()
             return [dict(o) for o in self.ops if o["estado"] in ABIERTOS]
 
     def hay_abiertas(self) -> bool:
-        with self._lock:
+        with self._candado():
+            self._recargar()
             return self.general is not None or any(o["estado"] in ABIERTOS for o in self.ops)
 
     def lista(self, limite: int = 50) -> list[dict]:
-        with self._lock:
+        with self._candado():
+            self._recargar()
             return [dict(o) for o in self.ops[-limite:]][::-1]
 
     def comprobar(self, huella: str) -> None:
         """Lanza ``OperacionBloqueada`` si NO se puede enviar este expediente ahora."""
-        with self._lock:
+        with self._candado():
+            self._recargar()
             if self.general is not None:
                 raise OperacionBloqueada("revision_general_pendiente",
                                          "El registro de operaciones necesita revisión de un operador "
@@ -235,7 +295,8 @@ class RegistroOperaciones:
     def iniciar(self, huella: str, origen: str, token_portal: Optional[str], sesion_ne: Optional[str],
                 api_acuse: Optional[str] = None) -> dict:
         """Crea la operación ``en_curso`` y la guarda en disco. Lanza OSError si no puede (entonces NO se envía)."""
-        with self._lock:
+        with self._candado():
+            self._recargar()
             self.comprobar(huella)
             o = {"id": "op_" + secrets.token_hex(6), "creada": _ahora(), "actualizada": _ahora(), "estado": EN_CURSO,
                  "motivo": None, "huella": huella, "origen": str(origen)[:200],
@@ -253,7 +314,8 @@ class RegistroOperaciones:
             return dict(o)
 
     def actualizar(self, oid: str, **campos: Any) -> dict:
-        with self._lock:
+        with self._candado():
+            self._recargar()
             o = next(x for x in self.ops if x["id"] == oid)
             for k, v in campos.items():
                 if k in ("aviso_en_curso", "envio_observado"):
@@ -266,7 +328,8 @@ class RegistroOperaciones:
         """Resultado del envío. Solo admite pasar de ``en_curso`` a un estado final o a ``incierta``."""
         if estado not in (CONFIRMADA, INCIERTA, NO_ENVIADA, RECHAZADA):
             raise ValueError(estado)
-        with self._lock:
+        with self._candado():
+            self._recargar()
             o = next(x for x in self.ops if x["id"] == oid)
             if o["estado"] != EN_CURSO:
                 raise ValueError(f"la operación {oid} ya no está en curso ({o['estado']})")
@@ -281,7 +344,8 @@ class RegistroOperaciones:
         """Una operación ``incierta`` pasa a ``confirmada`` SOLO con el folio que el portal confirmó por su API."""
         if not (folio and _FOLIO_RE.match(folio)):
             raise ValueError("folio no válido")
-        with self._lock:
+        with self._candado():
+            self._recargar()
             o = next(x for x in self.ops if x["id"] == oid)
             if o["estado"] != INCIERTA:
                 raise ValueError(f"solo una operación incierta se confirma por acuse ({o['estado']})")
@@ -293,7 +357,8 @@ class RegistroOperaciones:
         """Network Engine mostró ``requires_human`` en la sesión ``sid``: las inciertas sin marca quedan ligadas a ella."""
         if not _SID_RE.match(sid or ""):
             return
-        with self._lock:
+        with self._candado():
+            self._recargar()
             cambio = False
             for o in self.ops:
                 if o["estado"] == INCIERTA and o.get("marca_ne") is None:
@@ -304,7 +369,8 @@ class RegistroOperaciones:
     def resuelta_por_operador_ne(self, sid: str) -> list[str]:
         """El operador resolvió la marca de la sesión ``sid`` en Network Engine (señal POSITIVA, misma sesión)."""
         out = []
-        with self._lock:
+        with self._candado():
+            self._recargar()
             for o in self.ops:
                 if o["estado"] == INCIERTA and o.get("marca_ne") == sid:
                     o.update(estado=REVISADA, actualizada=_ahora(),
@@ -319,7 +385,8 @@ class RegistroOperaciones:
         """Revisión de un OPERADOR (línea de órdenes, no la interfaz de la persona). Exige nota y repetir el id."""
         if not isinstance(nota, str) or len(nota.strip()) < 5:
             raise ValueError("Escriba qué revisó (nota de al menos 5 caracteres).")
-        with self._lock:
+        with self._candado():
+            self._recargar()
             if oid == "GENERAL":
                 if self.general is None:
                     raise LookupError("No hay marca general pendiente.")

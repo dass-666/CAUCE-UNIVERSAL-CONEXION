@@ -183,6 +183,11 @@ class _Handler(BaseHTTPRequestHandler):
                     for _ in range(int(body.get("veces", 1))):
                         p.fallos.append({"tipo": tipo, "segundos": float(body.get("segundos", 8))})
             return self._json(200, p.estadisticas())
+        if ruta == "/_lab/limpiar_fallos":
+            with p.lock:
+                p.fallos.clear()
+                p.acuse_retardo_s = 0.0
+            return self._json(200, p.estadisticas())
         if ruta == "/_lab/limites":
             with p.lock:
                 p.capacidad = int(body.get("capacidad", p.capacidad))

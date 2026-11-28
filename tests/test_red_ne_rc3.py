@@ -267,6 +267,7 @@ def test_15_estado_del_motor_danado_pide_revision(ne, tmp_path):
     assert d.estado()["requiere_persona"] is True and d.estado()["motivo"] == "previous_state_unreadable"
 
 
+@pytest.mark.skipif(__import__("sys").platform == "win32", reason="SIGSTOP no existe en Windows")
 def test_16_motor_lento_o_congelado_no_retiene_la_accion(ne, tmp_path):
     d, *_ = forms(ne, tmp_path, intervalo=1.0, desactualizado_s=4)
     d.iniciar()
@@ -371,3 +372,42 @@ def test_ningun_secreto_en_los_archivos_de_forms(ne, tmp_path):
         if p.is_file():
             assert secreto not in p.read_bytes().decode("utf-8", "ignore"), p
     assert json.loads((tmp_path / "forms-puesto-1" / "puesto.json").read_text()).keys() == {"etiqueta", "sesion_ne"}
+
+
+def test_credencial_protegida_con_el_mecanismo_del_sistema(ne, tmp_path):
+    """Windows: la orden oficial guarda la credencial con DPAPI y Forms la descifra (mismo usuario). Linux: 0600."""
+    import sys
+    from cauce_form_connector.red.cliente_ne import storage_method
+    tid, ruta = ne.credencial("forms-dpapi")
+    esperado = "dpapi" if sys.platform == "win32" else "file-0600"
+    assert storage_method(str(ruta)) == esperado
+    tok = read_secret(str(ruta))
+    assert tok.startswith("cr1.") and tok.encode() not in ruta.read_bytes() if sys.platform == "win32" else True
+    d, *_ = forms(ne, tmp_path, credencial=(tid, ruta))
+    assert d.latir() and d.estado()["motor"] == "conectado"
+
+
+def test_paso_09b_con_forms_nativo_mismo_contrato(ne, tmp_path):
+    """Bloque G: el sustituto propuesto del consumidor de referencia del paso 09b recorre las 8 fases con Forms nativo,
+    Chromium real y el portal propio, y no envía nada."""
+    import os
+    import subprocess
+    import sys
+    from lab_portal.servidor import ServidorPortal
+    tid, ruta = ne.credencial("lab-sesion-09b")
+    portal = ServidorPortal(0).iniciar()
+    try:
+        env = dict(os.environ, CAUCE_LAB_NE_PORT=str(ne.port), CAUCE_LAB_NE_ADMIN=ne.admin,
+                   CAUCE_LAB_NE_SESSION=read_secret(str(ruta)), CAUCE_LAB_FORMS_URL=portal.url + "/tramite",
+                   CAUCE_LAB_ETIQUETA="lab-forms-09b", CAUCE_FORMS_DATA_DIR=str(tmp_path / "forms"))
+        raiz = Path(__file__).resolve().parents[1]
+        r = subprocess.run([sys.executable, str(raiz / "scripts" / "paso_09b_nativo.py")], cwd=str(raiz), env=env,
+                           capture_output=True, text=True, timeout=400)
+        res = json.loads(r.stdout.strip().splitlines()[-1])
+        assert not res.get("error"), (res, r.stderr[-2000:])
+        assert all(res["fases"].values()), res
+        assert res["formulario_enviado"] is False
+        assert res["sigue_pidiendo_persona_tras_recuperar"] is True
+        assert portal.portal.estadisticas()["peticiones_post"] == 0
+    finally:
+        portal.detener()
