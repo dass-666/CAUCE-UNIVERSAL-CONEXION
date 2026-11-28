@@ -142,6 +142,8 @@ fusiona.
 - Omitida 1: contrato antiguo de Monitor `9e7f88d` (no había copia local; en CI sí se descarga).
 - Omitida 2: prueba de permisos POSIX (el contenedor corre como root); la variante simulada sí pasa.
 
+**[Prueba] CI tras la revisión final:** run `46112498578`, commit `fdd099a`: Linux 197 superadas y 1 omitida, Windows 196 superadas y 2 omitidas (ver `REVISION_FINAL_FORMS_RC3.md` §6).
+
 **[Prueba] GitHub Actions** (run `46105215519`, commit `61842fd`, todo en verde): `ubuntu-latest` **191 superadas** (allí sí
 se descarga el contrato antiguo de Monitor) y la jornada corta de 6 expedientes; `windows-latest` **189 superadas, 2
 omitidas** (SIGSTOP y permisos POSIX, que no existen en Windows). En Windows se ejecutaron las pruebas contra Network
@@ -239,7 +241,7 @@ tarda unos 2 s, de los que la mayoría es la espera del acuse.
 Crecimiento de archivos en 62 min: auditoría de Forms 1044 KB, registro de operaciones
 154 KB, auditoría de Network Engine 281 KB, estado de sesiones del motor
 0.6 KB. **Riesgo:** `operaciones.json` crece con cada envío y se reescribe entero en cada cambio; con
-miles de operaciones conviene archivar las cerradas (pendiente, no implementado).
+miles de operaciones conviene archivar las cerradas (implementado en la revisión final: `REVISION_FINAL_FORMS_RC3.md` §4).
 
 Tendencia de memoria de Forms (PSS, MB) cada 6 min aprox.: 515, 524, 547, 548, 540, 544, 564, 568, 561, 550. Sube en
 los primeros 20 min y luego oscila sin crecer de forma sostenida; con una hora no se puede descartar una fuga lenta
@@ -362,7 +364,7 @@ recuerde que el puesto también puede tener una revisión local. Solo texto; no 
 | Monitor | `7b92446` | Lectura de red y centro de revisiones compatibles | [Prueba] `test_compat_monitor.py` (servicio `monitoreo/red_lectura`; **no** la aplicación web completa con usuarios) |
 | Centro de revisiones pendientes | `7b92446` | Ve y resuelve la marca que deja Forms; confirmación exacta | [Prueba] ídem |
 | Chromium real | Playwright 1.65 (headless) | Compatible | [Prueba] |
-| Windows (runner de CI) | `windows-latest` | 189 superadas, incluida DPAPI real y Network Engine real | [Prueba] CI |
+| Windows (runner de CI) | `windows-latest` | 196 superadas en `fdd099a` (189 en `61842fd`), incluida DPAPI real y Network Engine real | [Prueba] CI |
 | Windows 11 físico | — | **No verificado** | [No verificado] probar en el equipo de Ronaldo |
 | Instalaciones independientes | — | Forms no importa paquetes de NE ni de Monitor | [Inferencia] + [Prueba] del pin |
 | Paso 09b | `f93dd58` | Mismo contrato con Forms nativo | [Prueba] `test_paso_09b_con_forms_nativo_mismo_contrato` |

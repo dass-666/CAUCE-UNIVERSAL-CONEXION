@@ -16,7 +16,7 @@ documentado un **límite** que Forms no puede resolver solo: los reintentos inte
 | 3 | `huella.key` y permisos en Windows | **Defecto corregido** (pérdida silenciosa de la protección) + ACL efectiva en Windows | Alta / Media |
 | 4 | Crecimiento de `operaciones.json` | **Defecto corregido**: las confirmadas antiguas se borraban y perdían el bloqueo | Alta a medio plazo |
 | 5 | Conflictos con #3, #4 y #5 | #3 sin conflictos; #4 y #5 con conflictos de texto en 2 archivos | Media (orden de fusión) |
-| 6 | CI del último commit | Ver §6 | — |
+| 6 | CI del último commit | Verde en Linux y Windows (`fdd099a`) | — |
 
 ## 1. Reintentos internos de Chromium
 
@@ -99,7 +99,17 @@ conservando ambos. #4 y #5 comparten base, así que el orden recomendado es **#5
 
 ## 6. CI definitiva
 
-CI_FINAL
+Run `46112498578` sobre `fdd099a` (último commit de código): **verde en los dos sistemas**.
+
+| Runner | Resultado | Omitidas (motivo) |
+|---|---|---|
+| ubuntu-latest | 197 passed, 1 skipped; jornada de CI `ok` | ACL de Windows (solo Windows) |
+| windows-latest | 196 passed, 2 skipped | permisos POSIX; SIGSTOP no existe en Windows |
+
+Los dos commits anteriores (`13baee4`, `23928de`) fallaron en Windows con `Permission denied` en `operaciones.vivo` y
+`operaciones.lock`: `icacls /T` quitaba la herencia también a cada archivo. `fdd099a` aplica la ACL solo a la carpeta,
+una vez (marcador `.acl_aplicada`). `13baee4` además falló en Linux por la prueba de reintento de Chromium, que ahora
+comprueba solo lo invariable (§1). Los commits posteriores a `fdd099a` solo tocan documentación.
 
 ## Riesgos pendientes
 
