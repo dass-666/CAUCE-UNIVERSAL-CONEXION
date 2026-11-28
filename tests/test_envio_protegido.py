@@ -96,18 +96,20 @@ def test_chromium_reintenta_por_su_cuenta_un_post_cortado_y_el_token_evita_el_du
 
 
 def test_limite_portal_sin_idempotencia_el_reintento_interno_de_chromium_duplica(nav, portal, tmp_path):
-    """LÍMITE DOCUMENTADO (revisión final, punto 1). Medido: Chromium repite el POST tras un corte en una conexión
-    reutilizada (3 de 3 intentos) y ese reintento NO aparece en los eventos de Playwright (`posts_vistos` = 1).
-    Con un portal sin token de un solo uso, eso es un trámite duplicado que Forms no puede ver ni impedir. Forms
-    hizo UN solo clic y registró UNA operación: la protección de Forms llega hasta el clic, no más abajo."""
+    """LÍMITE DOCUMENTADO (revisión final, punto 1). Si la conexión REUTILIZADA se corta antes de la respuesta, Chromium
+    puede repetir el POST por su cuenta, y ese reintento NO aparece en los eventos de Playwright. Que ocurra depende de
+    si la conexión se reutilizó: en este contenedor ocurrió 6 de 6 veces; en el runner Linux del CI, no. Por eso se
+    comprueba lo invariable: Forms hace UN clic y registra UNA operación, y con un portal sin token de un solo uso
+    CADA reintento del navegador es un trámite duplicado que Forms no ve."""
     portal.portal.idempotente = False
     portal.portal.fallos.append({"tipo": "cortar_despues"})
     reg = RegistroOperaciones(tmp_path)
     rellenar(nav, portal.url + "/tramite", fila(14))
     out = enviar(nav, reg, fila(14), acuse_espera_s=3)
     st = portal.portal.estadisticas()
-    assert st["peticiones_post"] == 2 and st["duplicados"] == 1          # el navegador reintentó y el portal duplicó
     assert len(reg.lista()) == 1 and out["operacion"]["posts_vistos"] == 1   # Forms: un clic, una petición vista
+    assert st["peticiones_post"] in (1, 2)
+    assert st["duplicados"] == st["peticiones_post"] - 1                    # cada reintento invisible = un duplicado
 
 
 def test_corte_antes_de_registrar_queda_incierta_y_no_se_puede_repetir(nav, portal, tmp_path):

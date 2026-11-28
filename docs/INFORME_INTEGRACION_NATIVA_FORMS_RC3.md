@@ -312,6 +312,10 @@ Windows queda con los permisos heredados del perfil **[No verificado]**.
 | D9 | Un fallo del portal pasaba al expediente siguiente en las jornadas | Baja (laboratorio) | `/_lab/limpiar_fallos` tras cada expediente | jornadas (§8) |
 | D11 | Los guiones de laboratorio fallaban con una ruta de salida relativa (el motor arranca en otra carpeta) | Baja (CI) | Rutas absolutas | paso de jornada del CI |
 | D12 | **La interfaz contaba la operación en curso como «resultado desconocido»** (alerta roja durante un envío normal lento) | Media (alarma innecesaria) | `/api/diagnostico` separa `operacion_viva` de `operaciones_inciertas` | `test_doble_clic_en_la_interfaz_envia_una_sola_vez` (comprueba el diagnóstico a mitad del envío) |
+| D13 | **El envío directo de la persona en la ventana no quedaba en el registro** (se podía repetir con ENVIAR) | Alta | Se registra como `incierta` y bloquea | revisión final, §2 |
+| D14 | **Perder `huella.key` desactivaba en silencio la protección** contra duplicados | Alta | Identificador de clave en el registro → revisión general | revisión final, §3 |
+| D15 | **Las confirmadas antiguas (más de 500 cerradas) se borraban y perdían el bloqueo** | Alta a medio plazo | `confirmadas_archivadas` | revisión final, §4 |
+| D16 | En Windows `0o600` no protegía la carpeta de estado | Media | ACL solo usuario + SYSTEM | revisión final, §3 (CI Windows) |
 | D10 | La huella fijada del cliente fallaría en Windows (CRLF al descargar) | Baja (CI) | Comparación normalizada a LF | `test_los_archivos_de_origen_coinciden_con_el_pin` |
 
 ## 13. Solicitudes para el otro agente (Network Engine y Monitor)
@@ -377,6 +381,8 @@ Windows** que ejecutará Forms; se configura `CAUCE_NE_SESSION_TOKEN_FILE`; sin 
 No modifica rutas globales, puertos públicos ni la instalación de Network Engine o Monitor.
 
 ## 17. Riesgos y validaciones físicas pendientes
+
+Actualizado tras la revisión final: ver [`REVISION_FINAL_FORMS_RC3.md`](REVISION_FINAL_FORMS_RC3.md).
 
 | Pendiente | Riesgo | Cómo verificarlo |
 |---|---|---|
