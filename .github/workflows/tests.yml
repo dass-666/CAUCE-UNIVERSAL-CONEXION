@@ -37,7 +37,7 @@ jobs:
         if: runner.os == 'Linux'
       - run: python -m playwright install chromium
         if: runner.os == 'Windows'
-      - run: python -m pytest -q
+      - run: python -m pytest -q -rs
         env:
           CAUCE_EVIDENCE_DIR: evidence/out
           MONITOR_REPO: ${{ github.workspace }}/monitor-contrato

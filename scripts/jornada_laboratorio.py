@@ -482,7 +482,7 @@ def main(argv=None) -> int:
     ap.add_argument("--duracion-min", type=float, default=0, help="prueba prolongada: repetir jornadas este tiempo")
     ap.add_argument("--salida", default=str(ROOT / "evidence" / "out" / "jornadas"))
     a = ap.parse_args(argv)
-    salida = Path(a.salida)
+    salida = Path(a.salida).resolve()      # absoluta: el motor arranca con otra carpeta de trabajo
     lab = Laboratorio(salida, a.ne_repo)
     med = Medidor(lab.procs, paso=5.0 if not a.duracion_min else 15.0)
     informe: dict[str, Any] = {"inicio": ahora(), "network_engine": bool(a.ne_repo), "jornadas": [],

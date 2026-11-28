@@ -26,7 +26,7 @@ def main(argv=None) -> int:
     ap.add_argument("--ne-repo", default=os.environ.get("CAUCE_NE_REPO"))
     ap.add_argument("--salida", default=str(ROOT / "evidence" / "out" / "capturas"))
     a = ap.parse_args(argv)
-    out = Path(a.salida)
+    out = Path(a.salida).resolve()
     out.mkdir(parents=True, exist_ok=True)
     from playwright.sync_api import sync_playwright
     kw = {"headless": True}
