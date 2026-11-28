@@ -104,7 +104,8 @@ def _esperar_acuse(session: BrowserSession, limite_s: float, documentos: list) -
 
 def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro: RegistroOperaciones,
                      huella: str, audit: Optional[AuditLog] = None, diagnostico: Any = None,
-                     button_text: str = "", acuse_espera_s: float = ACUSE_ESPERA_S) -> dict[str, Any]:
+                     button_text: str = "", acuse_espera_s: float = ACUSE_ESPERA_S,
+                     destino: Optional[str] = None) -> dict[str, Any]:
     audit = audit or AuditLog(None)
     humanos_antes = session.envios_humanos           # envíos de la persona atendidos hasta ahora (ver paso 4)
     # 1. comprobaciones previas (mismas reglas H1 que submit_with_human_confirmation)
@@ -114,7 +115,7 @@ def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro
         raise PermissionError("Modo de integración: el conector no envía formularios.")
     if not session.submit_armed:
         raise PermissionError("No hay un relleno revisado pendiente de envío (aprobación de un solo uso).")
-    registro.comprobar(huella)                      # lanza OperacionBloqueada (subclase de PermissionError)
+    registro.comprobar(huella, destino)             # lanza OperacionBloqueada (subclase de PermissionError)
     analysis = session.inspect()
     if analysis.safety.blocked:
         raise PermissionError("La página requiere intervención humana directa: envíe desde el navegador.")
@@ -136,7 +137,8 @@ def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro
     session.aprobacion_en_uso = True                 # hasta el clic, un envío de la persona sigue siendo atribuible
     sesion_ne = getattr(getattr(diagnostico, "c", None), "session_id", None) if diagnostico else None
     try:
-        op = registro.iniciar(huella, analysis.source_label, token, sesion_ne, api_base if token else None)
+        op = registro.iniciar(huella, analysis.source_label, token, sesion_ne, api_base if token else None,
+                              destino=destino)
     except BaseException as exc:
         session.aprobacion_en_uso = False
         # OperacionBloqueada es PermissionError, y PermissionError es OSError: antes un bloqueo detectado aquí se

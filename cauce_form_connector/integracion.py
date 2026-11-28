@@ -271,8 +271,10 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
     if not registro._clave_persistida:
         raise _Parar("error_interno", "ERROR_INTERNO")
     huella_reg = huella_preparacion_registro(registro, form["url"], sol["campos"])
+    # identidad común con la interfaz: mismo formulario y mismas claves de campo de la página → mismos valores
+    destino_reg = registro.destino(form["url"], {integ["campos"][l]: v for l, v in sol["campos"].items()})
     try:
-        registro.comprobar(huella_reg)
+        registro.comprobar(huella_reg, destino_reg)
     except OperacionBloqueada as exc:
         print(f"OPERACION_PREVIA {exc.codigo}", file=sys.stderr)      # código fijo, sin datos
         raise _Parar("detenido_intervencion_humana", "INTERVENCION_HUMANA_REQUERIDA")
@@ -283,7 +285,7 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
             return None if anotada.get("ok") else False
         try:
             o = registro.registrar_envio_humano(
-                huella_reg, safe_url_label(form["url"]), ref_solicitud=sol["solicitud_id"],
+                huella_reg, safe_url_label(form["url"]), ref_solicitud=sol["solicitud_id"], destino=destino_reg,
                 motivo="envio_humano_observado_preparar" if via == "submit" else "envio_humano_por_javascript_preparar")
             anotada.update(ok=True, id=o["id"])
             print(f"OPERACION_REGISTRADA {o['id']}", file=sys.stderr)

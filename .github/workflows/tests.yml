@@ -57,9 +57,8 @@ jobs:
       - run: python scripts/recorrido_ui.py --headless
       # Analizador de formularios externos sobre un formulario de laboratorio local (solo lectura)
       - run: python -m cauce_form_connector analizar-formulario --html lab_forms/06_cita_monitor.html --expediente sample_data/expediente_monitor_sintetico.json --salida evidence/out/analisis_lab06
-      # Jornada corta de laboratorio (procesos reales, portal ficticio, red simulada): solo Linux (usa señales POSIX)
+      # Jornada corta de laboratorio (procesos reales, portal ficticio, red simulada), en Linux y Windows (A7 de E10)
       - run: python -m pip install psutil && python scripts/jornada_laboratorio.py --ne-repo ne-rc3 --expedientes 6 --salida evidence/out/jornada-ci
-        if: runner.os == 'Linux'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

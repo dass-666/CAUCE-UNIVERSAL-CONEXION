@@ -133,3 +133,52 @@ def test_s1_forms_pierde_su_id_y_recupera_la_sesion_heredando_la_marca(ne, tmp_p
     assert reg.get(op["id"])["estado"] == INCIERTA
     with pytest.raises(OperacionBloqueada):
         reg.comprobar("h_" + "f" * 24)
+
+
+def test_a5_credencial_rotada_con_la_sesion_vieja_viva_no_detiene_forms_y_la_marca_sigue(ne, tmp_path):
+    """A5 de E10: el puesto guarda el id de una sesión de la credencial ANTERIOR (sin revocar, sigue viva). Antes el
+    403 not_session_owner dejaba Forms en credencial_incorrecta hasta un reanudar() manual. Ahora registra una propia
+    y vuelve a entregar la marca. Lo incierto sigue bloqueado en el puesto."""
+    reg = RegistroOperaciones(tmp_path / "ops")
+    d, tid, ruta, puesto = forms(ne, tmp_path, registro=reg)
+    assert latir_hasta(d, lambda: d.estado()["fase"] == "activa", 20)
+    op = reg.iniciar("h_" + "a" * 24, "lab", None, d.c.session_id)
+    d.operacion_inicio()
+    reg.cerrar(op["id"], INCIERTA, "resultado_desconocido")
+    d.operacion_fin(resultado_seguro=False)
+    assert latir_hasta(d, lambda: d.estado()["requiere_persona"])
+    viejo = d.c.session_id
+    nueva = ne.credencial("forms-puesto-1-rotada")                     # rotación SIN revocar la anterior
+    d2, *_ = forms(ne, tmp_path, registro=reg, credencial=nueva)        # mismo puesto.json: recuerda la sesión vieja
+    assert d2.c.session_id == viejo
+    d2.latir(obligatorio=True)
+    # la sesión vieja sigue viva y ocupa la etiqueta: Forms espera y reintenta (antes: detenido para siempre)
+    assert d2.estado()["motor"] != "credencial_incorrecta", d2.estado()
+    assert d2.c.session_id is None
+    ne.revocar(tid)                                                    # el administrador retira la credencial vieja
+    assert latir_hasta(d2, lambda: d2.estado()["motor"] == "conectado" and d2.c.session_id not in (None, viejo), 20)
+    assert latir_hasta(d2, lambda: ne.sesion(d2.c.session_id)["requires_human"])
+    assert reg.get(op["id"])["estado"] == INCIERTA
+    with pytest.raises(OperacionBloqueada):
+        reg.comprobar("h_" + "a" * 24)
+
+
+def test_a5_un_403_con_la_sesion_recien_registrada_si_detiene(tmp_path):
+    """Si el 403 llega justo después de registrar (ámbito incorrecto u otro fallo real), Forms se detiene: sin bucle."""
+    from cauce_form_connector.red.cliente_ne import CauceAPIError
+    from cauce_form_connector.red.diagnostico import DiagnosticoRed
+
+    class Cli:
+        session_id = None
+        n = 0
+
+        def register(self, *a, **k):
+            self.session_id = "bs_" + "1" * 12
+            return {}
+
+        def heartbeat(self, *a, **k):
+            Cli.n += 1
+            raise CauceAPIError(403, "not_session_owner", "x")
+    d = DiagnosticoRed(Cli(), None, conexion="sim-a", intervalo_s=1, latido_max_s=30)
+    assert d.latir(obligatorio=True) is False
+    assert d.estado()["motor"] == "credencial_incorrecta" and Cli.n == 1

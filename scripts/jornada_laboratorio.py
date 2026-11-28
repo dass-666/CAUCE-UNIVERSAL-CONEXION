@@ -99,10 +99,18 @@ class Proc:
         if not esperar_puerto(self.port):
             raise RuntimeError(f"{self.nombre} no arrancó: {self.log.read_text()[-600:]}")
 
+    def _arbol(self, forzar: bool) -> None:
+        """Termina el proceso y sus hijos. A7 de E10: en Windows no existen os.killpg ni SIGKILL (taskkill /T)."""
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/T", *(["/F"] if forzar else []), "/PID", str(self.p.pid)],
+                           capture_output=True)
+        else:
+            os.killpg(self.p.pid, signal.SIGKILL if forzar else signal.SIGTERM)
+
     def matar(self) -> None:
         if self.p and self.p.poll() is None:
             try:
-                os.killpg(self.p.pid, signal.SIGKILL)
+                self._arbol(True)
             except OSError:
                 self.p.kill()
             self.p.wait(10)
@@ -110,7 +118,7 @@ class Proc:
     def parar(self) -> None:
         if self.p and self.p.poll() is None:
             try:
-                os.killpg(self.p.pid, signal.SIGTERM)
+                self._arbol(False)
             except OSError:
                 self.p.terminate()
             try:

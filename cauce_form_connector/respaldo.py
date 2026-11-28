@@ -41,7 +41,8 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import __version__
-from .operaciones import ARCHIVO, CLAVE, VIVO, RegistroOperaciones, _otro_forms_vivo, proteger_carpeta
+from .operaciones import (ARCHIVO, CLAVE, VIVO, RegistroOperaciones, _otro_forms_vivo, proteger_archivo,
+                          proteger_carpeta)
 
 ESQUEMA = "cauce.forms.respaldo/1"
 MANIFIESTO = "MANIFIESTO.json"
@@ -119,7 +120,6 @@ def respaldar(settings: Any, destino: str | Path) -> dict:
     man["resumen"] = _resumen(man)
     d = Path(destino)
     d.mkdir(parents=True, exist_ok=True)
-    proteccion = proteger_carpeta(d)
     ruta = d / f"respaldo-forms-{ahora.strftime('%Y%m%dT%H%M%SZ')}.zip"
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -131,8 +131,10 @@ def respaldar(settings: Any, destino: str | Path) -> dict:
         fh.write(buf.getvalue())
         fh.flush()
         os.fsync(fh.fileno())
+    # solo el archivo: la carpeta de destino la elige la persona (podría ser la raíz de una unidad) y no se toca
+    proteccion = proteger_archivo(ruta)
     verificar(ruta)                                       # se relee lo escrito: un respaldo que no se verifica no vale
-    return {"respaldo": str(ruta), "archivos": len(archivos), "operaciones": man["operaciones"],
+    return {"aviso": AVISO_CIFRADO, "respaldo": str(ruta), "archivos": len(archivos), "operaciones": man["operaciones"],
             "archivadas": man["archivadas"], "proteccion": proteccion, "sha256": _sha(ruta.read_bytes())}
 
 
@@ -264,12 +266,18 @@ def restaurar(settings: Any, ruta: str | Path) -> dict:
                      "cauce-forms operaciones revisar GENERAL --nota ... --confirmar GENERAL"}
 
 
+AVISO_CIFRADO = ("Este respaldo contiene huella.key, la clave que protege contra envíos duplicados: guárdelo SOLO en un "
+                 "medio cifrado (BitLocker, BitLocker To Go o equivalente) y con acceso restringido. Con esa clave y "
+                 "un registro, quien tenga el respaldo puede comprobar si un expediente concreto se envió.")
+
+
 def orden_estado(args: Any, settings: Any) -> int:
     def emit(o: dict) -> None:
         print(json.dumps(o, ensure_ascii=False, indent=1))
     try:
         if args.accion == "respaldar":
             emit(respaldar(settings, args.destino))
+            print("AVISO: " + AVISO_CIFRADO, file=sys.stderr)
         elif args.accion == "verificar":
             man, cont = verificar(args.respaldo)
             emit({"valido": True, "creado": man.get("creado"), "archivos": len(cont), "operaciones": man.get("operaciones"),

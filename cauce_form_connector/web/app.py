@@ -79,6 +79,7 @@ class Workspace:
         self.rows: list[dict[str, str]] = []
         self.proposals: list[Mapping] = []
         self.fila_rellenada: Optional[int] = None   # fila del último relleno (para la huella del expediente)
+        self.destino_rellenado: Optional[str] = None  # identidad común de ese relleno (formulario + campos escritos)
         self.lock = threading.Lock()
         # Bloque C: registro durable de operaciones confirmadas (antes del clic, en disco)
         self.registro = RegistroOperaciones(settings.data_dir, dueno=True)
@@ -129,12 +130,14 @@ class Workspace:
         try:
             op = self.registro.registrar_envio_humano(
                 self.registro.huella(self.rows[i]), self.session.source_label if self.session else "",
-                motivo="envio_humano_directo_sin_acuse" if via == "submit" else "envio_humano_por_javascript_sin_acuse")
+                motivo="envio_humano_directo_sin_acuse" if via == "submit" else "envio_humano_por_javascript_sin_acuse",
+                destino=self.destino_rellenado)
             self.audit.log("envio_humano_directo", detail=op["id"], codigo=via)
         except (OSError, ValueError):
             self.audit.log("envio_humano_no_registrado", codigo="registro_no_escribible")
             ok = False
         self.fila_rellenada = None                            # la aprobación de esa fila ya no vale
+        self.destino_rellenado = None
         if self.session is not None:
             self.session.submit_armed = False
         self.diag.exigir_marca()                              # el motor y Monitor también deben verlo
@@ -322,15 +325,21 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 ws.audit.log("mapping_override", field_key=m.field_key, column=m.column, mapping_status=m.status)
         s = ws.session
 
+        mapa = dict(body.mapping)          # fill_form le añade los campos aparecidos durante el relleno
+
         def job():
             if body.reload_first:
                 s.reload_source()
-            return fill_form(s, dict(body.mapping), row, delay_ms=body.delay_ms, audit=ws.audit,
-                             form_key=body.form_key)
+            rep = fill_form(s, mapa, row, delay_ms=body.delay_ms, audit=ws.audit, form_key=body.form_key)
+            return rep, s.page.url
 
         with ws.lock:
-            report = ws.worker.run(job)
+            report, url_rellenada = ws.worker.run(job)
             ws.fila_rellenada = body.row_index
+            # identidad común del expediente (la misma que calcula `preparar`): formulario + campo → valor escrito
+            ws.destino_rellenado = ws.registro.destino(url_rellenada, {
+                r.field_key: row.get(mapa.get(r.field_key) or "", "")
+                for r in report.results if r.method != "omitido" and mapa.get(r.field_key)})
         return {"report": report.to_dict()}
 
     @app.post("/api/submit")
@@ -344,7 +353,8 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             if ws.fila_rellenada is None or not 0 <= ws.fila_rellenada < len(ws.rows):
                 raise HTTPException(403, "No hay un relleno revisado pendiente de envío (aprobación de un solo uso).")
             huella = ws.registro.huella(ws.rows[ws.fila_rellenada])
-            return ws.worker.run(enviar_protegido, ws.session, body.phrase, ws.registro, huella, ws.audit, ws.diag)
+            return ws.worker.run(enviar_protegido, ws.session, body.phrase, ws.registro, huella, ws.audit, ws.diag,
+                                 destino=ws.destino_rellenado)
         except OperacionBloqueada as exc:
             raise HTTPException(409, str(exc))
         except PermissionError as exc:

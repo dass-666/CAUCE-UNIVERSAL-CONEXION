@@ -21,7 +21,8 @@ diferencias, todas cubiertas por pruebas:
 
 Estados del motor que ve la persona (``motor``):
 ``no_configurado`` · ``conectado`` · ``no_disponible`` (sin diagnóstico; NO significa sin internet) ·
-``credencial_invalida`` (401) · ``credencial_incorrecta`` (403: no es de ámbito session o la sesión es de otra) ·
+``credencial_invalida`` (401) · ``credencial_incorrecta`` (403: no es de ámbito session; un 403 ``not_session_owner``
+sobre una sesión guardada de otra credencial se trata como un 404: se registra una propia) ·
 ``limitado`` (429) · ``sesion_ocupada`` (409: la credencial ya tiene otra sesión viva cuyo id se perdió).
 
 Conectividad (``conectividad``): ``verificada`` · ``degradada`` · ``perdida`` · ``desconocida`` ·
@@ -258,6 +259,7 @@ class DiagnosticoRed:
     def _latir_sin_lock(self, timeout: Optional[float]) -> bool:
         ok, codigo, op = self._cuerpo()
         self._ultimo_envio = self.reloj()
+        recien = not self.c.session_id
         try:
             if not self.c.session_id:
                 v = self.c.register(self.puesto.etiqueta if self.puesto else "forms-sin-puesto",
@@ -278,7 +280,7 @@ class DiagnosticoRed:
                 v = self.c.heartbeat(ok, codigo, op, timeout=timeout, local_review=lr)
             self.local_review_enviado = lr
         except CauceAPIError as e:
-            return self._error_api(e, timeout)
+            return self._error_api(e, timeout, recien_registrada=recien)
         except (OSError, ValueError) as e:      # motor apagado, rechazo, tiempo agotado, JSON ilegible
             self._fijar(motor=MOTOR_NO_DISPONIBLE, codigo=type(e).__name__)
             return False
@@ -354,7 +356,16 @@ class DiagnosticoRed:
                 with self._st:
                     self._marca_por_entregar = True
 
-    def _error_api(self, e: CauceAPIError, timeout: Optional[float]) -> bool:
+    def _error_api(self, e: CauceAPIError, timeout: Optional[float], recien_registrada: bool = False) -> bool:
+        if e.status == 403 and e.code == "not_session_owner" and not recien_registrada:
+            # A5 de E10: la sesión guardada es de OTRA credencial (se rotó la credencial y la vieja seguía viva). No es
+            # una credencial mal configurada: se olvida ese id y se registra una sesión propia, como tras un 404. La
+            # marca local sigue y se vuelve a entregar. Si el 403 llega con la sesión recién registrada, sí se detiene.
+            self.c.session_id = None
+            if self.puesto:
+                self.puesto.recordar_sesion(None)
+            self._rh_visto_en = None
+            return self._latir_sin_lock(timeout)
         if e.status == 404 and e.code == "unknown_session":
             # el motor ya no la conoce (cerrada, caducada o sin persistencia): registrarla de nuevo; la marca local sigue
             self.c.session_id = None

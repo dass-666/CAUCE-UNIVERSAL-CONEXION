@@ -39,6 +39,7 @@ import secrets
 import shutil
 import sys
 import threading
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,11 +56,12 @@ EN_CURSO, CONFIRMADA, INCIERTA, NO_ENVIADA, RECHAZADA, REVISADA = (
 ESTADOS = (EN_CURSO, CONFIRMADA, INCIERTA, NO_ENVIADA, RECHAZADA, REVISADA)
 ABIERTOS = (EN_CURSO, INCIERTA)                       # requieren evidencia o revisión humana
 BLOQUEAN_REPETICION = (EN_CURSO, INCIERTA, CONFIRMADA)  # el expediente no se vuelve a enviar
+ESPERA_CANDADO_S = 30.0                               # A6: espera máxima por el candado entre procesos
 MAX_CERRADAS = 500                                    # las abiertas nunca se descartan
 
 CAMPOS = {"id", "creada", "actualizada", "estado", "motivo", "huella", "origen", "token_portal", "folio",
           "sesion_ne", "marca_ne", "revision", "aviso_en_curso", "envio_observado", "api_acuse",
-          "posts_vistos", "ref_solicitud", "revision_red"}
+          "posts_vistos", "ref_solicitud", "revision_red", "destino"}
 RESULTADOS_REVISION = ("recibido", "no_recibido", "sin_determinar")
 _SOL_RE = re.compile(r"^sol_[0-9a-f]{16,32}$")
 _ID_RE = re.compile(r"^op_[0-9a-f]{12}$")
@@ -100,7 +102,33 @@ def _resumen(ops: list, general: Optional[dict], archivadas: Optional[dict] = No
 
 
 _HUELLA_RE = re.compile(r"^h_[0-9a-f]{24}$")
+# Identidad común del expediente (interfaz y preparar): formulario de destino + una huella por campo escrito
+_DESTINO_RE = re.compile(r"^d_[0-9a-f]{16}(\.[0-9a-f]{16}){1,300}$")
 _CLAVE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def _sid_usuario() -> Optional[str]:
+    import subprocess
+    out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, timeout=10)
+    sid = out.stdout.strip().split(",")[-1].strip('"')
+    return sid if re.match(r"^S-1-[0-9-]+$", sid) else None
+
+
+def proteger_archivo(archivo: Path) -> str:
+    """Como ``proteger_carpeta`` pero para UN archivo (p. ej. un respaldo en una carpeta que elige la persona: no se
+    toca la ACL de esa carpeta). Windows: sin herencia, acceso solo del usuario actual y SYSTEM."""
+    if sys.platform != "win32":
+        return "posix"
+    import subprocess
+    try:
+        sid = _sid_usuario()
+        if not sid:
+            return "heredada"
+        r = subprocess.run(["icacls", str(archivo), "/inheritance:r", "/grant:r", f"*{sid}:F",
+                            "/grant:r", "*S-1-5-18:F", "/Q"], capture_output=True, text=True, timeout=30)
+        return "acl_usuario" if r.returncode == 0 else "heredada"
+    except (OSError, subprocess.SubprocessError):
+        return "heredada"
 
 
 def proteger_carpeta(carpeta: Path) -> str:
@@ -119,9 +147,8 @@ def proteger_carpeta(carpeta: Path) -> str:
         return "acl_usuario"
     import subprocess
     try:
-        out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, timeout=10)
-        sid = out.stdout.strip().split(",")[-1].strip('"')
-        if not re.match(r"^S-1-[0-9-]+$", sid):
+        sid = _sid_usuario()
+        if not sid:
             return "heredada"
         # 1) SOLO la carpeta: sin herencia de arriba; usuario y SYSTEM con herencia hacia dentro (OI)(CI).
         #    (Con /T esos mismos argumentos se aplicaban a cada archivo: quedaban sin herencia y, en el CI de Windows,
@@ -146,7 +173,25 @@ def _limpia(o: Any) -> Optional[dict]:
         return None
     if set(o) - CAMPOS:
         return None
+    if o.get("destino") is not None and not (isinstance(o["destino"], str) and _DESTINO_RE.match(o["destino"])):
+        return None
     return dict(o)
+
+
+def _partes_destino(d: Optional[str]) -> Optional[tuple[str, frozenset]]:
+    if not d or not _DESTINO_RE.match(d):
+        return None
+    f, *c = d.split(".")
+    return f, frozenset(c)
+
+
+def destinos_casan(a: Optional[str], b: Optional[str]) -> bool:
+    """Mismo expediente para el portal: mismo formulario y los campos escritos de uno están todos, con el mismo valor,
+    en el otro (uno contiene al otro). Conservador: si una modalidad escribió campos de más, sigue casando."""
+    pa, pb = _partes_destino(a), _partes_destino(b)
+    if not pa or not pb or pa[0] != pb[0]:
+        return False
+    return pa[1] <= pb[1] or pb[1] <= pa[1]
 
 
 VIVO = "operaciones.vivo"
@@ -272,6 +317,21 @@ class RegistroOperaciones:
         canon = json.dumps({str(k): str(v) for k, v in sorted(fila.items())}, ensure_ascii=False, sort_keys=True)
         return "h_" + hmac.new(self._clave, canon.encode("utf-8"), hashlib.sha256).hexdigest()[:24]
 
+    def destino(self, url: str, escrituras: dict[str, Any]) -> Optional[str]:
+        """Identidad COMÚN del expediente, igual en la interfaz y en ``preparar``: formulario de destino (esquema,
+        servidor, puerto y ruta, sin consulta) y, por cada campo que se escribe (clave del campo en la página → valor),
+        un HMAC con la clave local. No guarda ningún valor ni nombre de columna. None si no se escribe nada."""
+        from urllib.parse import urlsplit
+        u = urlsplit(url or "")
+        puerto = u.port or {"http": 80, "https": 443}.get(u.scheme, "")
+        f = f"{u.scheme}://{(u.hostname or '').lower()}:{puerto}{u.path or '/'}"
+        mac = lambda t: hmac.new(self._clave, t.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+        campos = sorted({mac(json.dumps(["campo", str(k), str(v)], ensure_ascii=False))
+                         for k, v in escrituras.items() if k and v is not None and str(v) != ""})
+        if not campos:
+            return None
+        return ".".join(["d_" + mac(json.dumps(["formulario", f], ensure_ascii=False)), *campos[:300]])
+
     # ------------------------------------------------------------------ persistencia
     def _leer(self, p: Path) -> Optional[dict]:
         try:
@@ -286,7 +346,8 @@ class RegistroOperaciones:
             return None
         a = d.get("confirmadas_archivadas") or {}
         k = d.get("clave_id")
-        if not isinstance(a, dict) or not all(isinstance(h, str) and _HUELLA_RE.match(h) and isinstance(f, str)
+        if not isinstance(a, dict) or not all(isinstance(h, str) and (_HUELLA_RE.match(h) or _DESTINO_RE.match(h))
+                                              and isinstance(f, str)
                                               for h, f in a.items()):
             return None
         if k is not None and not (isinstance(k, str) and _CLAVE_ID_RE.match(k)):
@@ -354,6 +415,8 @@ class RegistroOperaciones:
                     # una confirmada (o revisada que sigue bloqueando) que sale de la lista conserva su bloqueo
                     if o["id"] in quitar and _bloquea(o) and _HUELLA_RE.match(o.get("huella") or ""):
                         self.archivadas[o["huella"]] = (o.get("creada") or "")[:10]
+                    if o["id"] in quitar and _bloquea(o) and _DESTINO_RE.match(o.get("destino") or ""):
+                        self.archivadas[o["destino"]] = (o.get("creada") or "")[:10]
                 self.ops = [o for o in self.ops if o["id"] not in quitar]
             doc = {"esquema": ESQUEMA, "operaciones": self.ops, "general": self.general,
                    "confirmadas_archivadas": self.archivadas, "clave_id": self.clave_id,
@@ -387,19 +450,26 @@ class RegistroOperaciones:
                 return
             self.dir.mkdir(parents=True, exist_ok=True)
             fh = open(self.dir / "operaciones.lock", "a+b")
+            # A6 de E10: espera con tope (antes, en Windows, un bucle sin fin colgaba la interfaz sin mensaje). Al
+            # agotarse se lanza OSError y la capa superior no envía.
+            limite = time.monotonic() + ESPERA_CANDADO_S
+            while True:
+                try:
+                    if sys.platform == "win32":
+                        import msvcrt
+                        fh.seek(0)
+                        msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+                    else:
+                        import fcntl
+                        fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    if time.monotonic() >= limite:
+                        fh.close()
+                        raise OSError("operaciones.lock: otro proceso retiene el registro de operaciones "
+                                      f"más de {ESPERA_CANDADO_S:.0f} s; no se envía") from None
+                    time.sleep(0.05)
             try:
-                if sys.platform == "win32":
-                    import msvcrt
-                    fh.seek(0)
-                    while True:
-                        try:
-                            msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
-                            break
-                        except OSError:
-                            continue
-                else:
-                    import fcntl
-                    fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
                 self._profundidad = 1
                 yield
             finally:
@@ -454,19 +524,23 @@ class RegistroOperaciones:
             self._recargar()
             return [dict(o) for o in self.ops[-limite:]][::-1]
 
-    def comprobar(self, huella: str) -> None:
-        """Lanza ``OperacionBloqueada`` si NO se puede enviar este expediente ahora."""
+    def comprobar(self, huella: str, destino: Optional[str] = None) -> None:
+        """Lanza ``OperacionBloqueada`` si NO se puede enviar este expediente ahora. Casa por la huella de la modalidad
+        (``huella``) o por la identidad común (``destino``), así un expediente enviado desde la interfaz queda
+        protegido en ``preparar`` y al revés."""
         with self._candado():
             self._recargar()
             if self.general is not None:
                 raise OperacionBloqueada("revision_general_pendiente",
                                          "El registro de operaciones necesita revisión de un operador "
                                          f"({self.general['motivo']}): no se envía nada hasta entonces.")
-            if huella in self.archivadas:
+            arch = next((h for h in self.archivadas if h == huella or (destino and destinos_casan(h, destino))), None)
+            if arch is not None:
                 raise OperacionBloqueada("expediente_confirmada", "No se envía: este expediente ya consta como recibido "
-                                         f"por el portal (archivado, {self.archivadas[huella]}).")
+                                         f"por el portal (archivado, {self.archivadas[arch]}).")
             for o in self.ops:
-                if o.get("huella") == huella and _bloquea(o):
+                if (o.get("huella") == huella or (destino and destinos_casan(o.get("destino"), destino))) \
+                        and _bloquea(o):
                     if o["estado"] == REVISADA:
                         raise OperacionBloqueada("expediente_revisada", "No se envía: un operador revisó un envío "
                                                  "anterior de este expediente sin dejar escrito que el portal no lo "
@@ -478,7 +552,7 @@ class RegistroOperaciones:
 
     # ------------------------------------------------------------------ transiciones
     def iniciar(self, huella: str, origen: str, token_portal: Optional[str], sesion_ne: Optional[str],
-                api_acuse: Optional[str] = None) -> dict:
+                api_acuse: Optional[str] = None, destino: Optional[str] = None) -> dict:
         """Crea la operación ``en_curso`` y la guarda en disco. Lanza OSError si no puede (entonces NO se envía)."""
         if not self._clave_persistida:
             raise OSError("huella.key no se pudo guardar: la protección contra duplicados no sobreviviría a un reinicio")
@@ -492,14 +566,15 @@ class RegistroOperaciones:
                                          "con el mismo registro de operaciones. Ciérrela y vuelva a intentarlo.")
         with self._candado():
             self._recargar()
-            self.comprobar(huella)
+            self.comprobar(huella, destino)
             o = {"id": "op_" + secrets.token_hex(6), "creada": _ahora(), "actualizada": _ahora(), "estado": EN_CURSO,
                  "motivo": None, "huella": huella, "origen": str(origen)[:200],
                  "token_portal": token_portal if token_portal and _TOKEN_RE.match(token_portal) else None,
                  "folio": None, "sesion_ne": sesion_ne if sesion_ne and _SID_RE.match(sesion_ne) else None,
                  "marca_ne": None, "revision": None, "aviso_en_curso": None, "envio_observado": None,
                  # solo la API del portal PROPIO (127.0.0.1/localhost), para verificar el acuse más tarde
-                 "api_acuse": api_acuse if api_acuse and _API_RE.match(api_acuse) else None}
+                 "api_acuse": api_acuse if api_acuse and _API_RE.match(api_acuse) else None,
+                 "destino": destino if destino and _DESTINO_RE.match(destino) else None}
             self.ops.append(o)
             try:
                 self._guardar()
@@ -509,7 +584,7 @@ class RegistroOperaciones:
             return dict(o)
 
     def registrar_envio_humano(self, huella: str, origen: str, motivo: str = "envio_humano_directo_sin_acuse",
-                               ref_solicitud: Optional[str] = None) -> dict:
+                               ref_solicitud: Optional[str] = None, destino: Optional[str] = None) -> dict:
         """La PERSONA envió desde la ventana del navegador (sin pasar por ENVIAR). Forms no vio el resultado ni puede
         verificarlo: queda ``incierta`` y bloquea repetir ese expediente hasta que un operador lo revise.
         No comprueba bloqueos (el envío ya ocurrió) y, si no puede escribir, lanza OSError para que se audite."""
@@ -522,7 +597,8 @@ class RegistroOperaciones:
                  "token_portal": None, "folio": None, "sesion_ne": None, "marca_ne": None, "revision": None,
                  "aviso_en_curso": None, "envio_observado": True, "api_acuse": None,
                  # id opaco de la solicitud de Monitor (modo preparar): permite cruzar este registro con el de Monitor
-                 "ref_solicitud": ref_solicitud if ref_solicitud and _SOL_RE.match(ref_solicitud) else None}
+                 "ref_solicitud": ref_solicitud if ref_solicitud and _SOL_RE.match(ref_solicitud) else None,
+                 "destino": destino if destino and _DESTINO_RE.match(destino) else None}
             self.ops.append(o)
             try:
                 self._guardar()
