@@ -22,6 +22,9 @@ LAB = ROOT / "lab_forms"
 DATA = ROOT / "sample_data"
 
 os.environ.setdefault("CAUCE_HEADLESS", "1")
+# Datos propios de Forms (puesto, registro de operaciones) en una carpeta temporal: nunca en el repositorio
+import tempfile  # noqa: E402
+os.environ.setdefault("CAUCE_FORMS_DATA_DIR", tempfile.mkdtemp(prefix="cauce-forms-pruebas-"))
 os.environ.setdefault("CAUCE_TYPING_DELAY_MS", "0")
 os.environ.setdefault("CAUCE_SETTLE_QUIET_MS", "300")
 # En contenedores con Chromium preinstalado se puede indicar su ruta

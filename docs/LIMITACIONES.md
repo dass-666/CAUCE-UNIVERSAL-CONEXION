@@ -46,6 +46,29 @@ Resultado de referencia: **70 pruebas superadas**, demo `DEMO SUPERADA` y ejempl
 12. **Velocidad:** con 35 ms por tecla, 100 caracteres tardan ~3,5 s. Es deliberado y configurable; no se añaden pausas aleatorias porque eso sería técnica de evasión.
 13. **HTML pegado:** se ejecutan sus scripts en línea dentro de Chromium, pero sin acceso a red. Si el HTML depende de recursos externos (CSS/JS de un CDN) no cargarán: use la URL autorizada o el análisis estático.
 
+## 3 bis. Analizador de formularios externos (`analizar-formulario`)
+
+Verificado (pruebas `tests/test_analizador_formularios.py`, solo con páginas de laboratorio locales y datos sintéticos):
+detección de texto, numéricos, selectores, listas y opciones, fechas nativas y en texto, confirmaciones, validaciones
+visibles, campos creados por JavaScript y bloques condicionales; una sola petición GET y ningún POST; correspondencias
+con el modelo plano del Expediente de Monitor (correctas e incorrectas, labs 05 y 06); el perfil borrador del lab 03 lo
+acepta `cargar_formulario` y, tras aprobarlo, `autorrellenar` (contrato `cauce.conector.v1`) rellena 5 de 5 campos.
+
+Límites:
+1. **Modelo de Monitor:** se usa la estructura recuperada por auditoría (15 campos planos). El expediente es SINTÉTICO
+   (`sample_data/expediente_monitor_sintetico.json`); no se ha probado con un expediente real ni con la vista enmascarada
+   (que no es contrato de intercambio).
+2. **Tablas de equivalencias:** se llenan en la vista previa y se aprueban con el perfil; el puente traduce el código
+   antes de llamar al motor (el motor no cambia). Solo cubren correspondencias 1 código → 1 opción; no hay reglas
+   condicionales (p. ej. «si modo es POR_DIA, usar fecha_solicitada»).
+3. **Catálogos de región y sucursal:** desconocidos; los códigos `R01`/`S001` del sintético son inventados.
+4. **Solo lo que se ve al cargar:** campos que aparecen al interactuar, pasar de página o iniciar sesión no se ven.
+5. **Mensajes de validación:** solo `aria-describedby`, `title` y atributos HTML; las reglas solo en JavaScript no.
+6. **Perfiles de laboratorio:** `lab_validaciones.json` usa ya campos planos (5 campos; código postal, ciudad y aviso de
+   privacidad quedan para la persona) y `lab_cita_monitor.json` muestra tablas de equivalencias con códigos inventados.
+   Un perfil aprobado antes de este cambio tiene otra huella y debe aprobarse de nuevo.
+7. **Windows:** verificado en GitHub Actions (`windows-latest`, incluido el instalador sin `py`); no en el PC Windows 11.
+
 ## 4. Riesgos legales y de uso (cuestionamiento del requisito de URL)
 
 Analizar y rellenar páginas de terceros por URL es la parte de mayor riesgo del proyecto:

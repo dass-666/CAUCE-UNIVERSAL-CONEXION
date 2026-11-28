@@ -32,6 +32,21 @@ Mejoras menores aplicadas en la misma revisión:
 | Datos personales temporales | Las filas viven solo en memoria del proceso; los archivos subidos los gestiona Starlette en un temporal que se elimina al terminar la petición; los logs de acceso de uvicorn están desactivados |
 | CAPTCHA / intervención humana | Se mantiene el bloqueo: no rellena y `submit` devuelve 403 |
 
+## Analizador de formularios externos
+
+- **Autorización antes de abrir:** usa la misma `UrlPolicy` (lista `config/allowed_hosts.json` + declaración `--authorized`);
+  si falla, el navegador ni se inicia (prueba `test_url_externa_sin_autorizacion_no_se_abre`). Las redirecciones a dominios
+  no autorizados se bloquean con el mismo `nav_guard`.
+- **Solo lectura:** una carga, sin ventana, sin cookies previas; no escribe, no hace clic ni envía. Prueba: el servidor de
+  laboratorio registra una sola petición GET al formulario y ningún POST.
+- **Sin valores personales en las salidas:** el informe, el perfil y la vista previa dicen si hay dato y si encaja, nunca el
+  valor (prueba `_sin_secretos` sobre los cuatro archivos y la salida del CLI).
+- **Sin equivalencias inventadas:** CURP, RFC, documentos y consentimientos no se proponen; `id_externo` (personal) no
+  se asume equivalente a ningún campo; los códigos de Monitor exigen una tabla aprobada. El expediente sintético deja
+  `id_externo` vacío.
+- **Vista previa local:** HTML autónomo con `Content-Security-Policy: default-src 'none'`; no carga nada de la red. Los textos de
+  la página analizada se escapan antes de mostrarse.
+
 ## Límites conocidos (documentados, no corregidos en v0.1)
 
 - **L1. Scripts que bloquean el navegador:** un HTML con un bucle infinito deja ocupado el hilo de Playwright; hay que cerrar la aplicación (Ctrl+C) y volver a abrirla.

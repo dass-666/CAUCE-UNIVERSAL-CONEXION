@@ -92,6 +92,29 @@ def test_envio_humano_se_observa_pero_no_es_confirmacion(ent, monkeypatch):
     assert resp["revision_humana"]["resultado"] == "envio_humano"
 
 
+def test_tras_el_envio_humano_la_ventana_sigue_abierta_para_la_persona(ent, monkeypatch):
+    """La persona envía y sigue en la MISMA ventana (elige día, confirma, lee el folio) sin volver a teclear nada:
+    Forms no la cierra al ver el envío; termina cuando la persona la cierra."""
+    monkeypatch.setattr(I, "GRACIA_ACTIVACION_S", 0.5)
+    visto = {"llamadas_tras_envio": 0}
+
+    def persona(s):
+        if "envio" not in visto:
+            s.page.wait_for_timeout(800)
+            s.page.locator("button[type=submit]").first.click()
+            visto["envio"] = True
+            return
+        visto["llamadas_tras_envio"] += 1          # el conector ya vio el envío y la ventana sigue disponible
+        if visto["llamadas_tras_envio"] == 5:
+            s.page.close()
+
+    resp, salida = correr(ent, solicitud(ent["info"], espera=30), gancho_revision=persona)
+    assert (resp["estado"], salida) == ("enviado_por_persona_observado", 0)
+    assert visto["llamadas_tras_envio"] == 5
+    assert resp["revision_humana"]["resultado"] == "envio_humano" and resp["revision_humana"]["duracion_s"] < 30
+    assert resp["envio"] == {"realizado_por_conector": False, "envio_humano_observado": True}
+
+
 def test_submit_forzado_por_la_pagina_no_cuenta_como_persona(ent):
     """requestSubmit() desde un script (dentro de la ventana de activación y después de ella) no es envío humano."""
     pasos = {"n": 0}
@@ -134,11 +157,19 @@ def test_el_conector_no_puede_enviar_en_modo_integracion(ent):
     assert Espia.ultimo.submit_events == []
 
 
-def test_incidencias_no_esperan_revision(ent):
+def test_incidencias_dejan_la_ventana_abierta_hasta_que_la_persona_cierra(ent):
+    """Con CAMPO_NO_VERIFICADO la ventana NO se cierra sola: se espera a que la persona revise y cierre."""
     sol = solicitud(ent["info"], espera=60, valores={**VALORES, "email": "zz-no-es-correo"})
-    resp, salida = correr(ent, sol)
+    visto = {}
+
+    def persona_cierra(s):
+        visto["valor_intacto"] = s.page.locator("#email").input_value() == "zz-no-es-correo"   # no se borró nada
+        s.page.close()
+
+    resp, salida = correr(ent, sol, gancho_revision=persona_cierra)
     assert (resp["estado"], salida) == ("preparado_con_incidencias", 2)
-    assert resp["revision_humana"]["resultado"] == "no_realizada" and resp["duracion_ms"] < 30000
+    assert visto == {"valor_intacto": True}
+    assert resp["revision_humana"]["resultado"] == "cerrada_sin_envio" and resp["envio"]["realizado_por_conector"] is False
     assert {"campo": "email", "estado": "invalido"} .items() <= next(c for c in resp["campos"] if c["campo"] == "email").items()
     sin_valores(resp)
 
@@ -343,6 +374,7 @@ def test_excepcion_inesperada_no_filtra_valores(ent, capsys):
 def _proceso(ent, entrada: str, extra_env=None):
     env = {**os.environ, "CAUCE_HEADLESS": "1", "CAUCE_PROFILES_DIR": ent["s"].profiles_dir,
            "CAUCE_STATE_DIR": str(ent["state"]), "CAUCE_AUDIT_PATH": str(ent["tmp"] / "audit.jsonl"),
+           "CAUCE_FORMS_DATA_DIR": ent["s"].data_dir,
            "PYTHONPATH": str(Path(__file__).resolve().parents[1]), **(extra_env or {})}
     cwd = ent["tmp"] / "cwd"
     cwd.mkdir(exist_ok=True)

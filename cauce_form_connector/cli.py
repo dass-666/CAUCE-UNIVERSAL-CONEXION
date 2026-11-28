@@ -78,6 +78,36 @@ def main(argv: list[str] | None = None) -> int:
     p_ap.add_argument("--aprobado-por", required=True, help="rev_... (referencia opaca de quien revisó)")
     p_ap.add_argument("--campos", required=True,
                       help="archivo JSON {nombre_logico: clave_de_campo} revisado por una persona")
+    p_au = sub.add_parser("autorrellenar", help="Monitor -> conector: expediente + perfil de formulario -> ventana visible "
+                                                "rellenada y verificada, sin enviar")
+    p_au.add_argument("--formulario", required=True, help="perfil de formulario configurable (config/formularios/*.json)")
+    p_au.add_argument("--expediente", required=True, help="JSON del expediente (el conector solo lee los campos del perfil)")
+    p_au.add_argument("--url", help="URL del formulario (sustituye a la del perfil)")
+    p_au.add_argument("--puerto", type=int, help="puerto local para formularios de laboratorio ({puerto})")
+    p_au.add_argument("--aprobar-perfil", metavar="REV_ID", help="paso humano: aprobar/actualizar el perfil (rev_xxx) "
+                                                                 "tras revisar los campos del perfil de formulario")
+    p_au.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
+    p_au.add_argument("--autorizacion", metavar="AUT_REF", help="(opcional) referencia de autorización del sitio (aut_xxx); "
+                                                               "si se omite, se registra aut_lista_dominios_local")
+    p_au.add_argument("--manuales-stdin", action="store_true", help="leer por stdin un JSON {campo: valor} con los datos "
+                      "de captura manual (@manual) de ESTA ejecución; no se guardan ni se imprimen")
+    p_au.add_argument("--espera-s", type=int, default=300, help="segundos que se mantiene la ventana para la revisión")
+    p_au.add_argument("--json", action="store_true", help="salida JSON (respuesta del contrato + informe) en vez de texto")
+    p_az = sub.add_parser("analizar-formulario", help="SOLO LECTURA: analiza un formulario autorizado y genera informe "
+                                                      "técnico, perfil borrador y vista previa para revisión humana")
+    g_az = p_az.add_mutually_exclusive_group(required=True)
+    g_az.add_argument("--url", help="URL autorizada del formulario")
+    g_az.add_argument("--html", help="archivo .html local (pruebas)")
+    p_az.add_argument("--authorized", action="store_true", help="declaro autorización sobre la URL (sitios externos)")
+    p_az.add_argument("--expediente", default="sample_data/expediente_monitor_sintetico.json",
+                      help="expediente SINTÉTICO con el modelo de Monitor (solo se mira si hay dato, nunca se muestra)")
+    p_az.add_argument("--salida", help="carpeta de resultados (por defecto informes/analisis_<formulario>_<fecha>)")
+    p_az.add_argument("--nombre", default="", help="nombre legible del formulario")
+    p_az.add_argument("--sondeo", choices=("pasivo", "clic"), default="pasivo",
+                      help="pasivo (por defecto): solo lee la página, sin clics ni teclas. clic: además pulsa con el ratón "
+                           "los controles que la lectura no resolvió (sin teclado, escrituras bloqueadas, corta si algo cambia)")
+    p_az.add_argument("--perfil-previo", help="perfil ya revisado de esta misma URL: la vista previa conserva sus rutas, "
+                                              "formatos de fecha y equivalencias para no repetir la configuración")
     p_fi = sub.add_parser("fill", help="rellenar carácter por carácter y verificar (no envía)")
     source(p_fi)
     p_fi.add_argument("--data", required=True)
@@ -88,12 +118,45 @@ def main(argv: list[str] | None = None) -> int:
     p_fi.add_argument("--screenshot")
     p_fi.add_argument("--headed", action="store_true", help="mostrar la ventana del navegador")
 
+    p_op = sub.add_parser("operaciones", help="OPERADOR: ver y revisar operaciones con resultado desconocido")
+    sop = p_op.add_subparsers(dest="accion", required=True)
+    sop.add_parser("listar", help="operaciones recientes y pendientes (sin datos personales)")
+    p_rv = sop.add_parser("revisar", help="dar por revisada una operación incierta (o GENERAL) tras comprobarla")
+    p_rv.add_argument("id", help="op_xxxxxxxxxxxx o GENERAL")
+    p_rv.add_argument("--nota", required=True, help="qué comprobó (mín. 5 caracteres; no escriba datos personales)")
+    p_rv.add_argument("--confirmar", required=True, help="repita el id exacto (o GENERAL)")
+    p_rv.add_argument("--por", default="operador", help="quién revisa (rol o iniciales, sin datos personales)")
+    p_rv.add_argument("--resultado", choices=("recibido", "no_recibido", "sin_determinar"),
+                      help="obligatorio para una operación: recibido (sigue bloqueado), no_recibido (comprobado que no "
+                           "llegó: se podrá enviar otra vez) o sin_determinar (quita la alerta, sigue bloqueado)")
+    p_es = sub.add_parser("estado", help="OPERADOR: respaldar o restaurar la carpeta de estado de Forms")
+    ses = p_es.add_subparsers(dest="accion", required=True)
+    p_rs = ses.add_parser("respaldar", help="copia protegida y verificable de registro, clave, puesto y configuración")
+    p_rs.add_argument("--destino", required=True, help="carpeta donde dejar el respaldo (se protege como la de estado)")
+    p_vr = ses.add_parser("verificar", help="comprobar la integridad de un respaldo sin restaurarlo")
+    p_vr.add_argument("respaldo", help="archivo respaldo-forms-*.zip")
+    p_rt = ses.add_parser("restaurar", help="restaurar un respaldo (nada se envía hasta revisar GENERAL)")
+    p_rt.add_argument("respaldo", help="archivo respaldo-forms-*.zip")
+    p_rt.add_argument("--confirmar", required=True, help="escriba exactamente: RESTAURAR")
+
     args = ap.parse_args(argv)
     settings = get_settings()
+
+    if args.cmd == "operaciones":
+        return _operaciones(args, settings)
+    if args.cmd == "estado":
+        from .respaldo import orden_estado
+        return orden_estado(args, settings)
 
     if args.cmd == "preparar":
         from .integracion import principal
         return principal()
+
+    if args.cmd == "autorrellenar":
+        return _autorrellenar(args, settings)
+
+    if args.cmd == "analizar-formulario":
+        return _analizar_formulario(args, settings)
 
     if args.cmd == "ui":
         from .web.app import main as ui_main
@@ -157,6 +220,104 @@ def main(argv: list[str] | None = None) -> int:
             session.close()
 
 
+def _autorrellenar(args: argparse.Namespace, settings: Any) -> int:
+    import re
+    from urllib.parse import urlsplit
+    from . import puente_monitor as P
+    from .url_policy import LOCAL_HOSTS
+    try:
+        cfg = P.cargar_formulario(args.formulario, url=args.url, puerto=args.puerto)
+        expediente = json.loads(Path(args.expediente).read_text(encoding="utf-8"))
+        # Sitios externos: en CADA ejecución el dominio debe estar en la lista de permitidos y declararse con
+        # --authorized. La referencia --autorizacion es opcional; si se da, debe tener formato aut_xxx y no ser la de
+        # demostración. Sin ella, el registro indica que la autorización viene de la lista local de dominios.
+        p = urlsplit(cfg["url"])
+        externo = p.scheme in ("http", "https") and (p.hostname or "").lower() not in LOCAL_HOSTS
+        UrlPolicy.load(settings.allowed_hosts_file).check(cfg["url"], args.authorized)
+        aut_ref = args.autorizacion or "aut_lista_dominios_local"
+        if externo and not (args.authorized and re.fullmatch(r"aut_[a-z0-9_]{1,40}", aut_ref) and aut_ref != "aut_demo"):
+            print("URL no autorizada: para un sitio externo use --authorized (dominio en la lista de permitidos); "
+                  "--autorizacion, si se indica, debe ser aut_xxx y no aut_demo.", file=sys.stderr)
+            return 3
+        if args.aprobar_perfil:
+            info = P.aprobar_perfil(cfg, settings, aprobado_por=args.aprobar_perfil, autorizado=args.authorized)
+            print(f"Perfil aprobado: {info['perfil']} (sha256 {info['perfil_sha256'][:12]}…, firma {info['firma']})", file=sys.stderr)
+            for logico, cob in info.get("equivalencias", {}).items():
+                print(f"  Tabla «{logico}» aprobada: {len(cob['codigos_cubiertos'])} códigos"
+                      + (f"; sin fila (los completa la persona): {', '.join(cob['codigos_sin_fila'])}" if cob["codigos_sin_fila"] else ""),
+                      file=sys.stderr)
+        extra: dict[str, Any] = {}
+        if externo:
+            aprobado = (P.info_perfil(cfg, settings) or {}).get("aprobado_por")
+            extra = {"autorizacion_ref": aut_ref, "otorgada_por": aprobado or "rev_sin_aprobar"}
+        manuales = None
+        if args.manuales_stdin:
+            manuales = json.loads(sys.stdin.read() or "{}")
+            if not isinstance(manuales, dict) or not all(isinstance(v, str) for v in manuales.values()):
+                raise P.ConfigInvalida("Los datos de captura manual deben ser un objeto JSON {campo: texto}.")
+        r = P.autorrellenar(cfg, expediente, settings, espera_revision_s=args.espera_s, manuales=manuales, **extra)
+    except UrlNotAllowed as exc:          # antes que ValueError: UrlNotAllowed hereda de ValueError
+        print(f"URL no autorizada: {exc}", file=sys.stderr)
+        return 3
+    except P.ConfigInvalida as exc:       # mensajes propios, sin datos personales: se muestran para poder corregir
+        print(f"Error de configuración: {exc}", file=sys.stderr)
+        return 6
+    except (OSError, ValueError) as exc:
+        print(f"Error de configuración: {type(exc).__name__}", file=sys.stderr)
+        return 6
+    if args.json:
+        _emit({"salida": r["salida"], "salida_contrato": r["salida_contrato"], "respuesta": r["respuesta"],
+               "informe": r["informe"]})
+    else:
+        print(P.texto_informe(r["informe"]))
+    return r["salida"]
+
+
+def _analizar_formulario(args: argparse.Namespace, settings: Any) -> int:
+    """Códigos: 0 informe generado, 3 URL no autorizada, 4 informe generado pero la página exige intervención
+    humana (CAPTCHA/uso humano), 6 error de entrada."""
+    from datetime import datetime
+    from . import analizador_formularios as A
+    url = Path(args.html).resolve().as_uri() if args.html else args.url
+    expediente = None
+    if args.expediente:
+        try:
+            expediente = json.loads(Path(args.expediente).read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"No se pudo leer el expediente: {type(exc).__name__}", file=sys.stderr)
+            return 6
+    try:
+        inf = A.analizar_url(url, autorizado=args.authorized, settings=settings, expediente=expediente, nombre=args.nombre,
+                             sondeo=args.sondeo)
+    except UrlNotAllowed as exc:
+        print(f"URL no autorizada: {exc}", file=sys.stderr)
+        return 3
+    carpeta = args.salida or str(Path("informes") / ("analisis_" + inf["perfil_borrador"]["perfil"].removeprefix("perfil_")
+                                                     + "_" + datetime.now().strftime("%Y%m%d_%H%M%S")))
+    if args.perfil_previo:
+        try:
+            previo = json.loads(Path(args.perfil_previo).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            previo = None
+        if A.adjuntar_perfil_previo(inf, previo):
+            print("Se conservó la configuración del perfil anterior de esta URL (revísela en la vista previa).")
+        else:
+            print("Aviso: el perfil anterior no es de esta URL o no se pudo leer; no se usó.")
+    rutas = A.guardar(inf, carpeta)
+    r = inf["resumen"]
+    print(f"Formulario: {inf['url']}")
+    print(f"Campos: {r['campos']} · automáticos: {r['automatico']} · revisar: {r['revisar']} · humano: {r['humano']} · "
+          f"ignorados: {r['ignorado']}")
+    if inf["bloqueo_humano"]["blocked"]:
+        print("ATENCIÓN: la página exige intervención humana; el perfil no se podrá aprobar.")
+    for a in inf["advertencias"]:
+        print(f"Aviso: {a}")
+    print("Resultados (no se envió nada):")
+    for k, v in rutas.items():
+        print(f"  {k}: {v}")
+    return 4 if inf["bloqueo_humano"]["blocked"] else 0
+
+
 def _aprobar_perfil(args: argparse.Namespace, settings: Any, policy: UrlPolicy) -> int:
     import re
     if not (re.fullmatch(r"frm_[a-z0-9_]{1,40}", args.formulario_id) and re.fullmatch(r"rev_[a-z0-9_]{1,40}", args.aprobado_por)
@@ -189,3 +350,30 @@ def _aprobar_perfil(args: argparse.Namespace, settings: Any, policy: UrlPolicy) 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _operaciones(args: argparse.Namespace, settings: Any) -> int:
+    """Revisión de un OPERADOR desde la línea de órdenes (no desde la interfaz de la persona).
+
+    No toca Network Engine: sus marcas «revisar a mano» las resuelve el operador con sus propios mecanismos
+    (``cauce revisiones resolver`` o el centro de revisiones de Monitor). Esta orden solo cierra el registro LOCAL de
+    Forms, con nota obligatoria y confirmación escrita, y lo deja auditado. Nada se reenvía."""
+    from .envio import _publica
+    from .operaciones import RegistroOperaciones
+    reg = RegistroOperaciones(settings.data_dir)
+    audit = AuditLog(settings.audit_path)
+    if args.accion == "listar":
+        _emit({"revision_general": reg.general, "abiertas": [_publica(o) for o in reg.abiertas()],
+               "recientes": [_publica(o) for o in reg.lista(20)]})
+        return 0
+    if args.id != "GENERAL" and not args.resultado:
+        print("No se revisó nada: indique --resultado recibido | no_recibido | sin_determinar", file=sys.stderr)
+        return 1
+    try:
+        o = reg.revisar(args.id, args.nota, args.confirmar, args.por, args.resultado or "sin_determinar")
+    except (LookupError, ValueError) as exc:
+        print(f"No se revisó nada: {exc}", file=sys.stderr)
+        return 1
+    audit.log("operation_reviewed", detail=args.id, estado=o["estado"], codigo=args.resultado)
+    _emit({"revisada": args.id, "resultado": args.resultado})
+    return 0

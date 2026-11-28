@@ -1,0 +1,16 @@
+origen: https://github.com/dass-666/cauce-network-engine
+rama: claude/e8b-preparacion-fisica (PR #15, candidata RC3)
+commit: f93dd58eeddc1cc3032711bb0b6e378708063d41
+sha256 cauce/client.py: c6f3d3d5bf230a0e746be0dd670020a98c555fd6fc918a878feaefcf992c0207
+sha256 cauce/secrets_store.py: 422e5b7ef950b24f4504781478a2c3c55b66dfe5b5ff1a6cb1a1ca773d934a0f
+sha256 cauce/session_consumer.py: 64511d9de6214553bdda9706467696704c01012939596ba3165685c1ca1ad0e8
+sha256 cauce/sessions.py: a39df770462fde0ca2707d50aaaa634892955672bc8b5879db3e5bbfa2c25ac1
+sha256 docs/CONTRATO_SESIONES_FORMS.md: c3f17c6e920835b34b4cbfa34fba7d5f64a9c8f449299123be0b65bb4a59bd5d
+uso: cliente_ne.py es una COPIA REDUCIDA de client.py (CauceAPIError, _call, CauceSessionClient) y de la lectura de
+     secrets_store.py. diagnostico.py implementa el contrato de sesiones siguiendo session_consumer.py de RC3 (no RC2).
+e10 (opcional, laboratorio): rama claude/e10-forms-nativo (PR #16), commit 4f223a7d366a362fbdd64db4ae9a94bf2b63e414
+e10-sha256 cauce/client.py: 66b1dc71e1bf542cfacbcd33a08a81c2e9c21af0075384708f8235a5ca2bc7e4
+e10-sha256 cauce/sessions.py: 03b446f278464c18adb8470774c93a9adc15a2a98f54b8b53e90f04212d84082
+e10-sha256 docs/CONTRATO_SESIONES_FORMS.md: 28d90bc4bd19b210c7855ae3eb3742b5d337ef8ee8a665b0ea86bbf0aba77750
+e10-uso: heartbeat(local_review) y reviews() se copiaron de client.py E10. Forms solo envía local_review si el motor lo
+     anuncia en la vista de la sesión (RC3 rechaza campos desconocidos con 400); reviews() solo añade información.

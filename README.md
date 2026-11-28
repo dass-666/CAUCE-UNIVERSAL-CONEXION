@@ -12,6 +12,15 @@ Conector local, modular y reutilizable que:
 
 Proyecto independiente: no modifica Cauce Monitor, Jarvis ni Cauce Network Engine.
 
+## Integración con Cauce Network Engine (candidata consolidada 0.2.0rc2)
+
+Opcional. Forms informa a Network Engine RC3 del estado de su sesión de navegador y muestra un «Estado del puesto»;
+cada envío confirmado se registra en disco antes del clic y solo se da por recibido con un acuse verificable.
+Guía: [docs/INTEGRACION_NETWORK_ENGINE.md](docs/INTEGRACION_NETWORK_ENGINE.md) ·
+Informe con pruebas y límites: [docs/INFORME_INTEGRACION_NATIVA_FORMS_RC3.md](docs/INFORME_INTEGRACION_NATIVA_FORMS_RC3.md) ·
+Revisión final: [docs/REVISION_FINAL_FORMS_RC3.md](docs/REVISION_FINAL_FORMS_RC3.md) ·
+Consolidación (PR #3–#6, respaldos, envíos de la persona): [docs/CONSOLIDACION_FORMS_RC2.md](docs/CONSOLIDACION_FORMS_RC2.md).
+
 ## Inicio rápido
 
 **Windows:** ver [docs/WINDOWS.md](docs/WINDOWS.md). En resumen: `instalar_windows.bat` y luego `iniciar_windows.bat`.
@@ -51,10 +60,51 @@ python -m cauce_form_connector fill --html lab_forms/03_validaciones.html --data
 
 Salida en JSON por stdout. Códigos de salida: `0` correcto, `2` terminado con incidencias, `3` URL no autorizada, `1` error.
 
+## Autorrellenado desde un expediente (Cauce Monitor)
+
+```bash
+python scripts/recorrido_monitor.py          # demo visible con datos ficticios; no envía
+python -m cauce_form_connector autorrellenar --formulario config/formularios/lab_validaciones.json \
+    --expediente sample_data/expediente_monitor_sintetico.json --puerto 8765 --aprobar-perfil rev_demo
+```
+
+Detalle y límites en [docs/CONTRATO_CAUCE_CONECTOR_V1.md](docs/CONTRATO_CAUCE_CONECTOR_V1.md) §8.
+
+## Analizar un formulario externo (solo lectura)
+
+```bash
+python -m cauce_form_connector analizar-formulario --url https://sitio-autorizado.example/reserva --authorized \
+    --expediente sample_data/expediente_monitor_sintetico.json
+```
+
+En Windows: doble clic en `analizar_formulario_windows.bat` (pide la URL y abre la vista previa).
+El dominio debe estar en `config/allowed_hosts.json` y hay que declarar la autorización. Abre la página una vez,
+sin ventana, y **no escribe, no hace clic ni envía**. Deja en `informes/analisis_<formulario>_<fecha>/`:
+
+| Archivo | Para qué |
+|---|---|
+| `informe.md` / `informe.json` | Campos, selectores, tipos, opciones, fechas, confirmaciones, validaciones, elementos dinámicos y decisión por campo (automático / revisar / humano / ignorado) |
+| `perfil_borrador.json` | Perfil en el formato de `config/formularios/*.json`, solo con los campos automáticos; los dudosos van en `_borrador.pendientes_revision` |
+| `vista_previa.html` | Página local para marcar qué campos incluir, corregir la ruta del expediente y descargar el perfil revisado |
+
+Las correspondencias usan el **modelo real del Expediente de Monitor** (campos planos: `nombre`, `fecha_nacimiento`,
+`telefono`, `correo`, `id_externo`, `id_registro_previo`, `folio_anterior`, `tipo_tramite`, `operacion`, `region`,
+`sucursal`, `fecha_solicitada`, `fechas_desde`, `fechas_hasta`, `modo`; ver `cauce_form_connector/esquema_monitor.py`).
+Solo `nombre` (si el formulario pide el nombre completo), `fecha_nacimiento`, `telefono` y `correo` pueden ser
+automáticos. Nombre/apellidos separados, fechas de cita, folios e identificadores van a «revisar»; los códigos
+(`tipo_tramite`, `operacion`, `region`, `sucursal`, `modo`) exigen una tabla de equivalencias aprobada
+que se llena en `vista_previa.html` y se aprueba junto con el perfil; CURP, RFC y consentimientos nunca se proponen.
+Ejemplo con tablas: `config/formularios/lab_cita_monitor.json`.
+
+El perfil sigue siendo un borrador: `autorrellenar --formulario <perfil> --expediente <exp> --aprobar-perfil rev_xxx`
+es el paso humano que lo aprueba. Códigos de salida: `0` informe generado, `3` URL no autorizada (no se abre),
+`4` la página exige intervención humana (CAPTCHA), `6` expediente ilegible.
+
 ## Estructura
 
 | Componente | Archivo |
 |---|---|
+| Analizador de formularios externos (informe + perfil borrador) | `cauce_form_connector/analizador_formularios.py` |
 | Analizador HTML (estático, sin navegador) | `cauce_form_connector/html_analyzer.py` |
 | Inspector de páginas dinámicas (Playwright) | `cauce_form_connector/page_inspector.py` |
 | Detector de formularios | `cauce_form_connector/detector.js` + `form_detector.py` |

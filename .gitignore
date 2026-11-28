@@ -9,3 +9,5 @@ evidence/out/
 .pytest_cache/
 .pw-browsers/
 state/
+informes/
+lab_forms/vendor/

@@ -1,0 +1,1154 @@
+{
+ "inicio": "2026-11-28T04:49:14+00:00",
+ "network_engine": true,
+ "jornadas": [
+  {
+   "jornada": "6-expedientes",
+   "expedientes": 6,
+   "fallos": {
+    "1": "cortar_despues",
+    "2": "cortar_antes",
+    "3": "ne_apagado",
+    "4": "doble_clic",
+    "5": "forms_reiniciado"
+   },
+   "resultados": [
+    {
+     "i": 0,
+     "expediente": "EXP-00001",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_cfed87b09397",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 1,
+     "expediente": "EXP-00002",
+     "fallo": "cortar_despues",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_e58830bddf32",
+     "post_vistos_por_el_portal": 2
+    },
+    {
+     "i": 2,
+     "expediente": "EXP-00003",
+     "fallo": "cortar_antes",
+     "estado": "incierta",
+     "motivo": "portal_sin_constancia",
+     "op": "op_733ef12b1fed",
+     "post_vistos_por_el_portal": 2,
+     "repetir": 409
+    },
+    {
+     "i": 3,
+     "expediente": "EXP-00004",
+     "fallo": "ne_apagado",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_16e7dc862731",
+     "post_vistos_por_el_portal": 1,
+     "diag_durante": "no_disponible"
+    },
+    {
+     "i": 4,
+     "expediente": "EXP-00005",
+     "fallo": "doble_clic",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_d338bfff49a6",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 5,
+     "expediente": "EXP-00006",
+     "fallo": "forms_reiniciado",
+     "estado": "incierta",
+     "motivo": "forms_reiniciado_durante_operacion",
+     "op": "op_75bd8ab2e813",
+     "post_vistos_por_el_portal": 1,
+     "repetir": 409
+    }
+   ],
+   "verificadas": [
+    {
+     "op": "op_75bd8ab2e813",
+     "tras": "confirmada",
+     "motivo": null
+    },
+    {
+     "op": "op_733ef12b1fed",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    }
+   ],
+   "portal": {
+    "recibidos": 5,
+    "duplicados": 0,
+    "peticiones_post": 8,
+    "reintentos_mismo_token": 1,
+    "rechazos": {}
+   },
+   "forms": {
+    "confirmadas": 5,
+    "abiertas": 1,
+    "estados": {
+     "confirmada": 5,
+     "incierta": 1
+    }
+   },
+   "bloqueos_correctos": 3,
+   "reintento_tras_capacidad": 0,
+   "diagnostico_final": {
+    "motor": "conectado",
+    "conectividad": "verificada",
+    "fase": "requiere_intervencion",
+    "requiere_persona": true,
+    "motivo": "operation_interrupted",
+    "avisos_no_entregados": 0,
+    "operaciones_abiertas": 1
+   },
+   "sin_duplicados": true
+  },
+  {
+   "jornada": "10-expedientes",
+   "expedientes": 10,
+   "fallos": {
+    "1": "cortar_despues",
+    "3": "cortar_antes",
+    "5": "ne_apagado",
+    "7": "red_caida",
+    "9": "doble_clic"
+   },
+   "resultados": [
+    {
+     "i": 0,
+     "expediente": "EXP-00007",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_d0a2d2e8740a",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 1,
+     "expediente": "EXP-00008",
+     "fallo": "cortar_despues",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_db9dc8d585c1",
+     "post_vistos_por_el_portal": 2
+    },
+    {
+     "i": 2,
+     "expediente": "EXP-00009",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_0416ab89cefb",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 3,
+     "expediente": "EXP-00010",
+     "fallo": "cortar_antes",
+     "estado": "incierta",
+     "motivo": "portal_sin_constancia",
+     "op": "op_f53a24b189b7",
+     "post_vistos_por_el_portal": 2,
+     "repetir": 409
+    },
+    {
+     "i": 4,
+     "expediente": "EXP-00011",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_f46befd9dce5",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 5,
+     "expediente": "EXP-00012",
+     "fallo": "ne_apagado",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_eecfab01e990",
+     "post_vistos_por_el_portal": 1,
+     "diag_durante": "no_disponible"
+    },
+    {
+     "i": 6,
+     "expediente": "EXP-00013",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_1028a7476a76",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 7,
+     "expediente": "EXP-00014",
+     "fallo": "red_caida",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_647e22158d47",
+     "post_vistos_por_el_portal": 1,
+     "diag_durante": "perdida"
+    },
+    {
+     "i": 8,
+     "expediente": "EXP-00015",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_27f4699b6c1f",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 9,
+     "expediente": "EXP-00016",
+     "fallo": "doble_clic",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_9368b8615710",
+     "post_vistos_por_el_portal": 1
+    }
+   ],
+   "verificadas": [
+    {
+     "op": "op_f53a24b189b7",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    },
+    {
+     "op": "op_733ef12b1fed",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    }
+   ],
+   "portal": {
+    "recibidos": 9,
+    "duplicados": 0,
+    "peticiones_post": 12,
+    "reintentos_mismo_token": 1,
+    "rechazos": {}
+   },
+   "forms": {
+    "confirmadas": 14,
+    "abiertas": 2,
+    "estados": {
+     "confirmada": 14,
+     "incierta": 2
+    }
+   },
+   "bloqueos_correctos": 2,
+   "reintento_tras_capacidad": 0,
+   "diagnostico_final": {
+    "motor": "conectado",
+    "conectividad": "verificada",
+    "fase": "requiere_intervencion",
+    "requiere_persona": true,
+    "motivo": "operation_interrupted",
+    "avisos_no_entregados": 2,
+    "operaciones_abiertas": 2
+   },
+   "sin_duplicados": true
+  },
+  {
+   "jornada": "20-expedientes",
+   "expedientes": 20,
+   "fallos": {
+    "1": "cortar_despues",
+    "3": "cortar_antes",
+    "5": "ne_apagado",
+    "7": "red_caida",
+    "9": "doble_clic",
+    "11": "portal_lento",
+    "13": "forms_reiniciado",
+    "15": "capacidad",
+    "17": "navegador_cerrado"
+   },
+   "resultados": [
+    {
+     "i": 0,
+     "expediente": "EXP-00017",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_4f6e9257b642",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 1,
+     "expediente": "EXP-00018",
+     "fallo": "cortar_despues",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_77f2d2ebd3cb",
+     "post_vistos_por_el_portal": 2
+    },
+    {
+     "i": 2,
+     "expediente": "EXP-00019",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_9f389bb80d20",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 3,
+     "expediente": "EXP-00020",
+     "fallo": "cortar_antes",
+     "estado": "incierta",
+     "motivo": "portal_sin_constancia",
+     "op": "op_f5682873b98e",
+     "post_vistos_por_el_portal": 2,
+     "repetir": 409
+    },
+    {
+     "i": 4,
+     "expediente": "EXP-00021",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_6d2c58081552",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 5,
+     "expediente": "EXP-00022",
+     "fallo": "ne_apagado",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_9b8844cde46f",
+     "post_vistos_por_el_portal": 1,
+     "diag_durante": "no_disponible"
+    },
+    {
+     "i": 6,
+     "expediente": "EXP-00023",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_c5212c5cce52",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 7,
+     "expediente": "EXP-00024",
+     "fallo": "red_caida",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_58fc40115632",
+     "post_vistos_por_el_portal": 1,
+     "diag_durante": "perdida"
+    },
+    {
+     "i": 8,
+     "expediente": "EXP-00025",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_43e12beeacd3",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 9,
+     "expediente": "EXP-00026",
+     "fallo": "doble_clic",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_049e22bd4c04",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 10,
+     "expediente": "EXP-00027",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_4e7b059ad41d",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 11,
+     "expediente": "EXP-00028",
+     "fallo": "portal_lento",
+     "estado": "incierta",
+     "motivo": "portal_sin_constancia",
+     "op": "op_baee8f408a19",
+     "post_vistos_por_el_portal": 1,
+     "repetir": 409
+    },
+    {
+     "i": 12,
+     "expediente": "EXP-00029",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_aa1c8b534756",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 13,
+     "expediente": "EXP-00030",
+     "fallo": "forms_reiniciado",
+     "estado": "incierta",
+     "motivo": "forms_reiniciado_durante_operacion",
+     "op": "op_a0fddfafd639",
+     "post_vistos_por_el_portal": 1,
+     "repetir": 409
+    },
+    {
+     "i": 14,
+     "expediente": "EXP-00031",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_dc16b90acde8",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 15,
+     "expediente": "EXP-00032",
+     "fallo": "capacidad",
+     "estado": "rechazada",
+     "motivo": "portal_rechazo_capacidad",
+     "op": "op_6ba16fbc7584",
+     "post_vistos_por_el_portal": 1,
+     "tras_capacidad": "confirmada"
+    },
+    {
+     "i": 16,
+     "expediente": "EXP-00033",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_e5ea01185199",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 17,
+     "expediente": "EXP-00034",
+     "fallo": "navegador_cerrado",
+     "estado": "incierta",
+     "motivo": "navegador_cerrado_durante_envio",
+     "op": "op_e600641beb0b",
+     "post_vistos_por_el_portal": 1,
+     "repetir": 409
+    },
+    {
+     "i": 18,
+     "expediente": "EXP-00035",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_f916fbf46024",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 19,
+     "expediente": "EXP-00036",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_1ce131fd81a1",
+     "post_vistos_por_el_portal": 1
+    }
+   ],
+   "verificadas": [
+    {
+     "op": "op_e600641beb0b",
+     "tras": "confirmada",
+     "motivo": null
+    },
+    {
+     "op": "op_a0fddfafd639",
+     "tras": "confirmada",
+     "motivo": null
+    },
+    {
+     "op": "op_baee8f408a19",
+     "tras": "confirmada",
+     "motivo": null
+    },
+    {
+     "op": "op_f5682873b98e",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    },
+    {
+     "op": "op_f53a24b189b7",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    },
+    {
+     "op": "op_733ef12b1fed",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    }
+   ],
+   "portal": {
+    "recibidos": 19,
+    "duplicados": 0,
+    "peticiones_post": 23,
+    "reintentos_mismo_token": 1,
+    "rechazos": {
+     "capacidad": 1
+    }
+   },
+   "forms": {
+    "confirmadas": 33,
+    "abiertas": 3,
+    "estados": {
+     "rechazada": 1,
+     "confirmada": 33,
+     "incierta": 3
+    }
+   },
+   "bloqueos_correctos": 5,
+   "reintento_tras_capacidad": 1,
+   "diagnostico_final": {
+    "motor": "conectado",
+    "conectividad": "verificada",
+    "fase": "requiere_intervencion",
+    "requiere_persona": true,
+    "motivo": "operation_interrupted",
+    "avisos_no_entregados": 0,
+    "operaciones_abiertas": 3
+   },
+   "sin_duplicados": true
+  },
+  {
+   "jornada": "50-expedientes",
+   "expedientes": 50,
+   "fallos": {
+    "1": "cortar_despues",
+    "6": "cortar_antes",
+    "11": "ne_apagado",
+    "16": "red_caida",
+    "21": "doble_clic",
+    "26": "portal_lento",
+    "31": "forms_reiniciado",
+    "36": "capacidad",
+    "41": "navegador_cerrado"
+   },
+   "resultados": [
+    {
+     "i": 0,
+     "expediente": "EXP-00037",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_8835e7d43e31",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 1,
+     "expediente": "EXP-00038",
+     "fallo": "cortar_despues",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_f5443765a385",
+     "post_vistos_por_el_portal": 2
+    },
+    {
+     "i": 2,
+     "expediente": "EXP-00039",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_ddfb13a94275",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 3,
+     "expediente": "EXP-00040",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_de26e2e3e41e",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 4,
+     "expediente": "EXP-00041",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_d6079b482328",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 5,
+     "expediente": "EXP-00042",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_84cc57bf0553",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 6,
+     "expediente": "EXP-00043",
+     "fallo": "cortar_antes",
+     "estado": "incierta",
+     "motivo": "portal_sin_constancia",
+     "op": "op_7b7421d81661",
+     "post_vistos_por_el_portal": 2,
+     "repetir": 409
+    },
+    {
+     "i": 7,
+     "expediente": "EXP-00044",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_65b2596e290a",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 8,
+     "expediente": "EXP-00045",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_c202582b96d2",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 9,
+     "expediente": "EXP-00046",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_be05e77b5775",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 10,
+     "expediente": "EXP-00047",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_89004dd1d8a6",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 11,
+     "expediente": "EXP-00048",
+     "fallo": "ne_apagado",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_0b3e741dd4b3",
+     "post_vistos_por_el_portal": 1,
+     "diag_durante": "no_disponible"
+    },
+    {
+     "i": 12,
+     "expediente": "EXP-00049",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_39101a189fd1",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 13,
+     "expediente": "EXP-00050",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_0112d503061f",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 14,
+     "expediente": "EXP-00051",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_88f2a6dfae37",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 15,
+     "expediente": "EXP-00052",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_7690fca4484b",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 16,
+     "expediente": "EXP-00053",
+     "fallo": "red_caida",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_9f54bfa11b3d",
+     "post_vistos_por_el_portal": 1,
+     "diag_durante": "perdida"
+    },
+    {
+     "i": 17,
+     "expediente": "EXP-00054",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_e31d4b40927a",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 18,
+     "expediente": "EXP-00055",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_f3ba191e07cf",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 19,
+     "expediente": "EXP-00056",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_2941c9f31ac3",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 20,
+     "expediente": "EXP-00057",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_0dbffdf5d841",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 21,
+     "expediente": "EXP-00058",
+     "fallo": "doble_clic",
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_8425f22e795d",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 22,
+     "expediente": "EXP-00059",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_e0d6effacaa8",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 23,
+     "expediente": "EXP-00060",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_9467dcfaa504",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 24,
+     "expediente": "EXP-00061",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_3705adedb51e",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 25,
+     "expediente": "EXP-00062",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_214e552aebda",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 26,
+     "expediente": "EXP-00063",
+     "fallo": "portal_lento",
+     "estado": "incierta",
+     "motivo": "portal_sin_constancia",
+     "op": "op_918838069070",
+     "post_vistos_por_el_portal": 1,
+     "repetir": 409
+    },
+    {
+     "i": 27,
+     "expediente": "EXP-00064",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_14293302f228",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 28,
+     "expediente": "EXP-00065",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_a4db9ae48135",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 29,
+     "expediente": "EXP-00066",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_92308c149718",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 30,
+     "expediente": "EXP-00067",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_ed42e5e4fefb",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 31,
+     "expediente": "EXP-00068",
+     "fallo": "forms_reiniciado",
+     "estado": "incierta",
+     "motivo": "forms_reiniciado_durante_operacion",
+     "op": "op_ac9648a5ec09",
+     "post_vistos_por_el_portal": 1,
+     "repetir": 409
+    },
+    {
+     "i": 32,
+     "expediente": "EXP-00069",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_561f703c283e",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 33,
+     "expediente": "EXP-00070",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_77b8488acef6",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 34,
+     "expediente": "EXP-00071",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_1327e2e3fb70",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 35,
+     "expediente": "EXP-00072",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_47b47d310bfb",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 36,
+     "expediente": "EXP-00073",
+     "fallo": "capacidad",
+     "estado": "rechazada",
+     "motivo": "portal_rechazo_capacidad",
+     "op": "op_4507599f530e",
+     "post_vistos_por_el_portal": 1,
+     "tras_capacidad": "confirmada"
+    },
+    {
+     "i": 37,
+     "expediente": "EXP-00074",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_b20aaf84d0a2",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 38,
+     "expediente": "EXP-00075",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_4d144883c466",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 39,
+     "expediente": "EXP-00076",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_28f2c10ca5bc",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 40,
+     "expediente": "EXP-00077",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_43d443639214",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 41,
+     "expediente": "EXP-00078",
+     "fallo": "navegador_cerrado",
+     "estado": "incierta",
+     "motivo": "navegador_cerrado_durante_envio",
+     "op": "op_f15f846c6791",
+     "post_vistos_por_el_portal": 1,
+     "repetir": 409
+    },
+    {
+     "i": 42,
+     "expediente": "EXP-00079",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_3dddf3e37d14",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 43,
+     "expediente": "EXP-00080",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_a27d4b1db1b6",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 44,
+     "expediente": "EXP-00081",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_753b188e4c4f",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 45,
+     "expediente": "EXP-00082",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_3fd1779b11d5",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 46,
+     "expediente": "EXP-00083",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_217e12247c26",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 47,
+     "expediente": "EXP-00084",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_13e9ac39fcd8",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 48,
+     "expediente": "EXP-00085",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_a65d25e25dfc",
+     "post_vistos_por_el_portal": 1
+    },
+    {
+     "i": 49,
+     "expediente": "EXP-00086",
+     "fallo": null,
+     "estado": "confirmada",
+     "motivo": "acuse_verificado",
+     "op": "op_4c8419bbd7d7",
+     "post_vistos_por_el_portal": 1
+    }
+   ],
+   "verificadas": [
+    {
+     "op": "op_f15f846c6791",
+     "tras": "confirmada",
+     "motivo": null
+    },
+    {
+     "op": "op_ac9648a5ec09",
+     "tras": "confirmada",
+     "motivo": null
+    },
+    {
+     "op": "op_918838069070",
+     "tras": "confirmada",
+     "motivo": null
+    },
+    {
+     "op": "op_7b7421d81661",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    },
+    {
+     "op": "op_f5682873b98e",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    },
+    {
+     "op": "op_f53a24b189b7",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    },
+    {
+     "op": "op_733ef12b1fed",
+     "tras": "incierta",
+     "motivo": "portal_sin_constancia"
+    }
+   ],
+   "portal": {
+    "recibidos": 49,
+    "duplicados": 0,
+    "peticiones_post": 53,
+    "reintentos_mismo_token": 1,
+    "rechazos": {
+     "capacidad": 2
+    }
+   },
+   "forms": {
+    "confirmadas": 82,
+    "abiertas": 4,
+    "estados": {
+     "rechazada": 2,
+     "confirmada": 82,
+     "incierta": 4
+    }
+   },
+   "bloqueos_correctos": 5,
+   "reintento_tras_capacidad": 1,
+   "diagnostico_final": {
+    "motor": "conectado",
+    "conectividad": "verificada",
+    "fase": "requiere_intervencion",
+    "requiere_persona": true,
+    "motivo": "operation_interrupted",
+    "avisos_no_entregados": 0,
+    "operaciones_abiertas": 4
+   },
+   "sin_duplicados": true
+  }
+ ],
+ "nota": "Simulación de laboratorio: portal ficticio, red simulada de Network Engine y confirmación humana SIMULADA por el guion. No es validación física.",
+ "network_engine_commit": "f93dd58eeddc1cc3032711bb0b6e378708063d41",
+ "forms_commit": "61842fd761d74f62c074e537971a37c2ccf62a2f",
+ "tamanos_inicio": {
+  "forms_audit": null,
+  "forms_operaciones": null,
+  "ne_audit": 3006,
+  "ne_sesiones": 530
+ },
+ "duracion_s": 705.4,
+ "tamanos_fin": {
+  "forms_audit": 270329,
+  "forms_operaciones": 42373,
+  "ne_audit": 44804,
+  "ne_sesiones": 1849
+ },
+ "tiempos": {
+  "analizar": {
+   "n": 99,
+   "media_s": 1.092,
+   "p95_s": 1.592,
+   "max_s": 1.749
+  },
+  "rellenar": {
+   "n": 99,
+   "media_s": 2.491,
+   "p95_s": 2.551,
+   "max_s": 2.66
+  },
+  "enviar": {
+   "n": 103,
+   "media_s": 2.094,
+   "p95_s": 15.581,
+   "max_s": 16.14
+  },
+  "diagnostico": {
+   "n": 11,
+   "media_s": 0.003,
+   "p95_s": 0.004,
+   "max_s": 0.004
+  }
+ },
+ "recursos": {
+  "portal": {
+   "pss_mb_media": 13.7,
+   "pss_mb_max": 14.0,
+   "pss_mb_primer_tercio": 13.4,
+   "pss_mb_ultimo_tercio": 13.8,
+   "rss_mb_media": 21.9,
+   "rss_mb_max": 22.1,
+   "rss_mb_primer_tercio": 21.6,
+   "rss_mb_ultimo_tercio": 22.1,
+   "cpu_media_pct": 0.1,
+   "cpu_max_pct": 0.6,
+   "procesos_max": 1,
+   "chromium_rss_mb_max": 0.0
+  },
+  "network_engine": {
+   "pss_mb_media": 15.9,
+   "pss_mb_max": 16.4,
+   "pss_mb_primer_tercio": 15.7,
+   "pss_mb_ultimo_tercio": 16.1,
+   "rss_mb_media": 24.5,
+   "rss_mb_max": 24.8,
+   "rss_mb_primer_tercio": 24.0,
+   "rss_mb_ultimo_tercio": 24.7,
+   "cpu_media_pct": 0.1,
+   "cpu_max_pct": 0.4,
+   "procesos_max": 1,
+   "chromium_rss_mb_max": 0.0
+  },
+  "forms": {
+   "pss_mb_media": 520.5,
+   "pss_mb_max": 551.3,
+   "pss_mb_primer_tercio": 513.7,
+   "pss_mb_ultimo_tercio": 530.3,
+   "rss_mb_media": 1001.0,
+   "rss_mb_max": 1047.8,
+   "rss_mb_primer_tercio": 994.8,
+   "rss_mb_ultimo_tercio": 1011.4,
+   "cpu_media_pct": 17.0,
+   "cpu_max_pct": 35.4,
+   "procesos_max": 10,
+   "chromium_rss_mb_max": 813.4
+  }
+ },
+ "fin": "2026-11-28T05:01:00+00:00"
+}

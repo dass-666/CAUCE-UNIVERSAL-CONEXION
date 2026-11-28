@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "formulario_id": "frm_lab_listas_personalizadas",
+  "nombre": "Laboratorio 07 - listas personalizadas, identificador manual y fecha con máscara (ficticio)",
+  "url": "http://127.0.0.1:{puerto}/07_listas_personalizadas.html",
+  "perfil": "perfil_lab_listas_personalizadas",
+  "_nota": "Ejemplo SINTÉTICO. id_cliente es de captura manual (@manual): se escribe en la ventana para una sola ejecución y no se guarda. Los códigos OP-*/T-* son inventados.",
+  "campos_formulario": {
+    "operacion": "solicitud::operacion",
+    "id_cliente": "solicitud::id_cliente",
+    "fecha_nacimiento": "solicitud::nacimiento",
+    "tipo_tramite": "solicitud::tramite",
+    "telefono": "solicitud::telefono",
+    "telefono_confirmacion": "solicitud::telefono_confirmacion",
+    "correo": "solicitud::correo",
+    "correo_confirmacion": "solicitud::correo_confirmacion"
+  },
+  "campos_expediente": {
+    "operacion": "operacion",
+    "id_cliente": "@manual",
+    "fecha_nacimiento": "fecha_nacimiento",
+    "tipo_tramite": "tipo_tramite",
+    "telefono": "telefono",
+    "telefono_confirmacion": "telefono",
+    "correo": "correo",
+    "correo_confirmacion": "correo"
+  },
+  "etiquetas": {"id_cliente": "Identificador de cliente"},
+  "formatos_fecha": {"fecha_nacimiento": "DD/MM/AAAA"},
+  "equivalencias": {
+    "operacion": {"campo_monitor": "operacion", "valores": {"nueva": "OP-N", "reprogramar": "OP-R"}},
+    "tipo_tramite": {"campo_monitor": "tipo_tramite",
+                     "valores": {"alta": "T-ALTA", "renovacion": "T-REN", "constancia": "T-CONS"}}
+  }
+}

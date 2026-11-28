@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "formulario_id": "frm_lab_validaciones",
+  "nombre": "Laboratorio 03 - alta con validaciones (ficticio)",
+  "url": "http://127.0.0.1:{puerto}/03_validaciones.html",
+  "perfil": "perfil_lab_validaciones",
+  "_nota": "Rutas planas del Expediente de Monitor. Código postal, ciudad y aviso de privacidad no existen en Monitor: los completa la persona.",
+  "campos_formulario": {
+    "nombre": "alta::nombre_completo",
+    "email": "alta::email",
+    "email_confirmacion": "alta::email_confirmacion",
+    "telefono": "alta::telefono",
+    "telefono_confirmacion": "alta::telefono_confirmacion"
+  },
+  "campos_expediente": {
+    "nombre": "nombre",
+    "email": "correo",
+    "email_confirmacion": "correo",
+    "telefono": "telefono",
+    "telefono_confirmacion": "telefono"
+  }
+}

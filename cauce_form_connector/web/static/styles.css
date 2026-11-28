@@ -48,3 +48,16 @@ li.ok { color: var(--ok); } li.error { color: var(--err); }
 #captura img { max-width: 100%; border: 1px solid var(--border); border-radius: 6px; margin-top: 12px; }
 pre { white-space: pre-wrap; font-size: .78rem; max-height: 300px; overflow: auto; }
 #datos-preview td { white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Estado del puesto (Network Engine opcional y operaciones) */
+.indicadores { display: flex; flex-wrap: wrap; gap: 8px; }
+.ind { border-radius: 999px; padding: 4px 12px; font-size: .86rem; font-weight: 600; border: 1px solid var(--border); background: var(--chip); }
+.ind.ok { color: var(--ok); border-color: var(--ok); }
+.ind.aviso { color: var(--warn); border-color: var(--warn); }
+.ind.error { color: var(--err); border-color: var(--err); }
+.ind.neutro { color: var(--muted); }
+.revision { margin-top: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--err); color: var(--err); background: var(--panel); }
+.revision ul { margin: 6px 0 0 18px; padding: 0; color: var(--text); }
+.estado.confirmada { color: var(--ok); } .estado.incierta, .estado.en_curso { color: var(--err); }
+.estado.no_enviada, .estado.revisada { color: var(--muted); } .estado.rechazada { color: var(--warn); }
+button:disabled { opacity: .55; cursor: not-allowed; }

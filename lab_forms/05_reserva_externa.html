@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 5 · Formulario externo simulado (reserva)</title>
+<link rel="stylesheet" href="lab.css">
+</head>
+<body>
+<main>
+  <h1>Laboratorio 5 · Formulario externo simulado</h1>
+  <p class="nota">Página de PRUEBA que imita un formulario de reserva de un sitio de terceros. Sirve para
+    probar el analizador: tiene listas, fechas, número, confirmación, validaciones visibles, un bloque
+    condicional oculto y un campo que se crea con JavaScript. No envía nada a ningún sitio.</p>
+
+  <form id="reserva" action="#reservado" method="post">
+    <fieldset>
+      <legend>Datos del solicitante</legend>
+      <div class="fila">
+        <label for="nombre">Nombre(s)</label>
+        <input id="nombre" name="nombre" type="text" required maxlength="60" autocomplete="given-name"
+               aria-describedby="ayuda_nombre">
+        <small id="ayuda_nombre">Tal como aparece en su identificación.</small>
+      </div>
+      <div class="fila">
+        <label for="apellidos">Apellidos</label>
+        <input id="apellidos" name="apellidos" type="text" required maxlength="80" autocomplete="family-name">
+      </div>
+      <div class="fila">
+        <label for="doc_identidad">CURP</label>
+        <input id="doc_identidad" name="doc_identidad" type="text" required pattern="[A-Z0-9]{18}"
+               maxlength="18" title="18 caracteres en mayúsculas" aria-describedby="err_doc">
+        <small class="error" id="err_doc" hidden>La CURP debe tener 18 caracteres.</small>
+      </div>
+      <div class="fila">
+        <label for="f_nac">Fecha de nacimiento</label>
+        <input id="f_nac" name="f_nac" type="date" required min="1900-01-01" max="2026-12-31">
+      </div>
+      <div class="fila">
+        <label for="correo">Correo electrónico</label>
+        <input id="correo" name="correo" type="email" required autocomplete="email">
+      </div>
+      <div class="fila">
+        <label for="correo2">Vuelva a escribir su correo</label>
+        <input id="correo2" name="correo2" type="email" required onpaste="return false">
+      </div>
+      <div class="fila">
+        <label for="tel">Teléfono</label>
+        <input id="tel" name="tel" type="tel" required inputmode="numeric" pattern="\d{10}" maxlength="10"
+               aria-describedby="err_tel">
+        <small class="error" id="err_tel" role="alert" hidden>Deben ser 10 dígitos.</small>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Reserva</legend>
+      <div class="fila">
+        <label for="estado">Estado</label>
+        <select id="estado" name="estado" required>
+          <option value="">Seleccione…</option>
+          <option value="CMX">Ciudad de México</option>
+          <option value="JAL">Jalisco</option>
+          <option value="NLE">Nuevo León</option>
+        </select>
+      </div>
+      <div class="fila">
+        <label for="fecha_cita">Fecha de la cita (dd/mm/aaaa)</label>
+        <input id="fecha_cita" name="fecha_cita" type="text" placeholder="dd/mm/aaaa" required
+               pattern="\d{2}/\d{2}/\d{4}">
+      </div>
+      <div class="fila">
+        <label for="personas">Número de personas</label>
+        <input id="personas" name="personas" type="number" min="1" max="6" step="1" value="1" required>
+      </div>
+      <fieldset>
+        <legend>Tipo de trámite</legend>
+        <label><input type="radio" name="tramite" value="primera" required> Primera vez</label>
+        <label><input type="radio" name="tramite" value="renovacion"> Renovación</label>
+      </fieldset>
+      <div class="fila" id="bloque_folio" style="display:none">
+        <label for="folio_anterior">Folio del trámite anterior</label>
+        <input id="folio_anterior" name="folio_anterior" type="text" maxlength="12">
+      </div>
+      <div class="fila">
+        <label for="comprobante">Comprobante (PDF)</label>
+        <input id="comprobante" name="comprobante" type="file" accept="application/pdf">
+      </div>
+      <div class="fila">
+        <label for="comentarios">Comentarios</label>
+        <textarea id="comentarios" name="comentarios" maxlength="300"></textarea>
+      </div>
+      <div class="fila" id="ranura_horario"></div>
+      <input type="hidden" name="token_sesion" value="FICTICIO-NO-ES-UN-TOKEN">
+    </fieldset>
+
+    <div class="fila">
+      <label><input type="checkbox" id="acepto" name="acepto" required>
+        Acepto el aviso de privacidad</label>
+    </div>
+    <button type="submit" id="reservar">Reservar</button>
+    <p id="mensajes" aria-live="polite"></p>
+  </form>
+</main>
+<script>
+(function () {
+  // Bloque condicional: el folio solo aparece en renovaciones
+  document.querySelectorAll('input[name=tramite]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      document.getElementById('bloque_folio').style.display = r.value === 'renovacion' ? '' : 'none';
+    });
+  });
+  // Campo creado con JavaScript tras cargar (como un selector de horario que llega por red)
+  setTimeout(function () {
+    var ranura = document.getElementById('ranura_horario');
+    ranura.innerHTML = '<label for="horario">Horario disponible</label>' +
+      '<select id="horario" name="horario" required><option value="">Elija…</option>' +
+      '<option value="0900">09:00</option><option value="1130">11:30</option></select>';
+  }, 150);
+  // Envío desactivado en el laboratorio
+  document.getElementById('reserva').addEventListener('submit', function (e) {
+    e.preventDefault();
+    document.getElementById('mensajes').textContent = 'Laboratorio: no se envía nada.';
+  });
+})();
+</script>
+</body>
+</html>

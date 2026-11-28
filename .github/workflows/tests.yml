@@ -17,6 +17,24 @@ jobs:
           repository: dass-666/Cauce-monitor-engine
           ref: 9e7f88dd19f3e3bbf5c0c1e4476afbd2ca3bf76a
           path: monitor-contrato
+      # Network Engine RC3 de SOLO LECTURA (commit fijado) para las pruebas de integración nativa
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/cauce-network-engine
+          ref: f93dd58eeddc1cc3032711bb0b6e378708063d41
+          path: ne-rc3
+      # Network Engine E10 (PR #16, laboratorio) de SOLO LECTURA: contrato local_review y revisiones (tests/test_red_ne_e10.py)
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/cauce-network-engine
+          ref: 4f223a7d366a362fbdd64db4ae9a94bf2b63e414
+          path: ne-e10
+      # Cauce Monitor 7b92446 de SOLO LECTURA: su lectura de red y su centro de revisiones (tests/test_compat_monitor.py)
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/Cauce-monitor-engine
+          ref: 7b92446e884239b52c1253d57ee97d244fe4067b
+          path: monitor-rc3
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -25,15 +43,67 @@ jobs:
         if: runner.os == 'Linux'
       - run: python -m playwright install chromium
         if: runner.os == 'Windows'
-      - run: python -m pytest -q
+      # Ext JS 6.2 (GPL) para el laboratorio 13: se descarga con huella comprobada; no forma parte del repositorio
+      - run: python scripts/preparar_lab_extjs.py
+      - run: python -m pytest -q -rs
         env:
           CAUCE_EVIDENCE_DIR: evidence/out
           MONITOR_REPO: ${{ github.workspace }}/monitor-contrato
+          CAUCE_NE_REPO: ${{ github.workspace }}/ne-rc3
+          CAUCE_NE_E10_REPO: ${{ github.workspace }}/ne-e10
+          CAUCE_MONITOR_REPO: ${{ github.workspace }}/monitor-rc3
       - run: python scripts/demo_lab.py
       - run: python scripts/ejemplo_cauce_monitor.py --no-interactivo
       - run: python scripts/recorrido_ui.py --headless
+      # Analizador de formularios externos sobre un formulario de laboratorio local (solo lectura)
+      - run: python -m cauce_form_connector analizar-formulario --html lab_forms/06_cita_monitor.html --expediente sample_data/expediente_monitor_sintetico.json --salida evidence/out/analisis_lab06
+      # Jornada corta de laboratorio (procesos reales, portal ficticio, red simulada), en Linux y Windows (A7 de E10)
+      - run: python -m pip install psutil && python scripts/jornada_laboratorio.py --ne-repo ne-rc3 --expedientes 6 --salida evidence/out/jornada-ci
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: evidencia-${{ matrix.os }}
+          path: evidence/out
+
+  # Instalador y analizador .bat en Windows SIN el lanzador «py» (como en equipos con Python solo como «python»)
+  windows-bat:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: instalar_windows.bat y analizar_formulario_windows.bat sin «py»
+        shell: cmd
+        run: |
+          set "PATH=%pythonLocation%;%pythonLocation%\Scripts;C:\Windows\System32;C:\Windows\System32\WindowsPowerShell\v1.0"
+          where py >nul 2>nul && (echo ERROR: py sigue disponible & exit /b 1)
+          echo OK: el comando py no esta disponible
+          call instalar_windows.bat || exit /b 1
+          if not exist .venv\Scripts\python.exe (echo ERROR: no se creo .venv & exit /b 1)
+          set "CAUCE_AUTORIZADO=N"
+          set "CAUCE_NO_ABRIR=1"
+          call analizar_formulario_windows.bat "file:///%CD:\=/%/lab_forms/06_cita_monitor.html"
+          if errorlevel 1 (echo ERROR: el analisis fallo & exit /b 1)
+          dir /s /b informes\vista_previa.html || exit /b 1
+          dir /s /b informes\perfil_borrador.json || exit /b 1
+          call analizar_formulario_windows.bat "https://tramites.ejemplo.invalid/reserva"
+          if not errorlevel 3 (echo ERROR: una URL externa no autorizada debia rechazarse & exit /b 1)
+          echo OK: URL externa rechazada sin abrir el navegador
+          REM Recorrido Monitor -^> Forms con tablas de equivalencias (lab 06, datos sinteticos, sin ventana, sin envio)
+          set "CAUCE_HEADLESS=1"
+          set "CAUCE_ESPERA_S=0"
+          call recorrido_monitor_windows.bat > informes\autorrellenar_lab06.txt
+          set "RC=%ERRORLEVEL%"
+          type informes\autorrellenar_lab06.txt
+          if not "%RC%"=="7" (echo ERROR: se esperaba revision_caducada [7] y salio %RC% & exit /b 1)
+          findstr /l /c:"[!!]" informes\autorrellenar_lab06.txt && (echo ERROR: hay campos incorrectos & exit /b 1)
+          findstr /l /c:"[OK] Tipo de tr" informes\autorrellenar_lab06.txt || exit /b 1
+          echo OK: 8 campos con tablas de equivalencias rellenados y verificados, sin envio
+          mkdir evidence\out
+          xcopy /e /i /y informes evidence\out\bat_windows
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidencia-bat-windows
           path: evidence/out

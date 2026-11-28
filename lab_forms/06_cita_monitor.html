@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laboratorio 6 · Cita con campos parecidos a Monitor</title>
+<link rel="stylesheet" href="lab.css">
+</head>
+<body>
+<main>
+  <h1>Laboratorio 6 · Solicitud de cita (simulado)</h1>
+  <p class="nota">Formulario de PRUEBA cuyos campos se parecen a los del expediente de Cauce Monitor. Sirve para
+    comprobar que el analizador relaciona lo correcto y NO traduce códigos ni identificadores por su cuenta.
+    No envía nada.</p>
+  <form id="cita" action="#hecho" method="post">
+    <div class="fila">
+      <label for="nombre_completo">Nombre completo</label>
+      <input id="nombre_completo" name="nombre_completo" type="text" required minlength="5" maxlength="120">
+    </div>
+    <div class="fila">
+      <label for="nacimiento">Fecha de nacimiento</label>
+      <input id="nacimiento" name="nacimiento" type="date" required>
+    </div>
+    <div class="fila">
+      <label for="telefono">Teléfono a 10 dígitos</label>
+      <input id="telefono" name="telefono" type="tel" required pattern="\d{10}" maxlength="10">
+    </div>
+    <div class="fila">
+      <label for="correo">Correo</label>
+      <input id="correo" name="correo" type="email" required>
+    </div>
+    <div class="fila">
+      <label for="correo_confirmacion">Confirme su correo</label>
+      <input id="correo_confirmacion" name="correo_confirmacion" type="email" required data-confirm="correo">
+    </div>
+    <div class="fila">
+      <label for="tipo_tramite">Tipo de trámite</label>
+      <select id="tipo_tramite" name="tipo_tramite" required>
+        <option value="">Seleccione…</option>
+        <option value="alta">Alta</option>
+        <option value="renovacion">Renovación</option>
+        <option value="constancia">Constancia</option>
+      </select>
+    </div>
+    <div class="fila">
+      <label for="oficina">Oficina</label>
+      <select id="oficina" name="oficina" required>
+        <option value="">Seleccione…</option>
+        <option value="101">Centro</option>
+        <option value="102">Norte</option>
+      </select>
+    </div>
+    <div class="fila">
+      <label for="zona">Región</label>
+      <select id="zona" name="zona"><option value="N">Norte</option><option value="S">Sur</option></select>
+    </div>
+    <fieldset>
+      <legend>Modo de búsqueda</legend>
+      <label><input type="radio" name="modo" value="dia" required> Por día</label>
+      <label><input type="radio" name="modo" value="horario"> Por horario</label>
+    </fieldset>
+    <div class="fila">
+      <label for="fecha_preferida">Fecha preferida de la cita</label>
+      <input id="fecha_preferida" name="fecha_preferida" type="date">
+    </div>
+    <div class="fila">
+      <label for="desde">Buscar desde</label><input id="desde" name="desde" type="date">
+      <label for="hasta">Buscar hasta</label><input id="hasta" name="hasta" type="date">
+    </div>
+    <div class="fila">
+      <label for="registro_previo">Número de registro previo</label>
+      <input id="registro_previo" name="registro_previo" type="text" maxlength="20">
+    </div>
+    <div class="fila">
+      <label for="rfc">RFC</label>
+      <input id="rfc" name="rfc" type="text" maxlength="13">
+    </div>
+    <div class="fila">
+      <label><input type="checkbox" id="autorizo" name="autorizo" required> Autorizo el tratamiento de mis datos</label>
+    </div>
+    <button type="submit">Solicitar cita</button>
+  </form>
+</main>
+<script>
+document.getElementById('cita').addEventListener('submit', function (e) { e.preventDefault(); });
+</script>
+</body>
+</html>
