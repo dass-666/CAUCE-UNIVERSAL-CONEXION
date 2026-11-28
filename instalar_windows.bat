@@ -8,13 +8,21 @@ set "PLAYWRIGHT_BROWSERS_PATH=%~dp0.pw-browsers"
 REM Consola en UTF-8 para que los acentos se vean bien
 chcp 65001 >nul
 set PYTHONIOENCODING=utf-8
-where py >nul 2>nul
-if %errorlevel% neq 0 (
-  echo No se encontro Python. Instale Python 3.10 o superior desde https://www.python.org/downloads/ y marque "Add python.exe to PATH".
+REM Busca Python 3.10+: primero el lanzador "py"; si no existe (instalaciones sin lanzador o desde
+REM Microsoft Store), "python". El acceso directo falso de la Store no ejecuta el codigo y se descarta.
+set "PYEXE="
+where py >nul 2>nul && py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul && set "PYEXE=py -3"
+if not defined PYEXE (
+  python -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>nul && set "PYEXE=python"
+)
+if not defined PYEXE (
+  echo No se encontro Python 3.10 o superior ^(ni "py" ni "python"^).
+  echo Instale Python desde https://www.python.org/downloads/ y marque "Add python.exe to PATH".
   exit /b 1
 )
-if not exist .venv (
-  py -3 -m venv .venv || exit /b 1
+echo Usando Python: %PYEXE%
+if not exist .venv\Scripts\python.exe (
+  %PYEXE% -m venv .venv || exit /b 1
 )
 call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip

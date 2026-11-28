@@ -40,7 +40,7 @@ Variables: `CAUCE_PROFILES_DIR` (perfiles), `CAUCE_STATE_DIR` (por omisión `sta
 |---|---|---|---|
 | Revisada y cerrada sin enviar | `preparado_revisado_sin_envio` | — | 0 |
 | Persona pulsó enviar (observado) | `enviado_por_persona_observado` | — | 0 |
-| Campo `diferente/invalido` o confirmación que no coincide | `preparado_con_incidencias` | `CAMPO_NO_VERIFICADO` | 2 |
+| Campo `diferente/invalido` o confirmación que no coincide | `preparado_con_incidencias` | `CAMPO_NO_VERIFICADO` | 2 (la ventana queda abierta hasta que la persona la cierra o vence la espera) |
 | Autorización/formulario/perfil no válido o alterado | `rechazado_no_autorizado` | `FORMULARIO_NO_AUTORIZADO`, `AUTORIZACION_CADUCADA`, `PERFIL_NO_COINCIDE` | 3 |
 | CAPTCHA | `detenido_intervencion_humana` | `INTERVENCION_HUMANA_REQUERIDA` | 4 |
 | Estructura distinta | `detenido_estructura_cambiada` | `ESTRUCTURA_CAMBIADA` | 5 |
@@ -102,3 +102,20 @@ No verificado o con límites **[P]**:
 2. **Prueba automática** (ya incluida): `MONITOR_REPO=<ruta a Cauce-monitor-engine> python -m pytest tests/test_integracion_contrato.py -k monitor`. Usa el `Registro` real de Monitor: crea → autoriza → lanza → `recibir(respuesta, código de salida)` y comprueba que el estado final es `CADUCADA`, `CON_INCIDENCIAS` y `RECHAZADA` según el caso. La CI del conector lo ejecuta con el commit fijado.
 3. **Prueba manual con ventana visible** (laboratorio, datos ficticios): sirva `lab_forms/` en `127.0.0.1`, ejecute `aprobar-perfil`, construya una solicitud con `perfil_sha256` y firma impresos, lance `preparar` con `espera_revision_max_s: 120` **sin** `CAUCE_HEADLESS`, revise la ventana, ciérrela y compruebe `preparado_revisado_sin_envio`. Con el lanzador de Monitor (`puede_lanzar()` sigue en `False` por diseño) esto aún no es posible: hoy se lanza a mano o con un script.
 4. Para comparar con el simulador de Monitor: `python -m monitoreo.conector.simulador < solicitud.json` produce el mismo esquema de respuesta; las diferencias esperables son `duracion_ms` y la asignación de estados de §2.
+
+## 8. Autorrellenado desde un expediente (puente Monitor → conector)
+
+Capa fina sobre `preparar` (no duplica el motor): `cauce_form_connector/puente_monitor.py`, subcomando `autorrellenar` y `scripts/recorrido_monitor.py`.
+
+- **Perfil de formulario configurable** (`config/formularios/<id>.json`): `url`, `formulario_id`, `perfil`, `campos_formulario` (nombre lógico → clave de campo del formulario) y `campos_expediente` (nombre lógico → campo PLANO del Expediente de Monitor: `nombre`, `correo`, `telefono`…; ver `esquema_monitor.py`). Añadir un formulario nuevo = un JSON nuevo, sin tocar código.
+- **Minimización:** solo se leen del expediente las rutas declaradas; lo demás nunca se toca [V: `test_solo_se_extraen_campos_declarados`]. Un dato vacío o ausente no se inventa: el campo queda para la persona y se informa como «sin dato» [V].
+- **Aprobación humana del perfil:** `autorrellenar` no corre si no hay perfil aprobado (salida 6). Aprobar es explícito: `--aprobar-perfil rev_xxx` tras revisar `campos_formulario` frente al formulario real [V].
+- **Informe sin valores:** etiqueta del campo, estado (`ok`, `ok_normalizado`, `diferente`, `invalido`), nº de caracteres y confirmaciones (correo/teléfono repetido). Los errores de validación del propio sitio se reflejan como `invalido` solo cuando la página los expone al conector.
+- **Uso:** `python -m cauce_form_connector autorrellenar --formulario config/formularios/lab_validaciones.json --expediente sample_data/expediente_monitor_sintetico.json --puerto <p> [--aprobar-perfil rev_xxx] [--espera-s 300] [--json]`. Ventana visible; no envía; la persona revisa y cierra.
+- **Resultado inequívoco de `autorrellenar`:** `informe.resultado` = `{total, verificados, pendientes[{campo, etiqueta, motivo}], completo}` y línea `RESULTADO:` en el texto. Salida **0** solo con todos los campos del perfil verificados; **8** si el contrato terminó en 0 pero quedó algún campo pendiente (dato, equivalencia o identificador ausente); `salida_contrato` conserva el código del contrato. `preparar` y el contrato fijado no cambian [V: `tests/test_resultado_inequivoco.py`].
+- **Tablas de equivalencias** (`equivalencias` en el perfil de formulario): `{nombre_lógico: {"campo_monitor": "tipo_tramite", "valores": {"<código de Monitor>": "<valor de la opción>"}}}`. Todo campo que lea un código de Monitor (`tipo_tramite`, `operacion`, `region`, `sucursal`, `modo`) DEBE tener tabla; los códigos deben existir en Monitor cuando su catálogo se conoce [V: `test_tablas_invalidas_se_rechazan`].
+  - Se aprueban junto con el perfil (`--aprobar-perfil rev_xxx`): la aprobación comprueba que cada valor sea una opción del formulario real y guarda la tabla dentro del perfil aprobado, protegida por su SHA-256 [V: `test_tabla_con_opcion_inexistente_no_se_aprueba`].
+  - Si la tabla del JSON cambia después, `autorrellenar` se niega (`equivalencias_no_aprobadas`, salida 6) [V: `test_tabla_alterada_tras_aprobar_se_rechaza`].
+  - Un código sin fila no se adivina: el campo queda para la persona (`sin_equivalencia`) [V].
+  - `preparar` rechaza (`rechazado_solicitud_invalida` / `SOLICITUD_MAL_FORMADA`) un valor que no esté entre los aprobados para ese campo, por si Monitor enviara el código sin traducir [V: `test_preparar_rechaza_codigo_sin_traducir`]. El contrato fijado no cambia.
+- **Pendiente [P]:** el lanzador de Monitor (`puede_lanzar()` sigue en `False`) y validación física en el PC con Windows 11.

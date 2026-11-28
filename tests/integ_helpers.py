@@ -104,13 +104,21 @@ class Sitio:
     def __init__(self):
         self.paginas: dict[str, str] = {}
         self.redirecciones: dict[str, str] = {}
+        self.peticiones: list[tuple[str, str]] = []      # (método, ruta con parámetros) de todo lo que llega al servidor
         outer = self
 
         class H(http.server.BaseHTTPRequestHandler):
             def log_message(self, *a):
                 pass
 
+            def do_POST(self):
+                outer.peticiones.append(("POST", self.path))
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self.send_response(204)
+                self.end_headers()
+
             def do_GET(self):
+                outer.peticiones.append(("GET", self.path))
                 ruta = self.path.split("?")[0]
                 if ruta in outer.redirecciones:
                     self.send_response(302)

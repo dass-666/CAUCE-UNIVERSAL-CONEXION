@@ -14,7 +14,7 @@ TEXT_TYPES = {
     "text", "email", "tel", "password", "search", "url", "number", "textarea", "",
 }
 # Controles que NO reciben texto y usan su mecanismo normal de interacción.
-CHOICE_TYPES = {"select", "select-multiple", "checkbox", "radio"}
+CHOICE_TYPES = {"select", "select-multiple", "checkbox", "radio", "custom-select"}  # custom-select: lista hecha con JavaScript
 DATE_TYPES = {"date", "datetime-local", "month", "week", "time", "color", "range"}
 SKIP_TYPES = {"hidden", "submit", "button", "reset", "image", "file"}
 
@@ -55,6 +55,7 @@ class FieldDescriptor:
     form_key: str = ""
     confirms: str = ""            # key del campo que este campo confirma (email2 -> email)
     blocks_paste: bool = False    # el campo tiene onpaste (solo informativo)
+    format_hint: str = ""         # pistas de formato de la página (data-date-format, máscara, ayuda); no entra en la firma
 
     @property
     def is_text(self) -> bool:

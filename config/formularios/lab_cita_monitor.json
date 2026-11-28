@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "formulario_id": "frm_lab_cita_monitor",
+  "nombre": "Laboratorio 06 - solicitud de cita (ficticio)",
+  "url": "http://127.0.0.1:{puerto}/06_cita_monitor.html",
+  "perfil": "perfil_lab_cita_monitor",
+  "_nota": "Ejemplo SINTÉTICO. Las tablas de equivalencias se aprueban junto con el perfil (--aprobar-perfil rev_xxx); los códigos de sucursal S001/S002 son inventados.",
+  "campos_formulario": {
+    "nombre": "cita::nombre_completo",
+    "fecha_nacimiento": "cita::nacimiento",
+    "telefono": "cita::telefono",
+    "correo": "cita::correo",
+    "correo_confirmacion": "cita::correo_confirmacion",
+    "tipo_tramite": "cita::tipo_tramite",
+    "modo": "cita::modo",
+    "sucursal": "cita::oficina"
+  },
+  "campos_expediente": {
+    "nombre": "nombre",
+    "fecha_nacimiento": "fecha_nacimiento",
+    "telefono": "telefono",
+    "correo": "correo",
+    "correo_confirmacion": "correo",
+    "tipo_tramite": "tipo_tramite",
+    "modo": "modo",
+    "sucursal": "sucursal"
+  },
+  "equivalencias": {
+    "tipo_tramite": {"campo_monitor": "tipo_tramite",
+                     "valores": {"alta": "alta", "renovacion": "renovacion", "constancia": "constancia"}},
+    "modo": {"campo_monitor": "modo", "valores": {"POR_DIA": "dia", "POR_HORARIO": "horario"}},
+    "sucursal": {"campo_monitor": "sucursal", "valores": {"S001": "101", "S002": "102"}}
+  }
+}

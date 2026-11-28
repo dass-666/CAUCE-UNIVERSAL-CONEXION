@@ -1,0 +1,17 @@
+{
+  "nombre": "Zzmariana Zzejemplo Prueba",
+  "fecha_nacimiento": "1990-05-17",
+  "telefono": "5587654321",
+  "correo": "zz.mariana@example.com",
+  "id_externo": null,
+  "id_registro_previo": null,
+  "folio_anterior": null,
+  "tipo_tramite": "renovacion",
+  "operacion": "nueva",
+  "region": "R01",
+  "sucursal": "S001",
+  "fecha_solicitada": "2026-12-15",
+  "fechas_desde": null,
+  "fechas_hasta": null,
+  "modo": "POR_DIA"
+}
