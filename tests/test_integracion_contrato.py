@@ -374,6 +374,7 @@ def test_excepcion_inesperada_no_filtra_valores(ent, capsys):
 def _proceso(ent, entrada: str, extra_env=None):
     env = {**os.environ, "CAUCE_HEADLESS": "1", "CAUCE_PROFILES_DIR": ent["s"].profiles_dir,
            "CAUCE_STATE_DIR": str(ent["state"]), "CAUCE_AUDIT_PATH": str(ent["tmp"] / "audit.jsonl"),
+           "CAUCE_FORMS_DATA_DIR": ent["s"].data_dir,
            "PYTHONPATH": str(Path(__file__).resolve().parents[1]), **(extra_env or {})}
     cwd = ent["tmp"] / "cwd"
     cwd.mkdir(exist_ok=True)

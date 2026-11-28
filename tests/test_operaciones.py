@@ -135,7 +135,7 @@ def test_revision_exige_nota_y_confirmacion_y_solo_de_abiertas(tmp_path):
         r.revisar(op["id"], "ok", op["id"])
     with pytest.raises(ValueError):
         r.revisar(op["id"], "Revisé el acuse en el portal", "op_000000000000")
-    o = r.revisar(op["id"], "Revisé el acuse en el portal", op["id"])
+    o = r.revisar(op["id"], "Revisé el acuse en el portal", op["id"], resultado="no_recibido")
     assert o["estado"] == REVISADA
     with pytest.raises(ValueError):
         r.revisar(op["id"], "Otra vez", op["id"])
@@ -185,7 +185,7 @@ def test_revision_del_operador_desde_otro_proceso_no_se_pierde(tmp_path):
     forms.cerrar(op["id"], INCIERTA, "resultado_desconocido")
     env = dict(os.environ, CAUCE_FORMS_DATA_DIR=str(tmp_path / "datos"), CAUCE_AUDIT_PATH=str(tmp_path / "audit.jsonl"))
     r = subprocess.run([sys.executable, "-m", "cauce_form_connector", "operaciones", "revisar", op["id"], "--nota",
-                        "Comprobado en el portal: no consta", "--confirmar", op["id"]], env=env, capture_output=True,
+                        "Comprobado en el portal: no consta", "--confirmar", op["id"], "--resultado", "no_recibido"], env=env, capture_output=True,
                        text=True, cwd=str(Path(__file__).resolve().parents[1]))
     assert r.returncode == 0, r.stderr
     assert forms.get(op["id"])["estado"] == REVISADA          # Forms adopta la versión del operador

@@ -126,12 +126,27 @@ def main(argv: list[str] | None = None) -> int:
     p_rv.add_argument("--nota", required=True, help="qué comprobó (mín. 5 caracteres; no escriba datos personales)")
     p_rv.add_argument("--confirmar", required=True, help="repita el id exacto (o GENERAL)")
     p_rv.add_argument("--por", default="operador", help="quién revisa (rol o iniciales, sin datos personales)")
+    p_rv.add_argument("--resultado", choices=("recibido", "no_recibido", "sin_determinar"),
+                      help="obligatorio para una operación: recibido (sigue bloqueado), no_recibido (comprobado que no "
+                           "llegó: se podrá enviar otra vez) o sin_determinar (quita la alerta, sigue bloqueado)")
+    p_es = sub.add_parser("estado", help="OPERADOR: respaldar o restaurar la carpeta de estado de Forms")
+    ses = p_es.add_subparsers(dest="accion", required=True)
+    p_rs = ses.add_parser("respaldar", help="copia protegida y verificable de registro, clave, puesto y configuración")
+    p_rs.add_argument("--destino", required=True, help="carpeta donde dejar el respaldo (se protege como la de estado)")
+    p_vr = ses.add_parser("verificar", help="comprobar la integridad de un respaldo sin restaurarlo")
+    p_vr.add_argument("respaldo", help="archivo respaldo-forms-*.zip")
+    p_rt = ses.add_parser("restaurar", help="restaurar un respaldo (nada se envía hasta revisar GENERAL)")
+    p_rt.add_argument("respaldo", help="archivo respaldo-forms-*.zip")
+    p_rt.add_argument("--confirmar", required=True, help="escriba exactamente: RESTAURAR")
 
     args = ap.parse_args(argv)
     settings = get_settings()
 
     if args.cmd == "operaciones":
         return _operaciones(args, settings)
+    if args.cmd == "estado":
+        from .respaldo import orden_estado
+        return orden_estado(args, settings)
 
     if args.cmd == "preparar":
         from .integracion import principal
@@ -351,11 +366,14 @@ def _operaciones(args: argparse.Namespace, settings: Any) -> int:
         _emit({"revision_general": reg.general, "abiertas": [_publica(o) for o in reg.abiertas()],
                "recientes": [_publica(o) for o in reg.lista(20)]})
         return 0
+    if args.id != "GENERAL" and not args.resultado:
+        print("No se revisó nada: indique --resultado recibido | no_recibido | sin_determinar", file=sys.stderr)
+        return 1
     try:
-        o = reg.revisar(args.id, args.nota, args.confirmar, args.por)
+        o = reg.revisar(args.id, args.nota, args.confirmar, args.por, args.resultado or "sin_determinar")
     except (LookupError, ValueError) as exc:
         print(f"No se revisó nada: {exc}", file=sys.stderr)
         return 1
-    audit.log("operation_reviewed", detail=args.id, estado=o["estado"])
-    _emit({"revisada": args.id})
+    audit.log("operation_reviewed", detail=args.id, estado=o["estado"], codigo=args.resultado)
+    _emit({"revisada": args.id, "resultado": args.resultado})
     return 0

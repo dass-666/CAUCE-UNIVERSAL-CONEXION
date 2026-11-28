@@ -34,6 +34,7 @@ def settings_para(tmp: Path, **kw) -> Settings:
     s.headless = True
     s.profiles_dir = str(tmp / "profiles")
     s.audit_path = str(tmp / "audit.jsonl")
+    s.data_dir = str(tmp / "forms")          # registro de operaciones propio de cada prueba
     for k, v in kw.items():
         setattr(s, k, v)
     return s

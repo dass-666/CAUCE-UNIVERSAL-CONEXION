@@ -106,6 +106,7 @@ def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro
                      huella: str, audit: Optional[AuditLog] = None, diagnostico: Any = None,
                      button_text: str = "", acuse_espera_s: float = ACUSE_ESPERA_S) -> dict[str, Any]:
     audit = audit or AuditLog(None)
+    humanos_antes = session.envios_humanos           # envíos de la persona atendidos hasta ahora (ver paso 4)
     # 1. comprobaciones previas (mismas reglas H1 que submit_with_human_confirmation)
     if confirmation_phrase != "ENVIAR":
         raise PermissionError("Para enviar, una persona debe escribir exactamente ENVIAR.")
@@ -132,10 +133,16 @@ def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro
     # 2. consumir la aprobación y guardar «en curso» ANTES del clic
     session.observe_submits()
     session.submit_armed = False
+    session.aprobacion_en_uso = True                 # hasta el clic, un envío de la persona sigue siendo atribuible
     sesion_ne = getattr(getattr(diagnostico, "c", None), "session_id", None) if diagnostico else None
     try:
         op = registro.iniciar(huella, analysis.source_label, token, sesion_ne, api_base if token else None)
-    except OSError:
+    except BaseException as exc:
+        session.aprobacion_en_uso = False
+        # OperacionBloqueada es PermissionError, y PermissionError es OSError: antes un bloqueo detectado aquí se
+        # presentaba como «no se pudo guardar el registro» (403 en vez de 409).
+        if isinstance(exc, OperacionBloqueada) or not isinstance(exc, OSError):
+            raise
         audit.log("human_submit_refused", codigo="registro_no_escribible")
         raise PermissionError("No se pudo guardar el registro de la operación: por seguridad no se envía nada.")
     audit.log("operation_started", detail=op["id"], source_label=analysis.source_label)
@@ -170,6 +177,17 @@ def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro
         session.page.on("request", _req)
         session.page.on("framenavigated", _nav)
         session.page.on("response", _resp)
+        # Último momento antes del clic: se atienden los eventos pendientes. Si la persona acaba de enviar desde la
+        # ventana (su petición estaba parada en el interceptor), NO se pulsa: serían dos envíos.
+        try:
+            session.page.wait_for_timeout(1)
+        finally:
+            session.aprobacion_en_uso = False
+        if session.envios_humanos != humanos_antes:
+            registro.cerrar(op["id"], NO_ENVIADA, "envio_humano_simultaneo")
+            audit.log("human_submit_refused", detail=op["id"], codigo="envio_humano_simultaneo")
+            raise OperacionBloqueada("envio_humano_simultaneo", "No se envía: la persona acaba de enviar este "
+                                     "formulario desde la ventana; ese envío quedó registrado para revisión.", op["id"])
         session.envio_programado = True          # este `submit` lo registra esta función, no el aviso de envío humano
         try:
             loc.first.click(timeout=10_000, no_wait_after=True)   # el clic no espera a la navegación: la espera es nuestra
@@ -237,7 +255,8 @@ def _url_segura(session: BrowserSession) -> str:
 def _publica(o: dict) -> dict:
     """Vista de una operación para la interfaz (sin huella ni token)."""
     return {k: o.get(k) for k in ("id", "creada", "actualizada", "estado", "motivo", "origen", "folio", "sesion_ne",
-                                  "aviso_en_curso", "envio_observado", "posts_vistos", "revision")} | \
+                                  "aviso_en_curso", "envio_observado", "posts_vistos", "revision",
+                                  "ref_solicitud")} | \
            {"verificable": bool(o.get("token_portal"))}
 
 

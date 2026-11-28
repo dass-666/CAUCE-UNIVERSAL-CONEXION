@@ -13,8 +13,12 @@ Reglas (todas con pruebas en ``tests/test_operaciones.py`` y ``tests/test_envio_
 4. Un reinicio de Forms convierte toda operación ``en_curso`` en ``incierta`` (``forms_reiniciado_durante_operacion``).
 5. Archivo dañado: se usa la copia ``.bak`` y TODO lo abierto pasa a revisión; si tampoco vale, se aparta el archivo
    (``.corrupt-<fecha>``, nunca se borra) y una marca GENERAL bloquea nuevos envíos hasta que un operador la revise.
-6. Un expediente con una operación ``en_curso``, ``incierta`` o ``confirmada`` no se puede volver a enviar.
+6. Un expediente con una operación ``en_curso``, ``incierta`` o ``confirmada`` no se puede volver a enviar. Una
+   ``revisada`` también bloquea, salvo que el operador haya dejado escrito que el portal NO lo recibió
+   (``resultado = no_recibido``). Revisar sin decir el resultado (o resolver la marca en Network Engine) quita la
+   alerta, pero no desbloquea el expediente.
 7. Un clic observado NO es una recepción: ``envio_observado`` solo es un indicio; ``confirmada`` exige el acuse.
+8. Un envío que la PERSONA hace en la ventana (botón, tecla Intro o JavaScript de la página) queda ``incierta``.
 
 Qué se guarda (lista blanca, sin datos personales): id de operación, fechas, estado, motivo, huella del expediente
 (HMAC-SHA256 con una clave aleatoria local, truncado: no permite recuperar los datos y sin la clave no permite
@@ -53,12 +57,25 @@ MAX_CERRADAS = 500                                    # las abiertas nunca se de
 
 CAMPOS = {"id", "creada", "actualizada", "estado", "motivo", "huella", "origen", "token_portal", "folio",
           "sesion_ne", "marca_ne", "revision", "aviso_en_curso", "envio_observado", "api_acuse",
-          "posts_vistos"}
+          "posts_vistos", "ref_solicitud"}
+RESULTADOS_REVISION = ("recibido", "no_recibido", "sin_determinar")
+_SOL_RE = re.compile(r"^sol_[0-9a-f]{16,32}$")
 _ID_RE = re.compile(r"^op_[0-9a-f]{12}$")
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _FOLIO_RE = re.compile(r"^[A-Z0-9-]{4,32}$")
 _SID_RE = re.compile(r"^bs_[0-9a-f]{12}$")
 _API_RE = re.compile(r"^http://(127\.0\.0\.1|localhost)(:\d{1,5})?/[A-Za-z0-9/_-]{0,80}$")
+
+
+def _bloquea(o: dict) -> bool:
+    """¿Esta operación impide volver a enviar su expediente?"""
+    if o["estado"] in BLOQUEAN_REPETICION:
+        return True
+    if o["estado"] == REVISADA:
+        # Solo «no_recibido», escrito por un operador, desbloquea. Una revisión antigua sin resultado, la resolución
+        # de la marca en Network Engine o «sin_determinar» siguen bloqueando (conservador).
+        return ((o.get("revision") or {}).get("resultado") or "sin_determinar") != "no_recibido"
+    return False
 
 
 class OperacionBloqueada(PermissionError):
@@ -88,7 +105,7 @@ def proteger_carpeta(carpeta: Path) -> str:
     """Permisos EFECTIVOS de la carpeta de estado (clave de huella, registro, identidad del puesto).
 
     Windows: ``os.open(..., 0o600)`` solo marca «solo lectura»; los permisos reales son la ACL heredada de la carpeta
-    (en una carpeta creada en C:\ suelen incluir a «Usuarios autenticados»). Se quita la herencia y se deja acceso
+    (en una carpeta creada en C:\\ suelen incluir a «Usuarios autenticados»). Se quita la herencia y se deja acceso
     total SOLO al usuario actual y a SYSTEM (``icacls``, sin shell). Devuelve ``acl_usuario`` | ``heredada`` (no se
     pudo; se informa) | ``posix`` (los archivos ya se crean 0600)."""
     if sys.platform != "win32":
@@ -332,8 +349,8 @@ class RegistroOperaciones:
             if len(cerradas) > MAX_CERRADAS:
                 quitar = {o["id"] for o in cerradas[: len(cerradas) - MAX_CERRADAS]}
                 for o in self.ops:
-                    # una confirmada que sale de la lista conserva su bloqueo (antes se perdía: duplicado posible)
-                    if o["id"] in quitar and o["estado"] == CONFIRMADA and _HUELLA_RE.match(o.get("huella") or ""):
+                    # una confirmada (o revisada que sigue bloqueando) que sale de la lista conserva su bloqueo
+                    if o["id"] in quitar and _bloquea(o) and _HUELLA_RE.match(o.get("huella") or ""):
                         self.archivadas[o["huella"]] = (o.get("creada") or "")[:10]
                 self.ops = [o for o in self.ops if o["id"] not in quitar]
             doc = {"esquema": ESQUEMA, "operaciones": self.ops, "general": self.general,
@@ -447,7 +464,11 @@ class RegistroOperaciones:
                 raise OperacionBloqueada("expediente_confirmada", "No se envía: este expediente ya consta como recibido "
                                          f"por el portal (archivado, {self.archivadas[huella]}).")
             for o in self.ops:
-                if o.get("huella") == huella and o["estado"] in BLOQUEAN_REPETICION:
+                if o.get("huella") == huella and _bloquea(o):
+                    if o["estado"] == REVISADA:
+                        raise OperacionBloqueada("expediente_revisada", "No se envía: un operador revisó un envío "
+                                                 "anterior de este expediente sin dejar escrito que el portal no lo "
+                                                 f"recibió ({o['id']}).", o["id"])
                     texto = {EN_CURSO: "ya hay un envío en curso de este expediente",
                              INCIERTA: "un envío anterior de este expediente tiene resultado desconocido y debe revisarse",
                              CONFIRMADA: "este expediente ya consta como recibido por el portal"}[o["estado"]]
@@ -459,6 +480,14 @@ class RegistroOperaciones:
         """Crea la operación ``en_curso`` y la guarda en disco. Lanza OSError si no puede (entonces NO se envía)."""
         if not self._clave_persistida:
             raise OSError("huella.key no se pudo guardar: la protección contra duplicados no sobreviviría a un reinicio")
+        if self.otro_forms_en_marcha:
+            # Otra interfaz de Forms ya trabaja con este registro. Si esta enviara, la orden de operador no sabría
+            # cuál de las dos sigue viva. Se reintenta el candado (la otra pudo cerrarse) y, si no, no se envía.
+            self._vivo_fh = _candado_exclusivo(self.dir / VIVO)
+            self.otro_forms_en_marcha = self._vivo_fh is None
+            if self.otro_forms_en_marcha:
+                raise OperacionBloqueada("otro_forms_en_marcha", "No se envía: hay otra ventana de Cauce Forms abierta "
+                                         "con el mismo registro de operaciones. Ciérrela y vuelva a intentarlo.")
         with self._candado():
             self._recargar()
             self.comprobar(huella)
@@ -477,7 +506,8 @@ class RegistroOperaciones:
                 raise
             return dict(o)
 
-    def registrar_envio_humano(self, huella: str, origen: str) -> dict:
+    def registrar_envio_humano(self, huella: str, origen: str, motivo: str = "envio_humano_directo_sin_acuse",
+                               ref_solicitud: Optional[str] = None) -> dict:
         """La PERSONA envió desde la ventana del navegador (sin pasar por ENVIAR). Forms no vio el resultado ni puede
         verificarlo: queda ``incierta`` y bloquea repetir ese expediente hasta que un operador lo revise.
         No comprueba bloqueos (el envío ya ocurrió) y, si no puede escribir, lanza OSError para que se audite."""
@@ -486,9 +516,11 @@ class RegistroOperaciones:
         with self._candado():
             self._recargar()
             o = {"id": "op_" + secrets.token_hex(6), "creada": _ahora(), "actualizada": _ahora(), "estado": INCIERTA,
-                 "motivo": "envio_humano_directo_sin_acuse", "huella": huella, "origen": str(origen)[:200],
+                 "motivo": str(motivo)[:80], "huella": huella, "origen": str(origen)[:200],
                  "token_portal": None, "folio": None, "sesion_ne": None, "marca_ne": None, "revision": None,
-                 "aviso_en_curso": None, "envio_observado": True, "api_acuse": None}
+                 "aviso_en_curso": None, "envio_observado": True, "api_acuse": None,
+                 # id opaco de la solicitud de Monitor (modo preparar): permite cruzar este registro con el de Monitor
+                 "ref_solicitud": ref_solicitud if ref_solicitud and _SOL_RE.match(ref_solicitud) else None}
             self.ops.append(o)
             try:
                 self._guardar()
@@ -561,16 +593,23 @@ class RegistroOperaciones:
                 if o["estado"] == INCIERTA and o.get("marca_ne") == sid:
                     o.update(estado=REVISADA, actualizada=_ahora(),
                              revision={"por": "operador_network_engine", "nota": "marca resuelta en Network Engine",
-                                       "en": _ahora()})
+                                       "en": _ahora(), "resultado": "sin_determinar"})
                     out.append(o["id"])
             if out:
                 self._guardar_sin_lanzar()
         return out
 
-    def revisar(self, oid: str, nota: str, confirmar: str, por: str = "operador") -> dict:
-        """Revisión de un OPERADOR (línea de órdenes, no la interfaz de la persona). Exige nota y repetir el id."""
+    def revisar(self, oid: str, nota: str, confirmar: str, por: str = "operador",
+                resultado: str = "sin_determinar") -> dict:
+        """Revisión de un OPERADOR (línea de órdenes, no la interfaz de la persona). Exige nota y repetir el id.
+
+        ``resultado``: ``recibido`` (el portal lo tiene: sigue bloqueado), ``no_recibido`` (comprobado que no llegó: se
+        puede volver a enviar) o ``sin_determinar`` (quita la alerta, sigue bloqueado). Una ``revisada`` con
+        ``sin_determinar`` se puede volver a revisar para dejar el resultado."""
         if not isinstance(nota, str) or len(nota.strip()) < 5:
             raise ValueError("Escriba qué revisó (nota de al menos 5 caracteres).")
+        if resultado not in RESULTADOS_REVISION:
+            raise ValueError("resultado: recibido | no_recibido | sin_determinar")
         with self._candado():
             self._recargar()
             if oid == "GENERAL":
@@ -584,14 +623,40 @@ class RegistroOperaciones:
             o = next((x for x in self.ops if x["id"] == oid), None)
             if o is None:
                 raise LookupError("Operación inexistente.")
-            if o["estado"] not in ABIERTOS:
+            sin_resultado = o["estado"] == REVISADA and _bloquea(o) and \
+                ((o.get("revision") or {}).get("resultado") or "sin_determinar") == "sin_determinar"
+            if o["estado"] not in ABIERTOS and not sin_resultado:
                 raise ValueError(f"La operación no está pendiente de revisión ({o['estado']}).")
             if confirmar != oid:
                 raise ValueError(f"Para confirmar escriba exactamente: {oid}")
             o.update(estado=REVISADA, actualizada=_ahora(),
-                     revision={"por": str(por)[:40], "nota": redact(nota.strip())[:300], "en": _ahora()})
+                     revision={"por": str(por)[:40], "nota": redact(nota.strip())[:300], "en": _ahora(),
+                               "resultado": resultado})
             self._guardar()
             return dict(o)
+
+    def marcar_general(self, motivo: str) -> None:
+        """Bloquea TODO envío hasta que un operador lo revise (``operaciones revisar GENERAL``). Lanza OSError."""
+        with self._candado():
+            self._recargar()
+            self.general = {"motivo": str(motivo)[:80], "desde": _ahora()}
+            self._guardar()
+
+    def incorporar(self, ops: list, archivadas: dict) -> int:
+        """Restauración: añade operaciones (por id) y huellas archivadas de OTRO registro con la MISMA clave.
+        Nunca quita ni rebaja nada de lo que ya hay. Devuelve cuántas operaciones añadió. Lanza OSError."""
+        with self._candado():
+            self._recargar()
+            ids = {o["id"] for o in self.ops}
+            nuevas = [dict(o) for o in ops if o["id"] not in ids]
+            for o in nuevas:
+                if o["estado"] == EN_CURSO:      # lo que estaba a medias en el otro registro es desconocido
+                    o.update(estado=INCIERTA, motivo="en_curso_al_restaurar", actualizada=_ahora())
+            self.ops.extend(nuevas)
+            for h, f in archivadas.items():
+                self.archivadas.setdefault(h, f)
+            self._guardar()
+            return len(nuevas)
 
     def _guardar_sin_lanzar(self) -> None:
         try:

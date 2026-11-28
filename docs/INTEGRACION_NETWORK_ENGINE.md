@@ -65,12 +65,36 @@ Si el motor está apagado, la credencial fue revocada o no tiene el ámbito corr
 
 ```
 python -m cauce_form_connector operaciones listar
-python -m cauce_form_connector operaciones revisar op_xxxxxxxxxxxx --nota "qué comprobó" --confirmar op_xxxxxxxxxxxx
+python -m cauce_form_connector operaciones revisar op_xxxxxxxxxxxx --nota "qué comprobó" --confirmar op_xxxxxxxxxxxx --resultado no_recibido
 ```
 
-La revisión queda auditada. Si el registro se dañó, Forms pide una revisión `GENERAL` (`--confirmar GENERAL`).
-La marca del motor la resuelve el operador del motor (`cauce` o el centro de revisiones de Monitor). Forms solo da por
-revisada una operación si ve que el operador resolvió la marca **de su misma sesión** en Network Engine.
+`--resultado` es obligatorio (0.2.0rc2): `recibido` (el portal lo tiene: el expediente sigue bloqueado), `no_recibido`
+(comprobado que no llegó: se podrá enviar otra vez) o `sin_determinar` (quita la alerta y sigue bloqueado). Solo
+`no_recibido` desbloquea. La revisión queda auditada. Si el registro se dañó, Forms pide una revisión `GENERAL`
+(`--confirmar GENERAL`). La marca del motor la resuelve el operador del motor (`cauce` o el centro de revisiones de
+Monitor). Si Forms ve que el operador resolvió la marca **de su misma sesión** en Network Engine, quita la alerta, pero
+el expediente sigue bloqueado hasta que alguien deje el resultado con esta orden.
+
+### Envíos de la persona fuera de ENVIAR (0.2.0rc2)
+
+Si la persona envía desde la ventana (botón del portal, tecla Intro o un botón que usa JavaScript sin evento `submit`),
+Forms lo detecta por el evento `submit` **o** por cualquier petición `POST/PUT/PATCH/DELETE` al mismo sitio del
+formulario que Forms no originó. La anota como `incierta` **antes** de dejarla salir; si no puede anotarla, la corta.
+En el modo `preparar` (Monitor) se anota igual, con el `solicitud_id` (`ref_solicitud`) para cruzarla con el registro
+de Monitor, y un expediente bloqueado no se vuelve a preparar (`detenido_intervencion_humana`).
+
+### Respaldo y restauración
+
+```
+python -m cauce_form_connector estado respaldar --destino D:\respaldos-forms
+python -m cauce_form_connector estado verificar D:\respaldos-forms\respaldo-forms-AAAAMMDDTHHMMSSZ.zip
+python -m cauce_form_connector estado restaurar D:\respaldos-forms\respaldo-forms-....zip --confirmar RESTAURAR
+```
+
+El respaldo incluye registro (con archivadas), `huella.key`, `puesto.json`, ids de solicitud consumidos, lista de
+sitios y perfiles; no incluye la credencial de Network Engine. Restaurar aparta lo actual (no lo borra), suma las
+operaciones actuales y deja siempre una revisión `GENERAL`: nada se envía hasta que un operador revise lo ocurrido
+desde la fecha del respaldo. Guarde los respaldos en un medio cifrado: contienen `huella.key`.
 
 ## Laboratorio
 

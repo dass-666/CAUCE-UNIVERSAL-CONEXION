@@ -71,7 +71,9 @@ class Workspace:
         self.audit = AuditLog(settings.audit_path)
         self.policy = UrlPolicy.load(settings.allowed_hosts_file)
         self.profiles = ProfileStore(settings.profiles_dir)
-        self.worker = BrowserWorker()
+        # En reposo, el hilo de Playwright atiende los eventos del navegador (ver BrowserWorker): sin esto, un envío de
+        # la persona en la ventana se quedaba parado hasta la siguiente acción de la interfaz.
+        self.worker = BrowserWorker(en_reposo=self._bombear)
         self.session: Optional[BrowserSession] = None
         self.analysis: Optional[AnalysisResult] = None
         self.rows: list[dict[str, str]] = []
@@ -90,6 +92,10 @@ class Workspace:
             self.diag.exigir_marca()                 # tras un reinicio, el motor debe volver a saberlo
         self.diag.iniciar()
 
+    def _bombear(self) -> None:
+        if self.session is not None and self.session.loaded:
+            self.session.bombear()
+
     def _resuelta_en_ne(self, sid: str) -> None:
         ids = self.registro.resuelta_por_operador_ne(sid)
         self.audit.log("ne_marca_resuelta_por_operador", count=len(ids))
@@ -107,24 +113,31 @@ class Workspace:
             self.diag.iniciar()
         return self.session
 
-    def _envio_humano(self) -> None:
-        """La persona pulsó el botón del formulario en la ventana: queda en el registro durable como «incierta».
-
-        Sin esto, un envío directo no dejaba rastro y la misma fila podía enviarse otra vez con ENVIAR."""
+    def _envio_humano(self, via: str = "submit") -> Optional[bool]:
+        """La persona envió desde la ventana (botón, Intro o JavaScript de la página, ``via`` = submit | escritura):
+        queda en el registro durable como «incierta». Sin esto, un envío directo no dejaba rastro y la misma fila podía
+        enviarse otra vez con ENVIAR. Devuelve True (registrado), None (no hay relleno pendiente que atribuir) o False
+        (no se pudo escribir: la petición de escritura se corta)."""
         i = self.fila_rellenada
-        if i is None or not 0 <= i < len(self.rows):
-            self.audit.log("envio_humano_sin_fila")          # no hay fila rellenada que atribuir
-            return
+        armado = self.session is not None and (self.session.submit_armed or self.session.aprobacion_en_uso)
+        if i is None or not 0 <= i < len(self.rows) or not armado:
+            if via == "submit":
+                self.audit.log("envio_humano_sin_fila")      # no hay relleno pendiente que atribuir
+            return None
+        ok = True
         try:
-            op = self.registro.registrar_envio_humano(self.registro.huella(self.rows[i]),
-                                                      self.session.source_label if self.session else "")
-            self.audit.log("envio_humano_directo", detail=op["id"])
+            op = self.registro.registrar_envio_humano(
+                self.registro.huella(self.rows[i]), self.session.source_label if self.session else "",
+                motivo="envio_humano_directo_sin_acuse" if via == "submit" else "envio_humano_por_javascript_sin_acuse")
+            self.audit.log("envio_humano_directo", detail=op["id"], codigo=via)
         except (OSError, ValueError):
             self.audit.log("envio_humano_no_registrado", codigo="registro_no_escribible")
+            ok = False
         self.fila_rellenada = None                            # la aprobación de esa fila ya no vale
         if self.session is not None:
             self.session.submit_armed = False
         self.diag.exigir_marca()                              # el motor y Monitor también deben verlo
+        return ok
 
     def close(self, cerrar_sesion_ne: bool = True) -> None:
         if self.session is not None:
@@ -149,7 +162,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         ws.worker.shutdown()
         ws.registro.soltar()
 
-    app = FastAPI(title="Cauce Universal Form Connector", version="0.2.0rc1", lifespan=lifespan)
+    app = FastAPI(title="Cauce Universal Form Connector", version="0.2.0rc2", lifespan=lifespan)
     app.state.ws = ws
 
     @app.middleware("http")

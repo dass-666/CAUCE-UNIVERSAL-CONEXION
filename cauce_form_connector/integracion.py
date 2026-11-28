@@ -10,6 +10,11 @@ Implementa el contrato de Cauce Monitor (commit 9e7f88d, ver `contrato_v1/PIN.tx
 - Cada `solicitud_id` se consume una sola vez (archivo con el id, sin datos personales) ANTES de abrir el navegador.
 - La salida nunca contiene valores personales ni texto de excepciones; stderr solo lleva códigos fijos.
 - No se escribe ningún archivo con los datos (sin capturas, sin auditoría de valores, sin temporales propios).
+- Registro de operaciones (consolidación): si la persona envía desde la ventana (botón, Intro o JavaScript de la
+  página), queda una operación ``incierta`` en el registro durable de Forms, con el ``solicitud_id`` para cruzarla con
+  Monitor (solo huella HMAC y id opacos, sin valores). Un expediente con una operación que bloquea (incierta,
+  confirmada, revisada sin «no_recibido») o con revisión general pendiente NO se prepara otra vez: se responde
+  ``detenido_intervencion_humana`` / ``INTERVENCION_HUMANA_REQUERIDA`` (el contrato 9e7f88d no tiene un código propio).
 """
 from __future__ import annotations
 
@@ -28,10 +33,11 @@ from . import contrato_v1 as C
 from .audit import AuditLog
 from .config_store import INTEGRATION_PROFILE_VERSION, ProfileStore
 from .engine import fill_form
+from .operaciones import OperacionBloqueada, RegistroOperaciones
 from .page_inspector import BrowserSession
 from .settings import Settings, get_settings
 from .signature import diff_structure, structure_signature_v2
-from .url_policy import UrlNotAllowed, UrlPolicy
+from .url_policy import UrlNotAllowed, UrlPolicy, safe_url_label
 
 MAX_ENTRADA = 1_000_000
 _VACIO = {"faltan": [], "nuevos": [], "modificados": []}
@@ -246,9 +252,46 @@ def _cerrar(resp: dict, sol: dict) -> tuple[dict, int]:
     return resp, salida
 
 
+def huella_preparacion_registro(registro: RegistroOperaciones, url: str, campos: dict) -> str:
+    """Huella del expediente en el registro: formulario (host + ruta, sin consulta) + valores pedidos."""
+    u = urlsplit(url)
+    return registro.huella({"_formulario": f"{u.scheme}://{u.hostname}:{u.port or ''}{u.path or '/'}",
+                            **{str(k): str(v) for k, v in campos.items()}})
+
+
 def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj, fabrica, gancho) -> tuple[dict, int]:
     form, op = sol["formulario"], sol["opciones"]
     integ = perfil["integracion"]
+    # Registro durable ANTES de abrir el navegador: si no se puede garantizar que un envío de la persona quede
+    # anotado, no se prepara nada.
+    try:
+        registro = RegistroOperaciones(settings.data_dir)
+    except OSError:
+        raise _Parar("error_interno", "ERROR_INTERNO")
+    if not registro._clave_persistida:
+        raise _Parar("error_interno", "ERROR_INTERNO")
+    huella_reg = huella_preparacion_registro(registro, form["url"], sol["campos"])
+    try:
+        registro.comprobar(huella_reg)
+    except OperacionBloqueada as exc:
+        print(f"OPERACION_PREVIA {exc.codigo}", file=sys.stderr)      # código fijo, sin datos
+        raise _Parar("detenido_intervencion_humana", "INTERVENCION_HUMANA_REQUERIDA")
+    anotada: dict[str, Any] = {}
+
+    def _envio_de_la_persona(via: str) -> Optional[bool]:
+        if anotada:
+            return None if anotada.get("ok") else False
+        try:
+            o = registro.registrar_envio_humano(
+                huella_reg, safe_url_label(form["url"]), ref_solicitud=sol["solicitud_id"],
+                motivo="envio_humano_observado_preparar" if via == "submit" else "envio_humano_por_javascript_preparar")
+            anotada.update(ok=True, id=o["id"])
+            print(f"OPERACION_REGISTRADA {o['id']}", file=sys.stderr)
+            return True
+        except (OSError, ValueError):
+            anotada.update(ok=False)
+            print("OPERACION_NO_REGISTRADA", file=sys.stderr)
+            return False
     sesion = (fabrica or (lambda s: BrowserSession(s, headless=s.headless)))(settings)
     sesion.integration_mode = True          # H1: no existe envío programático en esta sesión
     try:
@@ -279,6 +322,9 @@ def _preparar(run: _Corrida, sol: dict, perfil: dict, settings: Settings, reloj,
         if reloj() >= C.ts(sol["caduca_en"]):       # caducidad comprobada también justo antes de escribir
             raise _Parar("rechazado_solicitud_invalida", "SOLICITUD_CADUCADA")
 
+        # Desde antes del relleno, todo envío de la persona (o escritura de la página al sitio) queda anotado
+        # (conservador: una escritura automática de la página durante el tecleo también cuenta).
+        sesion.on_submit_humano = _envio_de_la_persona
         # --- relleno: SOLO los campos aprobados y pedidos; los valores no se vuelven a tocar ni a imprimir ---
         a_clave = {l: integ["campos"][l] for l in sol["campos"]}
         mapping = {clave: logico for logico, clave in a_clave.items()}

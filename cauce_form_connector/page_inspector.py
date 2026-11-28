@@ -8,8 +8,11 @@ llamar desde cualquier hilo sin romper nada, también en Windows.
 from __future__ import annotations
 
 import concurrent.futures as cf
+import queue
 import re
+import threading
 import time
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Any, Callable, Optional, TypeVar
 
@@ -47,16 +50,64 @@ T = TypeVar("T")
 
 
 class BrowserWorker:
-    """Ejecuta funciones en un único hilo propietario de Playwright."""
+    """Ejecuta funciones en un único hilo propietario de Playwright.
 
-    def __init__(self) -> None:
-        self._pool = cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="playwright")
+    ``en_reposo``: función que el hilo ejecuta cada ``REPOSO_S`` mientras no tiene trabajo. La API síncrona de Playwright
+    solo atiende los eventos del navegador (peticiones interceptadas, avisos de ``submit``) DURANTE una llamada. Sin
+    esto, cuando la persona envía desde la ventana con la interfaz en reposo, su petición se queda parada en el
+    interceptor hasta la siguiente llamada (medido: 0 recibidas en 4 s). Si esa llamada es el clic de ENVIAR, salían
+    las dos peticiones (posible duplicado en un portal sin protección)."""
+
+    REPOSO_S = 0.1
+
+    def __init__(self, en_reposo: Optional[Callable[[], None]] = None) -> None:
+        self.en_reposo = en_reposo
+        self._cola: "queue.Queue[Optional[tuple]]" = queue.Queue()
+        self._hilo = threading.Thread(target=self._bucle, name="playwright", daemon=True)
+        self._hilo.start()
+
+    def _bucle(self) -> None:
+        while True:
+            try:
+                item = self._cola.get(timeout=self.REPOSO_S)
+            except queue.Empty:
+                if self.en_reposo is not None:
+                    try:
+                        self.en_reposo()
+                    except Exception:  # noqa: BLE001
+                        pass
+                continue
+            if item is None:
+                return
+            fut, fn, args, kwargs = item
+            if fut.set_running_or_notify_cancel():
+                try:
+                    fut.set_result(fn(*args, **kwargs))
+                except BaseException as exc:  # noqa: BLE001
+                    fut.set_exception(exc)
 
     def run(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-        return self._pool.submit(fn, *args, **kwargs).result()
+        if threading.current_thread() is self._hilo:
+            return fn(*args, **kwargs)
+        fut: cf.Future = cf.Future()
+        self._cola.put((fut, fn, args, kwargs))
+        return fut.result()
 
     def shutdown(self) -> None:
-        self._pool.shutdown(wait=True)
+        self.en_reposo = None
+        self._cola.put(None)
+        self._hilo.join(timeout=30)
+
+
+def _mismo_sitio(a: str, b: Optional[str]) -> bool:
+    try:
+        x, y = urlsplit(a), urlsplit(b or "")
+        return bool(x.hostname) and (x.scheme, x.hostname, x.port) == (y.scheme, y.hostname, y.port)
+    except ValueError:
+        return False
+
+
+ESCRITURAS = ("POST", "PUT", "PATCH", "DELETE")
 
 
 class BrowserSession:
@@ -95,8 +146,12 @@ class BrowserSession:
         self.on_abierta: Optional[Callable[[], None]] = None
         self._cierre_propio = False
         # Revisión final: un `submit` con gesto de la persona fuera de `enviar_protegido` se avisa aquí (ver web/app.py).
-        self.on_submit_humano: Optional[Callable[[], None]] = None
+        # Devuelve False si el envío NO pudo quedar registrado: entonces una petición de escritura se corta.
+        self.on_submit_humano: Optional[Callable[[str], Optional[bool]]] = None
         self.envio_programado = False      # True solo durante el clic de `enviar_protegido`
+        self.aprobacion_en_uso = False     # `enviar_protegido` consumió la aprobación y aún no ha pulsado
+        self.envios_humanos = 0            # avisos de envío humano atendidos (submit con gesto o escritura de la página)
+        self.escrituras_vistas: list[tuple[str, float]] = []   # (método, instante) de escrituras al sitio del formulario
 
     def _avisar_cierre(self) -> None:
         if self._cierre_propio or self.on_cierre_inesperado is None:
@@ -113,14 +168,28 @@ class BrowserSession:
             except Exception:
                 pass
 
+    def _envio_humano_visto(self, via: str) -> bool:
+        """Envío hecho por la PERSONA en la ventana (no por `enviar_protegido`): debe quedar en el registro durable.
+        Devuelve False solo si había algo que registrar y no se pudo."""
+        if self.envio_programado or self.on_submit_humano is None:
+            return True
+        try:
+            r = self.on_submit_humano(via)       # True: registrado · None: nada que registrar · False: no se pudo
+        except Exception:  # noqa: BLE001
+            r = False
+        if r is True:
+            self.envios_humanos += 1
+        return r is not False
+
     def _submit_visto(self, gesto: Any) -> None:
         self.submit_events.append((bool(gesto), time.monotonic()))
-        # Envío hecho por la PERSONA en la ventana (no por `enviar_protegido`): debe quedar en el registro durable.
-        if gesto and not self.envio_programado and self.on_submit_humano is not None:
-            try:
-                self.on_submit_humano()
-            except Exception:
-                pass
+        if gesto:
+            self._envio_humano_visto("submit")
+
+    def bombear(self) -> None:
+        """Atiende eventos pendientes del navegador (ver BrowserWorker.en_reposo). Barato: 1 ms."""
+        if self.page is not None and not self.page.is_closed():
+            self.page.wait_for_timeout(1)
 
     def observe_submits(self) -> None:
         """Empieza a registrar eventos `submit` de la página actual (idempotente por página)."""
@@ -167,6 +236,7 @@ class BrowserSession:
                 self._cierre_propio = False
         self.blocked_requests = 0
         self.submit_armed, self.submit_events, self._observed_page = False, [], None
+        self.escrituras_vistas = []
         # offline=True emula "sin conexión" en el propio Chromium: cubre lo que el enrutado de
         # Playwright no intercepta (p. ej. navigator.sendBeacon), además de abortar con route.
         self._context = self._browser.new_context(locale="es-ES", service_workers="block",
@@ -188,6 +258,15 @@ class BrowserSession:
                 return
             if nav_guard is not None and req.is_navigation_request() and req.frame.parent_frame is None:
                 if not nav_guard(req.url):
+                    self.blocked_requests += 1
+                    route.abort()
+                    return
+            if req.method.upper() in ESCRITURAS and not self.envio_programado and _mismo_sitio(req.url, self._url):
+                # Petición que puede modificar datos en el sitio del formulario y que Forms no originó: la persona
+                # envió (botón, Intro o JavaScript de la página, aunque no haya evento `submit`). Se registra ANTES de
+                # dejarla salir; si no se puede registrar, se corta (conservador).
+                self.escrituras_vistas.append((req.method.upper(), time.monotonic()))
+                if not self._envio_humano_visto("escritura"):
                     self.blocked_requests += 1
                     route.abort()
                     return
