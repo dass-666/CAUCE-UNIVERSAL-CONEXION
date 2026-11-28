@@ -89,12 +89,44 @@ class BrowserSession:
         self.submit_armed = False          # solo tras un relleno completado en ESTA página; un solo uso
         self.submit_events: list[tuple[bool, float]] = []  # (¿con gesto de usuario activo?, instante monotónico)
         self._observed_page = None
+        # Integración con Network Engine: avisar si el navegador o la página se cierran SIN que Forms lo pida
+        # (la persona cerró la ventana, Chromium se cayó). Se llama desde el hilo de Playwright; debe ser rápido.
+        self.on_cierre_inesperado: Optional[Callable[[], None]] = None
+        self.on_abierta: Optional[Callable[[], None]] = None
+        self._cierre_propio = False
+        # Revisión final: un `submit` con gesto de la persona fuera de `enviar_protegido` se avisa aquí (ver web/app.py).
+        self.on_submit_humano: Optional[Callable[[], None]] = None
+        self.envio_programado = False      # True solo durante el clic de `enviar_protegido`
+
+    def _avisar_cierre(self) -> None:
+        if self._cierre_propio or self.on_cierre_inesperado is None:
+            return
+        try:
+            self.on_cierre_inesperado()
+        except Exception:
+            pass
+
+    def _avisar_apertura(self) -> None:
+        if self.on_abierta is not None:
+            try:
+                self.on_abierta()
+            except Exception:
+                pass
+
+    def _submit_visto(self, gesto: Any) -> None:
+        self.submit_events.append((bool(gesto), time.monotonic()))
+        # Envío hecho por la PERSONA en la ventana (no por `enviar_protegido`): debe quedar en el registro durable.
+        if gesto and not self.envio_programado and self.on_submit_humano is not None:
+            try:
+                self.on_submit_humano()
+            except Exception:
+                pass
 
     def observe_submits(self) -> None:
         """Empieza a registrar eventos `submit` de la página actual (idempotente por página)."""
         if self.page is None or self._observed_page is self.page:
             return
-        self.page.expose_function("__cauceSubmitSeen", lambda gesto: self.submit_events.append((bool(gesto), time.monotonic())))
+        self.page.expose_function("__cauceSubmitSeen", self._submit_visto)
         self.page.add_init_script(SUBMIT_OBSERVER_JS)
         try:
             self.page.evaluate(SUBMIT_OBSERVER_JS)
@@ -113,6 +145,7 @@ class BrowserSession:
         if self.settings.browser_path:
             kwargs["executable_path"] = self.settings.browser_path
         self._browser = self._pw.chromium.launch(**kwargs)
+        self._browser.on("disconnected", lambda _b: self._avisar_cierre())
         self._new_context()
         return self
 
@@ -127,7 +160,11 @@ class BrowserSession:
         - Service workers bloqueados y ventanas emergentes cerradas en ambos casos.
         """
         if self._context is not None:
-            self._context.close()
+            self._cierre_propio = True
+            try:
+                self._context.close()
+            finally:
+                self._cierre_propio = False
         self.blocked_requests = 0
         self.submit_armed, self.submit_events, self._observed_page = False, [], None
         # offline=True emula "sin conexión" en el propio Chromium: cubre lo que el enrutado de
@@ -161,6 +198,7 @@ class BrowserSession:
             self._context.route_web_socket(re.compile(".*"), lambda ws: ws.close())
         self.page = self._context.new_page()
         main = self.page
+        main.on("close", lambda _p: self._avisar_cierre())
         self._context.on("page", lambda p: p.close() if p is not main else None)
 
     def add_init_script(self, js: str) -> None:
@@ -171,6 +209,7 @@ class BrowserSession:
             self._context.add_init_script(js)
 
     def close(self) -> None:
+        self._cierre_propio = True
         for obj in (self._context, self._browser):
             try:
                 if obj is not None:
@@ -180,6 +219,7 @@ class BrowserSession:
         if self._pw is not None:
             self._pw.stop()
         self._pw = self._browser = self._context = self.page = None
+        self._cierre_propio = False
 
     def __enter__(self) -> "BrowserSession":
         return self.start()
@@ -198,6 +238,7 @@ class BrowserSession:
         self.source, self.source_label = "html", html_fingerprint(html)
         self._html, self._url = html, None
         self.settle()
+        self._avisar_apertura()
 
     def open_url(self, url: str, nav_guard: Optional[Callable[[str], bool]] = None) -> None:
         """Abre una URL. La autorización debe comprobarse ANTES con `UrlPolicy`;
@@ -218,6 +259,7 @@ class BrowserSession:
         self.source, self.source_label = "url", safe_url_label(url)
         self._url, self._html = url, None
         self.last_settle_changes = self.settle()
+        self._avisar_apertura()
 
     def reload_source(self) -> None:
         """Vuelve a cargar la fuente original (para empezar un relleno limpio)."""

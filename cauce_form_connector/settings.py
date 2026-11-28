@@ -26,6 +26,17 @@ class Settings:
     audit_path: str = field(default_factory=lambda: os.environ.get("CAUCE_AUDIT_PATH", "logs/audit.jsonl"))
     profiles_dir: str = field(default_factory=lambda: os.environ.get("CAUCE_PROFILES_DIR", "profiles"))
     allowed_hosts_file: str = field(default_factory=lambda: os.environ.get("CAUCE_ALLOWED_HOSTS_FILE", "config/allowed_hosts.json"))
+    # Carpeta de datos propios de Forms: identidad del puesto, registro de operaciones y su clave de huella.
+    data_dir: str = field(default_factory=lambda: os.environ.get("CAUCE_FORMS_DATA_DIR", "state"))
+    # --- Network Engine (OPCIONAL). Sin archivo de credencial, Forms funciona sin diagnóstico de red. ---
+    # Credencial de ámbito «session» creada por el administrador: cauce token create --name forms-puesto-1
+    # --scope session --out ARCHIVO (DPAPI en Windows). Nunca la credencial admin ni la «review» de Monitor.
+    ne_token_file: str = field(default_factory=lambda: os.environ.get("CAUCE_NE_SESSION_TOKEN_FILE", ""))
+    ne_port: int = field(default_factory=lambda: int(os.environ.get("CAUCE_NE_PORT", "8780")))
+    ne_connection_id: str = field(default_factory=lambda: os.environ.get("CAUCE_NE_CONNECTION_ID", ""))
+    ne_heartbeat_s: float = field(default_factory=lambda: float(os.environ.get("CAUCE_NE_LATIDO_S", "7")))
+    # Etiqueta legible y estable del puesto (opcional). Sin ella se genera una al azar: forms-xxxxxxxx.
+    puesto: str = field(default_factory=lambda: os.environ.get("CAUCE_FORMS_PUESTO", ""))
 
 
 def get_settings() -> Settings:

@@ -19,10 +19,13 @@ from pydantic import BaseModel
 from ..audit import AuditLog
 from ..config_store import ProfileStore
 from ..data_adapter import DataError, columns_of, load_data
-from ..engine import fill_form, submit_with_human_confirmation
+from ..engine import fill_form
+from ..envio import _publica, enviar_protegido, verificar_operacion
 from ..html_analyzer import analyze_html
 from ..matcher import apply_manual, match_fields
 from ..models import AnalysisResult, Mapping
+from ..operaciones import OperacionBloqueada, RegistroOperaciones
+from ..red.montaje import crear_diagnostico
 from ..page_inspector import BrowserSession, BrowserWorker
 from ..settings import Settings, get_settings
 from ..url_policy import UrlNotAllowed, UrlPolicy
@@ -73,17 +76,63 @@ class Workspace:
         self.analysis: Optional[AnalysisResult] = None
         self.rows: list[dict[str, str]] = []
         self.proposals: list[Mapping] = []
+        self.fila_rellenada: Optional[int] = None   # fila del último relleno (para la huella del expediente)
         self.lock = threading.Lock()
+        # Bloque C: registro durable de operaciones confirmadas (antes del clic, en disco)
+        self.registro = RegistroOperaciones(settings.data_dir, dueno=True)
+        for ev in self.registro.eventos:
+            self.audit.log(ev["event"], estado=ev.get("estado"), codigo=ev.get("codigo"))
+        # Bloque B: diagnóstico de red con Network Engine (opcional)
+        self.diag, self.diag_info = crear_diagnostico(
+            settings, hay_inciertas=self.registro.pide_revision, al_ver_marca=self.registro.marca_vista_en,
+            al_resolver=self._resuelta_en_ne, al_cambiar=self._diag_cambio)
+        if self.registro.pide_revision():
+            self.diag.exigir_marca()                 # tras un reinicio, el motor debe volver a saberlo
+        self.diag.iniciar()
+
+    def _resuelta_en_ne(self, sid: str) -> None:
+        ids = self.registro.resuelta_por_operador_ne(sid)
+        self.audit.log("ne_marca_resuelta_por_operador", count=len(ids))
+
+    def _diag_cambio(self, e: dict) -> None:
+        self.audit.log("ne_estado", estado=e["motor"], status=e.get("fase"), ok=not e["requiere_persona"],
+                       codigo=e.get("motivo") or e.get("codigo"))
 
     def browser(self) -> BrowserSession:
         if self.session is None:
             self.session = BrowserSession(self.settings)
+            self.session.on_cierre_inesperado = lambda: self.diag.navegador(False, "browser_closed")
+            self.session.on_abierta = lambda: self.diag.navegador(True)
+            self.session.on_submit_humano = self._envio_humano
+            self.diag.iniciar()
         return self.session
 
-    def close(self) -> None:
+    def _envio_humano(self) -> None:
+        """La persona pulsó el botón del formulario en la ventana: queda en el registro durable como «incierta».
+
+        Sin esto, un envío directo no dejaba rastro y la misma fila podía enviarse otra vez con ENVIAR."""
+        i = self.fila_rellenada
+        if i is None or not 0 <= i < len(self.rows):
+            self.audit.log("envio_humano_sin_fila")          # no hay fila rellenada que atribuir
+            return
+        try:
+            op = self.registro.registrar_envio_humano(self.registro.huella(self.rows[i]),
+                                                      self.session.source_label if self.session else "")
+            self.audit.log("envio_humano_directo", detail=op["id"])
+        except (OSError, ValueError):
+            self.audit.log("envio_humano_no_registrado", codigo="registro_no_escribible")
+        self.fila_rellenada = None                            # la aprobación de esa fila ya no vale
+        if self.session is not None:
+            self.session.submit_armed = False
+        self.diag.exigir_marca()                              # el motor y Monitor también deben verlo
+
+    def close(self, cerrar_sesion_ne: bool = True) -> None:
         if self.session is not None:
             self.worker.run(self.session.close)
             self.session = None
+        if cerrar_sesion_ne:
+            # Cerrar la sesión NO borra revisiones: el motor guarda la marca y el registro local también.
+            self.diag.detener(cerrar=True)
 
 
 def create_app(settings: Optional[Settings] = None) -> FastAPI:
@@ -93,10 +142,14 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         yield
-        ws.close()   # cierra el navegador al apagar el servidor
+        # Al apagar el servidor: se cierra el navegador; la sesión de Network Engine se deja (el motor la verá sin
+        # latidos y, si Forms vuelve, seguirá con el mismo id). El registro de operaciones ya está en disco.
+        ws.close(cerrar_sesion_ne=False)
+        ws.diag.detener(cerrar=False)
         ws.worker.shutdown()
+        ws.registro.soltar()
 
-    app = FastAPI(title="Cauce Universal Form Connector", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Cauce Universal Form Connector", version="0.2.0rc1", lifespan=lifespan)
     app.state.ws = ws
 
     @app.middleware("http")
@@ -124,6 +177,35 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index() -> FileResponse:
         return FileResponse(STATIC / "index.html")
+
+    @app.get("/api/diagnostico")
+    def diagnostico() -> dict[str, Any]:
+        e = ws.diag.estado()
+        abiertas = ws.registro.abiertas()
+        e.update({"configurado": ws.diag_info["configurado"], "proteccion_credencial": ws.diag_info["proteccion_credencial"],
+                  "operaciones_abiertas": len(abiertas),
+                  # la operación viva NO es un resultado desconocido (antes la alerta la contaba como tal)
+                  "operaciones_inciertas": sum(1 for o in abiertas if o["estado"] == "incierta"),
+                  "operacion_viva": any(o["estado"] == "en_curso" for o in abiertas),
+                  "revision_general": ws.registro.general,
+                  "registro": ws.registro.estado_carga,
+                  "envio_bloqueado": ws.registro.general is not None})
+        return e
+
+    @app.get("/api/operaciones")
+    def operaciones(limit: int = 20) -> dict[str, Any]:
+        return {"operaciones": [_publica(o) for o in ws.registro.lista(max(1, min(limit, 200)))],
+                "revision_general": ws.registro.general}
+
+    @app.post("/api/operaciones/{oid}/verificar")
+    def verificar(oid: str) -> dict[str, Any]:
+        """La persona pide comprobar el acuse en el portal propio. Nunca reenvía; «no consta» no desbloquea."""
+        try:
+            r = verificar_operacion(ws.registro, oid)
+        except LookupError as exc:
+            raise HTTPException(404, str(exc))
+        ws.audit.log("operation_verified", detail=oid, estado=r["operacion"]["estado"], codigo=r.get("motivo"))
+        return r
 
     @app.get("/api/status")
     def status() -> dict[str, Any]:
@@ -234,19 +316,29 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
         with ws.lock:
             report = ws.worker.run(job)
+            ws.fila_rellenada = body.row_index
         return {"report": report.to_dict()}
 
     @app.post("/api/submit")
     def submit(body: SubmitIn) -> dict[str, Any]:
         if ws.session is None or not ws.session.loaded:
             raise HTTPException(400, "No hay página cargada.")
+        # El candado hace que un doble clic espere y luego encuentre la aprobación ya consumida (403).
+        if not ws.lock.acquire(timeout=0.5):
+            raise HTTPException(409, "Ya hay un envío en marcha: espere su resultado. No se envía otra vez.")
         try:
-            with ws.lock:
-                return ws.worker.run(submit_with_human_confirmation, ws.session, body.phrase, ws.audit)
+            if ws.fila_rellenada is None or not 0 <= ws.fila_rellenada < len(ws.rows):
+                raise HTTPException(403, "No hay un relleno revisado pendiente de envío (aprobación de un solo uso).")
+            huella = ws.registro.huella(ws.rows[ws.fila_rellenada])
+            return ws.worker.run(enviar_protegido, ws.session, body.phrase, ws.registro, huella, ws.audit, ws.diag)
+        except OperacionBloqueada as exc:
+            raise HTTPException(409, str(exc))
         except PermissionError as exc:
             raise HTTPException(403, str(exc))
         except LookupError as exc:
             raise HTTPException(404, str(exc))
+        finally:
+            ws.lock.release()
 
     @app.get("/api/screenshot")
     def screenshot() -> FileResponse:
@@ -297,6 +389,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             ws.analysis = None
             ws.rows = []          # los datos personales solo viven en memoria: se descartan
             ws.proposals = []
+            ws.fila_rellenada = None
         return {"closed": True}
 
     return app

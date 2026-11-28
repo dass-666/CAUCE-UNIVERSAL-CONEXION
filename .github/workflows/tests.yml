@@ -17,6 +17,18 @@ jobs:
           repository: dass-666/Cauce-monitor-engine
           ref: 9e7f88dd19f3e3bbf5c0c1e4476afbd2ca3bf76a
           path: monitor-contrato
+      # Network Engine RC3 de SOLO LECTURA (commit fijado) para las pruebas de integración nativa
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/cauce-network-engine
+          ref: f93dd58eeddc1cc3032711bb0b6e378708063d41
+          path: ne-rc3
+      # Cauce Monitor 7b92446 de SOLO LECTURA: su lectura de red y su centro de revisiones (tests/test_compat_monitor.py)
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/Cauce-monitor-engine
+          ref: 7b92446e884239b52c1253d57ee97d244fe4067b
+          path: monitor-rc3
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -27,15 +39,20 @@ jobs:
         if: runner.os == 'Windows'
       # Ext JS 6.2 (GPL) para el laboratorio 13: se descarga con huella comprobada; no forma parte del repositorio
       - run: python scripts/preparar_lab_extjs.py
-      - run: python -m pytest -q
+      - run: python -m pytest -q -rs
         env:
           CAUCE_EVIDENCE_DIR: evidence/out
           MONITOR_REPO: ${{ github.workspace }}/monitor-contrato
+          CAUCE_NE_REPO: ${{ github.workspace }}/ne-rc3
+          CAUCE_MONITOR_REPO: ${{ github.workspace }}/monitor-rc3
       - run: python scripts/demo_lab.py
       - run: python scripts/ejemplo_cauce_monitor.py --no-interactivo
       - run: python scripts/recorrido_ui.py --headless
       # Analizador de formularios externos sobre un formulario de laboratorio local (solo lectura)
       - run: python -m cauce_form_connector analizar-formulario --html lab_forms/06_cita_monitor.html --expediente sample_data/expediente_monitor_sintetico.json --salida evidence/out/analisis_lab06
+      # Jornada corta de laboratorio (procesos reales, portal ficticio, red simulada): solo Linux (usa señales POSIX)
+      - run: python -m pip install psutil && python scripts/jornada_laboratorio.py --ne-repo ne-rc3 --expedientes 6 --salida evidence/out/jornada-ci
+        if: runner.os == 'Linux'
       - uses: actions/upload-artifact@v4
         if: always()
         with:

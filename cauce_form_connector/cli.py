@@ -118,8 +118,20 @@ def main(argv: list[str] | None = None) -> int:
     p_fi.add_argument("--screenshot")
     p_fi.add_argument("--headed", action="store_true", help="mostrar la ventana del navegador")
 
+    p_op = sub.add_parser("operaciones", help="OPERADOR: ver y revisar operaciones con resultado desconocido")
+    sop = p_op.add_subparsers(dest="accion", required=True)
+    sop.add_parser("listar", help="operaciones recientes y pendientes (sin datos personales)")
+    p_rv = sop.add_parser("revisar", help="dar por revisada una operación incierta (o GENERAL) tras comprobarla")
+    p_rv.add_argument("id", help="op_xxxxxxxxxxxx o GENERAL")
+    p_rv.add_argument("--nota", required=True, help="qué comprobó (mín. 5 caracteres; no escriba datos personales)")
+    p_rv.add_argument("--confirmar", required=True, help="repita el id exacto (o GENERAL)")
+    p_rv.add_argument("--por", default="operador", help="quién revisa (rol o iniciales, sin datos personales)")
+
     args = ap.parse_args(argv)
     settings = get_settings()
+
+    if args.cmd == "operaciones":
+        return _operaciones(args, settings)
 
     if args.cmd == "preparar":
         from .integracion import principal
@@ -323,3 +335,27 @@ def _aprobar_perfil(args: argparse.Namespace, settings: Any, policy: UrlPolicy) 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _operaciones(args: argparse.Namespace, settings: Any) -> int:
+    """Revisión de un OPERADOR desde la línea de órdenes (no desde la interfaz de la persona).
+
+    No toca Network Engine: sus marcas «revisar a mano» las resuelve el operador con sus propios mecanismos
+    (``cauce revisiones resolver`` o el centro de revisiones de Monitor). Esta orden solo cierra el registro LOCAL de
+    Forms, con nota obligatoria y confirmación escrita, y lo deja auditado. Nada se reenvía."""
+    from .envio import _publica
+    from .operaciones import RegistroOperaciones
+    reg = RegistroOperaciones(settings.data_dir)
+    audit = AuditLog(settings.audit_path)
+    if args.accion == "listar":
+        _emit({"revision_general": reg.general, "abiertas": [_publica(o) for o in reg.abiertas()],
+               "recientes": [_publica(o) for o in reg.lista(20)]})
+        return 0
+    try:
+        o = reg.revisar(args.id, args.nota, args.confirmar, args.por)
+    except (LookupError, ValueError) as exc:
+        print(f"No se revisó nada: {exc}", file=sys.stderr)
+        return 1
+    audit.log("operation_reviewed", detail=args.id, estado=o["estado"])
+    _emit({"revisada": args.id})
+    return 0

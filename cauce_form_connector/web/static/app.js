@@ -164,13 +164,83 @@ $("#btn-fill").addEventListener("click", async () => {
   } catch (e) { msg($("#fill-msg"), e.message, "error"); }
 });
 
+const TXT_ESTADO = { confirmada: "confirmada (acuse verificado)", incierta: "resultado desconocido", en_curso: "en curso",
+  no_enviada: "no enviada", rechazada: "rechazada por el portal", revisada: "revisada por un operador" };
+
 $("#btn-enviar").addEventListener("click", async () => {
+  const b = $("#btn-enviar");
+  b.disabled = true;                       // un doble clic no envía dos veces (el servidor también lo impide)
+  msg($("#envio-msg"), "Enviando… no cierre el navegador. No se repetirá automáticamente.", "info");
   try {
     const r = await postJSON("/api/submit", { phrase: $("#frase").value });
-    msg($("#envio-msg"), r.submitted ? "Envío realizado por confirmación humana." : "No enviado.", "ok");
+    const op = r.operacion || {};
+    const kind = op.estado === "confirmada" ? "ok" : op.estado === "incierta" ? "error" : "aviso";
+    msg($("#envio-msg"), `Operación ${op.id}: ${TXT_ESTADO[op.estado] || op.estado}${op.folio ? " · folio " + op.folio : ""}. ${r.nota}`, kind);
+    $("#frase").value = "";
     $("#captura").innerHTML = `<img alt="Captura tras el envío" src="/api/screenshot?t=${Date.now()}">`;
   } catch (e) { msg($("#envio-msg"), e.message, "error"); }
+  finally { b.disabled = false; refrescarEstado(); refrescarOperaciones(); }
 });
+
+// ------------------------------------------------------------ estado del puesto y operaciones
+const TXT_MOTOR = { conectado: ["Network Engine conectado", "ok"], no_disponible: ["Network Engine no disponible", "aviso"],
+  no_configurado: ["Network Engine no configurado", "neutro"], credencial_invalida: ["Credencial de Network Engine no válida", "error"],
+  credencial_incorrecta: ["Credencial de Network Engine incorrecta", "error"], limitado: ["Network Engine: espaciando latidos", "aviso"],
+  sesion_ocupada: ["Network Engine: sesión ocupada", "error"], configuracion_invalida: ["Configuración de Network Engine no válida", "error"] };
+const TXT_RED = { verificada: ["Conectividad verificada", "ok"], degradada: ["Conectividad degradada", "aviso"],
+  perdida: ["Conectividad perdida", "error"], desconocida: ["Conectividad sin mediciones", "neutro"],
+  desactualizada: ["Información de conectividad desactualizada", "aviso"], sin_diagnostico: ["Sin diagnóstico de red", "neutro"] };
+const TXT_FASE = { iniciada: "Sesión iniciada", activa: "Sesión activa", perdida_conectividad: "Sesión sin conectividad",
+  recuperada: "Sesión recuperada", requiere_intervencion: "Sesión: revisión humana necesaria", incierta: "Sesión incierta",
+  interrumpida: "Sesión interrumpida (navegador)", cerrada: "Sesión cerrada" };
+const TXT_MOTIVO = { operation_interrupted: "una operación se interrumpió con el resultado sin confirmar",
+  engine_restart_during_operation: "Network Engine se reinició durante una operación", session_expired: "la sesión del portal caducó",
+  previous_state_unreadable: "el estado anterior de Network Engine no se pudo leer", state_recovered_from_backup: "Network Engine usó su copia de respaldo" };
+
+function ind(el, [texto, kind]) { el.textContent = texto; el.className = "ind " + kind; }
+
+async function refrescarEstado() {
+  let d;
+  try { d = await api("/api/diagnostico"); } catch (_) { return; }
+  ind($("#ind-motor"), TXT_MOTOR[d.motor] || [d.motor, "neutro"]);
+  ind($("#ind-red"), TXT_RED[d.conectividad] || [d.conectividad, "neutro"]);
+  const fase = d.fase ? [TXT_FASE[d.fase] || d.fase, d.fase === "activa" || d.fase === "recuperada" ? "ok"
+    : d.fase === "iniciada" ? "neutro" : d.fase === "requiere_intervencion" || d.fase === "interrumpida" ? "error" : "aviso"]
+    : ["Sesión: sin datos del motor", "neutro"];
+  ind($("#ind-sesion"), fase);
+  const inciertas = d.operaciones_inciertas ?? d.operaciones_abiertas;
+  ind($("#ind-op"), d.operacion === "in_progress" || d.operacion_viva ? ["Operación en curso", "aviso"]
+    : inciertas ? [`Resultado desconocido: ${inciertas}`, "error"] : ["Operación: ninguna pendiente", "neutro"]);
+  $("#estado-texto").textContent = d.motor_texto + (d.etiqueta ? ` Puesto: ${d.etiqueta}.` : "") +
+    (d.ultima_respuesta_s != null && d.motor === "conectado" ? ` Última respuesta hace ${Math.round(d.ultima_respuesta_s)} s.` : "");
+  // Una sola alerta de revisión, con sus motivos (sin alarmas repetidas ni contradictorias)
+  const motivos = [];
+  if (d.revision_general) motivos.push(`El registro de operaciones necesita revisión de un operador (${d.revision_general.motivo}). No se envía nada hasta entonces.`);
+  if (inciertas) motivos.push(`${inciertas} operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.`);
+  if (d.requiere_persona) motivos.push(`Network Engine pide revisión humana: ${TXT_MOTIVO[d.motivo] || d.motivo || "motivo no indicado"}. La resuelve un operador autorizado (centro de revisiones), no este puesto.`);
+  const rv = $("#revision");
+  rv.hidden = !motivos.length;
+  rv.innerHTML = motivos.length ? `<strong>Revisión humana necesaria</strong><ul>${motivos.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>` : "";
+}
+
+async function refrescarOperaciones() {
+  let r;
+  try { r = await api("/api/operaciones?limit=10"); } catch (_) { return; }
+  if (!r.operaciones.length) { $("#operaciones").innerHTML = '<p class="ayuda">Sin operaciones todavía.</p>'; return; }
+  $("#operaciones").innerHTML = `<table><thead><tr><th>Operación</th><th>Estado</th><th>Motivo</th><th>Folio</th><th>Hora (UTC)</th><th></th></tr></thead><tbody>
+    ${r.operaciones.map((o) => `<tr><td><code>${esc(o.id)}</code></td><td><span class="estado ${esc(o.estado)}">${esc(TXT_ESTADO[o.estado] || o.estado)}</span></td>
+      <td><small>${esc(o.motivo || "")}</small></td><td>${esc(o.folio || "")}</td><td><small>${esc((o.actualizada || "").slice(11, 19))}</small></td>
+      <td>${o.estado === "incierta" && o.verificable ? `<button class="verificar" data-op="${esc(o.id)}">Comprobar acuse</button>` : ""}</td></tr>`).join("")}
+    </tbody></table>`;
+  document.querySelectorAll("button.verificar").forEach((b) => b.addEventListener("click", async () => {
+    b.disabled = true;
+    try {
+      const v = await postJSON(`/api/operaciones/${b.dataset.op}/verificar`, {});
+      msg($("#envio-msg"), v.cambio ? `Acuse verificado: ${v.operacion.folio}.` : "El portal no tiene constancia todavía: sigue pendiente de revisión (no se reenvía).", v.cambio ? "ok" : "aviso");
+    } catch (e) { msg($("#envio-msg"), e.message, "error"); }
+    refrescarEstado(); refrescarOperaciones();
+  }));
+}
 
 $("#btn-cerrar").addEventListener("click", async () => {
   try {
@@ -197,4 +267,7 @@ $("#btn-audit").addEventListener("click", async () => {
   $("#hosts-info").textContent = st.allowed_hosts.length ? "Permitidos: " + st.allowed_hosts.join(", ") : "No hay dominios externos permitidos.";
   renderMapping();
   loadProfiles();
+  refrescarEstado(); refrescarOperaciones();
+  setInterval(refrescarEstado, 3000);
+  setInterval(refrescarOperaciones, 10000);
 })();

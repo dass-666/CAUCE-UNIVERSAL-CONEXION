@@ -14,6 +14,19 @@
 </header>
 
 <main>
+  <!-- Estado: Network Engine (opcional) y operaciones pendientes de revisión -->
+  <section id="estado" aria-live="polite">
+    <h2>Estado del puesto</h2>
+    <div class="indicadores">
+      <span id="ind-motor" class="ind neutro" title="Network Engine">Network Engine: …</span>
+      <span id="ind-red" class="ind neutro" title="Conectividad según Network Engine">Conectividad: …</span>
+      <span id="ind-sesion" class="ind neutro" title="Sesión de navegador en Network Engine">Sesión: …</span>
+      <span id="ind-op" class="ind neutro" title="Operación confirmada por la persona">Operación: ninguna</span>
+    </div>
+    <p id="estado-texto" class="ayuda"></p>
+    <div id="revision" class="revision" role="alert" hidden></div>
+  </section>
+
   <!-- 1. Fuente -->
   <section id="paso-fuente">
     <h2><span class="num">1</span> Formulario</h2>
@@ -96,6 +109,10 @@
       <button id="btn-enviar" class="peligro">Confirmo el envío</button>
     </div>
     <div id="envio-msg" class="msg" role="status"></div>
+    <h3>Operaciones confirmadas</h3>
+    <p class="ayuda">«Confirmada» solo con el acuse verificado del portal propio de laboratorio. Un clic o un envío
+      observado no es una recepción. Lo «incierto» no se reenvía: compruebe el acuse o pida la revisión a un operador.</p>
+    <div id="operaciones"><p class="ayuda">Sin operaciones todavía.</p></div>
     <button id="btn-cerrar">Terminar: cerrar navegador y borrar datos de la memoria</button>
     <div id="cerrar-msg" class="msg" role="status"></div>
   </section>

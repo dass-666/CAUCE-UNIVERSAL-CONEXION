@@ -1,0 +1,77 @@
+[
+ {
+  "archivo": "01_ne_no_configurado.png",
+  "estado": "ne_no_configurado",
+  "descripcion": "Forms sin credencial de Network Engine: funciona, sin diagnóstico",
+  "indicadores": "Network Engine no configurado · Sin diagnóstico de red · Sesión: sin datos del motor · Operación: ninguna pendiente",
+  "revision": ""
+ },
+ {
+  "archivo": "02_ne_conectado_verificada.png",
+  "estado": "ne_conectado_verificada",
+  "descripcion": "Network Engine conectado, conectividad verificada, sesión activa",
+  "indicadores": "Network Engine conectado · Conectividad verificada · Sesión activa · Operación: ninguna pendiente",
+  "revision": ""
+ },
+ {
+  "archivo": "03_operacion_en_curso.png",
+  "estado": "operacion_en_curso",
+  "indicadores": "Network Engine conectado · Conectividad verificada · Sesión activa · Operación en curso"
+ },
+ {
+  "archivo": "04_confirmada.png",
+  "estado": "confirmada",
+  "descripcion": "Envío confirmado por el acuse verificado del portal propio",
+  "indicadores": "Network Engine conectado · Conectividad verificada · Sesión activa · Operación: ninguna pendiente",
+  "revision": ""
+ },
+ {
+  "archivo": "05_resultado_desconocido.png",
+  "estado": "resultado_desconocido",
+  "descripcion": "Resultado desconocido: Forms no reenvía y pide revisión",
+  "indicadores": "Network Engine conectado · Conectividad verificada · Sesión: revisión humana necesaria · Resultado desconocido: 1",
+  "revision": "Revisión humana necesaria\n1 operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.\nNetwork Engine pide revisión humana: una operación se interrumpió con el resultado sin confirmar. La resuelve un operador autorizado (centro de revisiones), no este puesto."
+ },
+ {
+  "archivo": "06_conectividad_perdida.png",
+  "estado": "conectividad_perdida",
+  "descripcion": "Network Engine informa conectividad perdida",
+  "indicadores": "Network Engine conectado · Conectividad perdida · Sesión: revisión humana necesaria · Resultado desconocido: 1",
+  "revision": "Revisión humana necesaria\n1 operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.\nNetwork Engine pide revisión humana: una operación se interrumpió con el resultado sin confirmar. La resuelve un operador autorizado (centro de revisiones), no este puesto."
+ },
+ {
+  "archivo": "07_recuperada_con_revision.png",
+  "estado": "recuperada_con_revision",
+  "descripcion": "La red vuelve, pero lo incierto sigue pidiendo revisión",
+  "indicadores": "Network Engine conectado · Conectividad verificada · Sesión: revisión humana necesaria · Resultado desconocido: 1",
+  "revision": "Revisión humana necesaria\n1 operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.\nNetwork Engine pide revisión humana: una operación se interrumpió con el resultado sin confirmar. La resuelve un operador autorizado (centro de revisiones), no este puesto."
+ },
+ {
+  "archivo": "08_conectividad_desactualizada.png",
+  "estado": "conectividad_desactualizada",
+  "descripcion": "Motor congelado: la información de conectividad envejece",
+  "indicadores": "Network Engine no disponible · Sin diagnóstico de red · Sesión: sin datos del motor · Resultado desconocido: 1",
+  "revision": "Revisión humana necesaria\n1 operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.\nNetwork Engine pide revisión humana: una operación se interrumpió con el resultado sin confirmar. La resuelve un operador autorizado (centro de revisiones), no este puesto."
+ },
+ {
+  "archivo": "09_ne_no_disponible.png",
+  "estado": "ne_no_disponible",
+  "descripcion": "Network Engine apagado: «sin diagnóstico», NO «sin internet»",
+  "indicadores": "Network Engine no disponible · Sin diagnóstico de red · Sesión: sin datos del motor · Resultado desconocido: 1",
+  "revision": "Revisión humana necesaria\n1 operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.\nNetwork Engine pide revisión humana: una operación se interrumpió con el resultado sin confirmar. La resuelve un operador autorizado (centro de revisiones), no este puesto."
+ },
+ {
+  "archivo": "10_ne_vuelve.png",
+  "estado": "ne_vuelve",
+  "descripcion": "El motor vuelve: la revisión pendiente sigue",
+  "indicadores": "Network Engine conectado · Conectividad verificada · Sesión: revisión humana necesaria · Resultado desconocido: 1",
+  "revision": "Revisión humana necesaria\n1 operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.\nNetwork Engine pide revisión humana: una operación se interrumpió con el resultado sin confirmar. La resuelve un operador autorizado (centro de revisiones), no este puesto."
+ },
+ {
+  "archivo": "11_revisado_por_operador.png",
+  "estado": "revisado_por_operador",
+  "descripcion": "Tras la revisión del operador (Network Engine y Forms)",
+  "indicadores": "Network Engine conectado · Conectividad verificada · Sesión recuperada · Operación: ninguna pendiente",
+  "revision": ""
+ }
+]

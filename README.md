@@ -12,6 +12,13 @@ Conector local, modular y reutilizable que:
 
 Proyecto independiente: no modifica Cauce Monitor, Jarvis ni Cauce Network Engine.
 
+## Integración con Cauce Network Engine (candidata 0.2.0rc1)
+
+Opcional. Forms informa a Network Engine RC3 del estado de su sesión de navegador y muestra un «Estado del puesto»;
+cada envío confirmado se registra en disco antes del clic y solo se da por recibido con un acuse verificable.
+Guía: [docs/INTEGRACION_NETWORK_ENGINE.md](docs/INTEGRACION_NETWORK_ENGINE.md) ·
+Informe con pruebas y límites: [docs/INFORME_INTEGRACION_NATIVA_FORMS_RC3.md](docs/INFORME_INTEGRACION_NATIVA_FORMS_RC3.md).
+
 ## Inicio rápido
 
 **Windows:** ver [docs/WINDOWS.md](docs/WINDOWS.md). En resumen: `instalar_windows.bat` y luego `iniciar_windows.bat`.

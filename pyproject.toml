@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cauce-form-connector"
-version = "0.1.0"
+version = "0.2.0rc1"
 description = "Conector universal de formularios: análisis, correspondencia, escritura carácter por carácter y verificación, con parada antes del envío."
 requires-python = ">=3.10"
 dependencies = [
@@ -22,7 +22,7 @@ cauce-forms = "cauce_form_connector.cli:main"
 include = ["cauce_form_connector*"]
 
 [tool.setuptools.package-data]
-cauce_form_connector = ["detector.js", "web/static/*", "contrato_v1/*.json", "contrato_v1/PIN.txt"]
+cauce_form_connector = ["detector.js", "web/static/*", "contrato_v1/*.json", "contrato_v1/PIN.txt", "red/PIN.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
