@@ -93,15 +93,30 @@ def proteger_carpeta(carpeta: Path) -> str:
     pudo; se informa) | ``posix`` (los archivos ya se crean 0600)."""
     if sys.platform != "win32":
         return "posix"
+    marca = carpeta / ".acl_aplicada"
+    if marca.exists():
+        # Una sola vez: repetir icacls en cada arranque dejaba un instante sin permisos y otros procesos (la orden
+        # de operador, el Forms que envía) recibían «Permission denied» (visto en el CI de Windows).
+        return "acl_usuario"
     import subprocess
     try:
         out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, timeout=10)
         sid = out.stdout.strip().split(",")[-1].strip('"')
         if not re.match(r"^S-1-[0-9-]+$", sid):
             return "heredada"
+        # 1) SOLO la carpeta: sin herencia de arriba; usuario y SYSTEM con herencia hacia dentro (OI)(CI).
+        #    (Con /T esos mismos argumentos se aplicaban a cada archivo: quedaban sin herencia y, en el CI de Windows,
+        #    con «Permission denied» incluso para el propio usuario.)
         r = subprocess.run(["icacls", str(carpeta), "/inheritance:r", "/grant:r", f"*{sid}:(OI)(CI)F",
-                            "/grant:r", "*S-1-5-18:(OI)(CI)F", "/T", "/Q"], capture_output=True, text=True, timeout=30)
-        return "acl_usuario" if r.returncode == 0 else "heredada"
+                            "/grant:r", "*S-1-5-18:(OI)(CI)F", "/Q"], capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            return "heredada"
+        # 2) lo que ya existía dentro vuelve a heredar, ahora de la carpeta protegida
+        if any(carpeta.iterdir()):
+            subprocess.run(["icacls", str(carpeta / "*"), "/reset", "/T", "/Q"], capture_output=True, text=True,
+                           timeout=30)
+        marca.write_bytes(b"")
+        return "acl_usuario"
     except (OSError, subprocess.SubprocessError):
         return "heredada"
 
