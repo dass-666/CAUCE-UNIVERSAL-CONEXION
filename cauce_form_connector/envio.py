@@ -170,9 +170,13 @@ def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro
         session.page.on("request", _req)
         session.page.on("framenavigated", _nav)
         session.page.on("response", _resp)
-        loc.first.click(timeout=10_000, no_wait_after=True)   # el clic no espera a la navegación: la espera es nuestra
-        # pausa corta que atiende eventos (submit, request); NO se usa settle(): evaluate se bloquea si hay navegación
-        session.page.wait_for_timeout(400)
+        session.envio_programado = True          # este `submit` lo registra esta función, no el aviso de envío humano
+        try:
+            loc.first.click(timeout=10_000, no_wait_after=True)   # el clic no espera a la navegación: la espera es nuestra
+            # pausa corta que atiende eventos (submit, request); NO se usa settle(): evaluate se bloquea si hay navegación
+            session.page.wait_for_timeout(400)
+        finally:
+            session.envio_programado = False
         observed = len(session.submit_events) > before
         registro.actualizar(op["id"], envio_observado=observed)
         # 5. resultado
@@ -203,6 +207,7 @@ def enviar_protegido(session: BrowserSession, confirmation_phrase: str, registro
                 session.page.remove_listener(ev, fn)
             except Exception:  # noqa: BLE001
                 pass
+    registro.actualizar(op["id"], posts_vistos=len(escrituras))
     cerrada = registro.cerrar(op["id"], estado, motivo, folio)
     seguro = estado in (CONFIRMADA, NO_ENVIADA, RECHAZADA)
     # 6. aviso final al motor (nunca bloquea más de 3 s)
@@ -232,7 +237,7 @@ def _url_segura(session: BrowserSession) -> str:
 def _publica(o: dict) -> dict:
     """Vista de una operación para la interfaz (sin huella ni token)."""
     return {k: o.get(k) for k in ("id", "creada", "actualizada", "estado", "motivo", "origen", "folio", "sesion_ne",
-                                  "aviso_en_curso", "envio_observado", "revision")} | \
+                                  "aviso_en_curso", "envio_observado", "posts_vistos", "revision")} | \
            {"verificable": bool(o.get("token_portal"))}
 
 

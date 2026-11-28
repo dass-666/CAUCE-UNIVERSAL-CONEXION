@@ -52,7 +52,8 @@ BLOQUEAN_REPETICION = (EN_CURSO, INCIERTA, CONFIRMADA)  # el expediente no se vu
 MAX_CERRADAS = 500                                    # las abiertas nunca se descartan
 
 CAMPOS = {"id", "creada", "actualizada", "estado", "motivo", "huella", "origen", "token_portal", "folio",
-          "sesion_ne", "marca_ne", "revision", "aviso_en_curso", "envio_observado", "api_acuse"}
+          "sesion_ne", "marca_ne", "revision", "aviso_en_curso", "envio_observado", "api_acuse",
+          "posts_vistos"}
 _ID_RE = re.compile(r"^op_[0-9a-f]{12}$")
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _FOLIO_RE = re.compile(r"^[A-Z0-9-]{4,32}$")
@@ -70,8 +71,39 @@ def _ahora() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _resumen(ops: list, general: Optional[dict]) -> str:
-    return hashlib.sha256(json.dumps({"o": ops, "g": general}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+def _resumen(ops: list, general: Optional[dict], archivadas: Optional[dict] = None, clave_id: Optional[str] = None) -> str:
+    d: dict[str, Any] = {"o": ops, "g": general}
+    if archivadas:                       # solo si existen: los archivos anteriores siguen siendo válidos
+        d["a"] = archivadas
+    if clave_id:
+        d["k"] = clave_id
+    return hashlib.sha256(json.dumps(d, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+_HUELLA_RE = re.compile(r"^h_[0-9a-f]{24}$")
+_CLAVE_ID_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def proteger_carpeta(carpeta: Path) -> str:
+    """Permisos EFECTIVOS de la carpeta de estado (clave de huella, registro, identidad del puesto).
+
+    Windows: ``os.open(..., 0o600)`` solo marca «solo lectura»; los permisos reales son la ACL heredada de la carpeta
+    (en una carpeta creada en C:\ suelen incluir a «Usuarios autenticados»). Se quita la herencia y se deja acceso
+    total SOLO al usuario actual y a SYSTEM (``icacls``, sin shell). Devuelve ``acl_usuario`` | ``heredada`` (no se
+    pudo; se informa) | ``posix`` (los archivos ya se crean 0600)."""
+    if sys.platform != "win32":
+        return "posix"
+    import subprocess
+    try:
+        out = subprocess.run(["whoami", "/user", "/fo", "csv", "/nh"], capture_output=True, text=True, timeout=10)
+        sid = out.stdout.strip().split(",")[-1].strip('"')
+        if not re.match(r"^S-1-[0-9-]+$", sid):
+            return "heredada"
+        r = subprocess.run(["icacls", str(carpeta), "/inheritance:r", "/grant:r", f"*{sid}:(OI)(CI)F",
+                            "/grant:r", "*S-1-5-18:(OI)(CI)F", "/T", "/Q"], capture_output=True, text=True, timeout=30)
+        return "acl_usuario" if r.returncode == 0 else "heredada"
+    except (OSError, subprocess.SubprocessError):
+        return "heredada"
 
 
 def _limpia(o: Any) -> Optional[dict]:
@@ -139,7 +171,16 @@ class RegistroOperaciones:
         self.eventos: list[dict] = []            # para la auditoría del llamador
         self._sha_conocido: Optional[str] = None # resumen de lo último leído o escrito por ESTE proceso
         self._profundidad = 0
+        self.archivadas: dict[str, str] = {}     # huellas de confirmadas que ya salieron de la lista (nunca se borran)
+        self._clave_persistida = False
+        self.proteccion = "sin_carpeta"
+        try:
+            self.dir.mkdir(parents=True, exist_ok=True)
+            self.proteccion = proteger_carpeta(self.dir)
+        except OSError:
+            pass
         self._clave = self._leer_clave()
+        self.clave_id = hashlib.sha256(self._clave).hexdigest()[:16]
         if self.otro_forms_en_marcha:
             self.eventos.append({"event": "operaciones_otro_forms_en_marcha"})
         with self._candado():
@@ -163,19 +204,33 @@ class RegistroOperaciones:
         try:
             k = p.read_bytes()
             if len(k) == 32:
+                self._clave_persistida = True
                 return k
         except OSError:
             pass
         k = secrets.token_bytes(32)
         try:
             self.dir.mkdir(parents=True, exist_ok=True)
-            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            if p.exists():
+                # existe pero está dañada: se aparta (no se borra) y el registro detectará la clave distinta
+                p.replace(p.with_name(f"{CLAVE}.danada-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"))
+            # O_EXCL: si otro proceso la crea a la vez, se usa la suya (antes O_TRUNC podía pisarla)
+            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(fd, "wb") as fh:
                 fh.write(k)
                 fh.flush()
                 os.fsync(fh.fileno())
+            self._clave_persistida = True
+        except FileExistsError:
+            try:
+                k2 = p.read_bytes()
+                if len(k2) == 32:
+                    self._clave_persistida = True
+                    return k2
+            except OSError:
+                pass
         except OSError:
-            pass                                     # sin disco: la huella vale solo en este proceso
+            pass                                     # sin disco: la huella valdría solo en este proceso → no se envía
         return k
 
     def huella(self, fila: dict[str, Any]) -> str:
@@ -195,9 +250,16 @@ class RegistroOperaciones:
         g = d.get("general")
         if None in ops or (g is not None and not isinstance(g, dict)):
             return None
-        if d.get("sha256") != _resumen(ops, g):
+        a = d.get("confirmadas_archivadas") or {}
+        k = d.get("clave_id")
+        if not isinstance(a, dict) or not all(isinstance(h, str) and _HUELLA_RE.match(h) and isinstance(f, str)
+                                              for h, f in a.items()):
+            return None
+        if k is not None and not (isinstance(k, str) and _CLAVE_ID_RE.match(k)):
+            return None
+        if d.get("sha256") != _resumen(ops, g, a, k):
             return None                              # editado a mano o escrito a medias: no vale
-        return {"operaciones": ops, "general": g, "sha256": d["sha256"]}
+        return {"operaciones": ops, "general": g, "sha256": d["sha256"], "archivadas": a, "clave_id": k}
 
     def _cargar(self) -> None:
         if not self.path.exists() and not self.bak.exists():
@@ -223,8 +285,15 @@ class RegistroOperaciones:
             self._guardar()
             return
         self.ops, self.general = doc["operaciones"], doc["general"]
+        self.archivadas = dict(doc["archivadas"])
         self._sha_conocido = doc["sha256"]
         cambio = False
+        if doc["clave_id"] and doc["clave_id"] != self.clave_id and self.general is None:
+            # huella.key se perdió o cambió: las huellas antiguas ya no casan y la protección contra duplicados
+            # de lo enviado antes NO funcionaría. Nada se envía hasta que un operador lo revise.
+            self.general = {"motivo": "clave_de_huella_distinta", "desde": _ahora()}
+            self.eventos.append({"event": "operaciones_clave_de_huella_distinta"})
+            cambio = True
         hay_forms_vivo = self._vivo_fh is None and _otro_forms_vivo(self.dir / VIVO)
         for o in self.ops:
             if o["estado"] == EN_CURSO and not hay_forms_vivo:
@@ -247,9 +316,14 @@ class RegistroOperaciones:
             cerradas = [o for o in self.ops if o["estado"] not in ABIERTOS]
             if len(cerradas) > MAX_CERRADAS:
                 quitar = {o["id"] for o in cerradas[: len(cerradas) - MAX_CERRADAS]}
+                for o in self.ops:
+                    # una confirmada que sale de la lista conserva su bloqueo (antes se perdía: duplicado posible)
+                    if o["id"] in quitar and o["estado"] == CONFIRMADA and _HUELLA_RE.match(o.get("huella") or ""):
+                        self.archivadas[o["huella"]] = (o.get("creada") or "")[:10]
                 self.ops = [o for o in self.ops if o["id"] not in quitar]
             doc = {"esquema": ESQUEMA, "operaciones": self.ops, "general": self.general,
-                   "sha256": _resumen(self.ops, self.general)}
+                   "confirmadas_archivadas": self.archivadas, "clave_id": self.clave_id,
+                   "sha256": _resumen(self.ops, self.general, self.archivadas, self.clave_id)}
             self._sha_conocido = doc["sha256"]
             self.dir.mkdir(parents=True, exist_ok=True)
             tmp = self.path.with_name(f"{ARCHIVO}.{os.getpid()}.{threading.get_ident()}.tmp")
@@ -313,6 +387,7 @@ class RegistroOperaciones:
         doc = self._leer(self.path)
         if doc is not None and doc["sha256"] != self._sha_conocido:
             self.ops, self.general, self._sha_conocido = doc["operaciones"], doc["general"], doc["sha256"]
+            self.archivadas = dict(doc["archivadas"])
 
     # ------------------------------------------------------------------ consultas
     def get(self, oid: str) -> Optional[dict]:
@@ -353,6 +428,9 @@ class RegistroOperaciones:
                 raise OperacionBloqueada("revision_general_pendiente",
                                          "El registro de operaciones necesita revisión de un operador "
                                          f"({self.general['motivo']}): no se envía nada hasta entonces.")
+            if huella in self.archivadas:
+                raise OperacionBloqueada("expediente_confirmada", "No se envía: este expediente ya consta como recibido "
+                                         f"por el portal (archivado, {self.archivadas[huella]}).")
             for o in self.ops:
                 if o.get("huella") == huella and o["estado"] in BLOQUEAN_REPETICION:
                     texto = {EN_CURSO: "ya hay un envío en curso de este expediente",
@@ -364,6 +442,8 @@ class RegistroOperaciones:
     def iniciar(self, huella: str, origen: str, token_portal: Optional[str], sesion_ne: Optional[str],
                 api_acuse: Optional[str] = None) -> dict:
         """Crea la operación ``en_curso`` y la guarda en disco. Lanza OSError si no puede (entonces NO se envía)."""
+        if not self._clave_persistida:
+            raise OSError("huella.key no se pudo guardar: la protección contra duplicados no sobreviviría a un reinicio")
         with self._candado():
             self._recargar()
             self.comprobar(huella)
@@ -382,6 +462,26 @@ class RegistroOperaciones:
                 raise
             return dict(o)
 
+    def registrar_envio_humano(self, huella: str, origen: str) -> dict:
+        """La PERSONA envió desde la ventana del navegador (sin pasar por ENVIAR). Forms no vio el resultado ni puede
+        verificarlo: queda ``incierta`` y bloquea repetir ese expediente hasta que un operador lo revise.
+        No comprueba bloqueos (el envío ya ocurrió) y, si no puede escribir, lanza OSError para que se audite."""
+        if not isinstance(huella, str) or not huella.startswith("h_"):
+            raise ValueError("huella")
+        with self._candado():
+            self._recargar()
+            o = {"id": "op_" + secrets.token_hex(6), "creada": _ahora(), "actualizada": _ahora(), "estado": INCIERTA,
+                 "motivo": "envio_humano_directo_sin_acuse", "huella": huella, "origen": str(origen)[:200],
+                 "token_portal": None, "folio": None, "sesion_ne": None, "marca_ne": None, "revision": None,
+                 "aviso_en_curso": None, "envio_observado": True, "api_acuse": None}
+            self.ops.append(o)
+            try:
+                self._guardar()
+            except OSError:
+                self.ops.remove(o)
+                raise
+            return dict(o)
+
     def actualizar(self, oid: str, **campos: Any) -> dict:
         with self._candado():
             self._recargar()
@@ -389,6 +489,8 @@ class RegistroOperaciones:
             for k, v in campos.items():
                 if k in ("aviso_en_curso", "envio_observado"):
                     o[k] = None if v is None else bool(v)
+                elif k == "posts_vistos" and isinstance(v, int) and not isinstance(v, bool):
+                    o[k] = max(0, min(v, 99))      # peticiones de escritura que el navegador hizo tras el clic
             o["actualizada"] = _ahora()
             self._guardar_sin_lanzar()
             return dict(o)

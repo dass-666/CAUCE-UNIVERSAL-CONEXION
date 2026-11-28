@@ -86,6 +86,9 @@ class BrowserSession:
         self.on_cierre_inesperado: Optional[Callable[[], None]] = None
         self.on_abierta: Optional[Callable[[], None]] = None
         self._cierre_propio = False
+        # Revisión final: un `submit` con gesto de la persona fuera de `enviar_protegido` se avisa aquí (ver web/app.py).
+        self.on_submit_humano: Optional[Callable[[], None]] = None
+        self.envio_programado = False      # True solo durante el clic de `enviar_protegido`
 
     def _avisar_cierre(self) -> None:
         if self._cierre_propio or self.on_cierre_inesperado is None:
@@ -102,11 +105,20 @@ class BrowserSession:
             except Exception:
                 pass
 
+    def _submit_visto(self, gesto: Any) -> None:
+        self.submit_events.append((bool(gesto), time.monotonic()))
+        # Envío hecho por la PERSONA en la ventana (no por `enviar_protegido`): debe quedar en el registro durable.
+        if gesto and not self.envio_programado and self.on_submit_humano is not None:
+            try:
+                self.on_submit_humano()
+            except Exception:
+                pass
+
     def observe_submits(self) -> None:
         """Empieza a registrar eventos `submit` de la página actual (idempotente por página)."""
         if self.page is None or self._observed_page is self.page:
             return
-        self.page.expose_function("__cauceSubmitSeen", lambda gesto: self.submit_events.append((bool(gesto), time.monotonic())))
+        self.page.expose_function("__cauceSubmitSeen", self._submit_visto)
         self.page.add_init_script(SUBMIT_OBSERVER_JS)
         try:
             self.page.evaluate(SUBMIT_OBSERVER_JS)

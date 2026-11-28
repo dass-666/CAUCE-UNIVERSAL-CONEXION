@@ -95,6 +95,21 @@ def test_chromium_reintenta_por_su_cuenta_un_post_cortado_y_el_token_evita_el_du
         assert out["operacion"]["estado"] == INCIERTA and st["recibidos"] == 0
 
 
+def test_limite_portal_sin_idempotencia_el_reintento_interno_de_chromium_duplica(nav, portal, tmp_path):
+    """LÍMITE DOCUMENTADO (revisión final, punto 1). Medido: Chromium repite el POST tras un corte en una conexión
+    reutilizada (3 de 3 intentos) y ese reintento NO aparece en los eventos de Playwright (`posts_vistos` = 1).
+    Con un portal sin token de un solo uso, eso es un trámite duplicado que Forms no puede ver ni impedir. Forms
+    hizo UN solo clic y registró UNA operación: la protección de Forms llega hasta el clic, no más abajo."""
+    portal.portal.idempotente = False
+    portal.portal.fallos.append({"tipo": "cortar_despues"})
+    reg = RegistroOperaciones(tmp_path)
+    rellenar(nav, portal.url + "/tramite", fila(14))
+    out = enviar(nav, reg, fila(14), acuse_espera_s=3)
+    st = portal.portal.estadisticas()
+    assert st["peticiones_post"] == 2 and st["duplicados"] == 1          # el navegador reintentó y el portal duplicó
+    assert len(reg.lista()) == 1 and out["operacion"]["posts_vistos"] == 1   # Forms: un clic, una petición vista
+
+
 def test_corte_antes_de_registrar_queda_incierta_y_no_se_puede_repetir(nav, portal, tmp_path):
     reg = RegistroOperaciones(tmp_path)
     for _ in range(3):                                     # también se corta el reintento del propio navegador
@@ -277,6 +292,38 @@ def test_doble_clic_en_la_interfaz_envia_una_sola_vez(portal, tmp_path, monkeypa
         ws.close()
 
 
+def test_envio_directo_de_la_persona_en_la_ventana_queda_en_el_registro(portal, tmp_path, monkeypatch):
+    """Revisión final (punto 2): si la persona pulsa el botón del portal en la ventana, sin ENVIAR, el envío no pasa
+    por `enviar_protegido`. Antes no dejaba rastro y la misma fila podía enviarse otra vez. Ahora queda «incierta»."""
+    import httpx
+    from servidor_app import servir
+    from cauce_form_connector.web import app as web
+    monkeypatch.setenv("CAUCE_FORMS_DATA_DIR", str(tmp_path / "forms"))
+    monkeypatch.setenv("CAUCE_NE_SESSION_TOKEN_FILE", "")
+    app = web.create_app()
+    ws = app.state.ws
+    with servir(app) as base:
+        s = ws.browser()
+        ws.rows = [fila(21)]
+        ws.worker.run(lambda: rellenar(s, portal.url + "/tramite", fila(21)))
+        ws.fila_rellenada = 0
+        # la «persona» pulsa el botón del formulario (clic de confianza con gesto de usuario, fuera de Forms)
+        ws.worker.run(lambda: (s.page.click("button[type=submit]"), s.page.wait_for_timeout(1500)))
+        ops = ws.registro.lista()
+        assert len(ops) == 1 and ops[0]["estado"] == INCIERTA and ops[0]["motivo"] == "envio_humano_directo_sin_acuse"
+        assert portal.portal.estadisticas()["recibidos"] == 1
+        r = httpx.post(base + "/api/submit", json={"phrase": "ENVIAR"}, timeout=30)
+        assert r.status_code == 403                       # la aprobación de esa fila se anuló
+        ws.worker.run(lambda: rellenar(s, portal.url + "/tramite", fila(21)))   # vuelve a rellenar la MISMA fila
+        ws.fila_rellenada = 0
+        r = httpx.post(base + "/api/submit", json={"phrase": "ENVIAR"}, timeout=30)
+        assert r.status_code == 409, r.text               # bloqueada: hay una incierta de ese expediente
+        assert portal.portal.estadisticas()["recibidos"] == 1
+        d = httpx.get(base + "/api/diagnostico").json()
+        assert d["operaciones_inciertas"] == 1
+        ws.close()
+
+
 HIJO = r'''
 import json, sys, time
 sys.path.insert(0, sys.argv[3])
@@ -323,3 +370,21 @@ def test_forms_muere_durante_el_envio_y_al_volver_queda_incierta(portal, tmp_pat
     assert v["operacion"]["estado"] == CONFIRMADA
     st = portal.portal.estadisticas()
     assert st["recibidos"] == 1 and st["peticiones_post"] == 1 and st["duplicados"] == 0
+
+
+def test_ninguna_ruta_de_produccion_envia_sin_el_registro_durable():
+    """Revisión final (punto 2): el único clic de envío en producción es `enviar_protegido`. La función antigua
+    `submit_with_human_confirmation` (sin registro) solo la usan las pruebas H1; la CLI y `preparar` no envían."""
+    import ast
+    paquete = ROOT / "cauce_form_connector"
+    usos = {}
+    for py in paquete.rglob("*.py"):
+        arbol = ast.parse(py.read_text("utf-8"))
+        nombres = {n.id for n in ast.walk(arbol) if isinstance(n, ast.Name)} | \
+                  {n.attr for n in ast.walk(arbol) if isinstance(n, ast.Attribute)} | \
+                  {a.name for n in ast.walk(arbol) if isinstance(n, ast.ImportFrom) for a in n.names}
+        usos[py.relative_to(paquete).as_posix()] = nombres
+    assert [f for f, n in usos.items() if "submit_with_human_confirmation" in n] == []      # solo definida en engine.py
+    assert [f for f, n in usos.items() if "enviar_protegido" in n] == ["web/app.py"]
+    cli = (paquete / "cli.py").read_text("utf-8")
+    assert "enviar_protegido" not in cli and "submit" not in cli.lower().replace("submit_", "")

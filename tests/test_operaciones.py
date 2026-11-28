@@ -232,3 +232,70 @@ def test_dos_forms_dueños_del_mismo_registro_se_detecta(tmp_path):
     assert not a.otro_forms_en_marcha and b.otro_forms_en_marcha
     assert {"event": "operaciones_otro_forms_en_marcha"} in b.eventos
     a.soltar()
+
+
+def test_confirmadas_que_salen_de_la_lista_siguen_bloqueando(tmp_path, monkeypatch):
+    """Revisión final (punto 4): antes, pasadas MAX_CERRADAS operaciones cerradas se BORRABAN las más antiguas,
+    también las confirmadas, y ese expediente podía enviarse otra vez. Ahora su huella se archiva y sigue bloqueando."""
+    import cauce_form_connector.operaciones as O
+    monkeypatch.setattr(O, "MAX_CERRADAS", 2)
+    r = _reg(tmp_path)
+    filas = [dict(FILA, expediente=f"EXP-{i:04d}") for i in range(5)]
+    for f in filas:
+        op = r.iniciar(r.huella(f), "x", None, None)
+        r.cerrar(op["id"], CONFIRMADA, "acuse_verificado", "LAB-00001-ABCD")
+    assert len(r.lista()) == 2                                   # la lista se acota...
+    r2 = _reg(tmp_path)                                          # ...y tras reiniciar
+    for f in filas:                                              # todas siguen bloqueadas
+        with pytest.raises(OperacionBloqueada) as e:
+            r2.comprobar(r2.huella(f))
+        assert e.value.codigo == "expediente_confirmada"
+    doc = json.loads((tmp_path / "datos" / "operaciones.json").read_text())
+    assert len(doc["confirmadas_archivadas"]) == 3
+    doc["confirmadas_archivadas"] = {}                            # borrar el archivo a mano no lo desbloquea
+    (tmp_path / "datos" / "operaciones.json").write_text(json.dumps(doc))
+    r3 = _reg(tmp_path)
+    assert r3.general is not None
+    with pytest.raises(OperacionBloqueada):
+        r3.comprobar(r3.huella(filas[0]))
+
+
+def test_perder_huella_key_no_desactiva_en_silencio_la_proteccion(tmp_path):
+    """Revisión final (punto 3): sin la clave, las huellas antiguas no casan. Antes se creaba otra clave en silencio
+    y los expedientes ya enviados podían repetirse. Ahora se pide una revisión general y no se envía nada."""
+    r = _reg(tmp_path)
+    op = r.iniciar(r.huella(FILA), "x", None, None)
+    r.cerrar(op["id"], CONFIRMADA, "acuse_verificado", "LAB-00001-ABCD")
+    (tmp_path / "datos" / "huella.key").unlink()
+    r2 = _reg(tmp_path)
+    assert r2.general and r2.general["motivo"] == "clave_de_huella_distinta"
+    with pytest.raises(OperacionBloqueada) as e:
+        r2.comprobar(r2.huella(FILA))
+    assert e.value.codigo == "revision_general_pendiente"
+    (tmp_path / "datos" / "huella.key").write_bytes(b"corta")          # dañada: se aparta, no se borra
+    r3 = _reg(tmp_path)
+    assert list((tmp_path / "datos").glob("huella.key.danada-*"))
+    assert r3.general is not None
+
+
+def test_sin_poder_guardar_la_clave_no_se_envia(tmp_path, monkeypatch):
+    r = _reg(tmp_path)
+    monkeypatch.setattr(r, "_clave_persistida", False)
+    with pytest.raises(OSError):
+        r.iniciar(r.huella(FILA), "x", None, None)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="ACL de Windows")
+def test_windows_permisos_efectivos_solo_usuario_y_system(tmp_path):
+    """Revisión final (punto 3): en Windows 0o600 no protege nada; los permisos reales son la ACL. Se comprueban."""
+    import subprocess
+    r = RegistroOperaciones(tmp_path / "datos", dueno=True)
+    r.iniciar(r.huella(FILA), "x", None, None)
+    assert r.proteccion == "acl_usuario"
+    for nombre in ("huella.key", "operaciones.json"):
+        out = subprocess.run(["icacls", str(tmp_path / "datos" / nombre)], capture_output=True, text=True).stdout
+        print(out)
+        # lo heredado (I) viene solo de la carpeta de estado, que ya no hereda de arriba: nadie más tiene acceso
+        for ajeno in ("Authenticated Users", "BUILTIN\\Users", "Everyone"):
+            assert ajeno not in out, out
+    r.soltar()

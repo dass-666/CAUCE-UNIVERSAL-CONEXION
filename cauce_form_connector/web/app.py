@@ -103,8 +103,28 @@ class Workspace:
             self.session = BrowserSession(self.settings)
             self.session.on_cierre_inesperado = lambda: self.diag.navegador(False, "browser_closed")
             self.session.on_abierta = lambda: self.diag.navegador(True)
+            self.session.on_submit_humano = self._envio_humano
             self.diag.iniciar()
         return self.session
+
+    def _envio_humano(self) -> None:
+        """La persona pulsó el botón del formulario en la ventana: queda en el registro durable como «incierta».
+
+        Sin esto, un envío directo no dejaba rastro y la misma fila podía enviarse otra vez con ENVIAR."""
+        i = self.fila_rellenada
+        if i is None or not 0 <= i < len(self.rows):
+            self.audit.log("envio_humano_sin_fila")          # no hay fila rellenada que atribuir
+            return
+        try:
+            op = self.registro.registrar_envio_humano(self.registro.huella(self.rows[i]),
+                                                      self.session.source_label if self.session else "")
+            self.audit.log("envio_humano_directo", detail=op["id"])
+        except (OSError, ValueError):
+            self.audit.log("envio_humano_no_registrado", codigo="registro_no_escribible")
+        self.fila_rellenada = None                            # la aprobación de esa fila ya no vale
+        if self.session is not None:
+            self.session.submit_armed = False
+        self.diag.exigir_marca()                              # el motor y Monitor también deben verlo
 
     def close(self, cerrar_sesion_ne: bool = True) -> None:
         if self.session is not None:

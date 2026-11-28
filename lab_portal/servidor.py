@@ -80,6 +80,8 @@ class Portal:
         self.fallos: list[dict] = []                  # cola de fallos a aplicar a los siguientes POST
         self.acuse_retardo_s = 0.0
         self.peticiones_post = 0
+        # Solo para demostrar el LÍMITE de Forms: un portal sin protección contra repeticiones (como muchos reales).
+        self.idempotente = True
 
     def emitir(self) -> str:
         t = secrets.token_urlsafe(16)
@@ -220,7 +222,7 @@ class _Handler(BaseHTTPRequestHandler):
             if token not in p.tokens:
                 p.rechazos["token_desconocido"] = p.rechazos.get("token_desconocido", 0) + 1
                 return self._enviar(400, RECHAZO.format(codigo="token_desconocido", texto="Formulario caducado.").encode())
-            if token in p.recibidos:                  # idempotente: el mismo envío no crea otro trámite
+            if token in p.recibidos and p.idempotente:   # idempotente: el mismo envío no crea otro trámite
                 p.reintentos_mismo_token += 1
                 r = p.recibidos[token]
                 if tipo == "cortar_despues":
@@ -233,7 +235,11 @@ class _Handler(BaseHTTPRequestHandler):
                 p.rechazos["capacidad"] = p.rechazos.get("capacidad", 0) + 1
                 return self._enviar(429, RECHAZO.format(codigo="capacidad", texto="Capacidad del portal agotada.").encode())
             folio = f"LAB-{len(p.recibidos) + 1:05d}-{secrets.token_hex(2).upper()}"
-            p.recibidos[token] = {"folio": folio, "t": ahora, "exp": hashlib.sha256(exp.encode()).hexdigest()[:16]}
+            clave = token
+            if token in p.recibidos:                  # portal NO idempotente: otro trámite con el mismo formulario
+                p.reintentos_mismo_token += 1
+                clave = f"{token}#{len(p.recibidos)}"
+            p.recibidos[clave] = {"folio": folio, "t": ahora, "exp": hashlib.sha256(exp.encode()).hexdigest()[:16]}
         if tipo == "cortar_despues":
             return self._cortar()
         self._enviar(200, ACUSE.format(folio=folio, token=token, nota="Recibido.").encode())
