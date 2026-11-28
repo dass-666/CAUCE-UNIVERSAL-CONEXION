@@ -132,7 +132,7 @@ lo hace, convendría pasar a dependencia versionada. No se usa el consumidor ant
 
 Commits en la rama (todos sobre `aa1bb02`): `f53c1c6` (diagnóstico, registro y envío protegido), `423e34a`
 (compatibilidad con Monitor, paso 09b nativo, pin, jornadas), `367ed54` (dos defectos hallados en las capturas, guía,
-0.2.0rc1) y el commit de documentación final que añade este informe. El PR se abre en **borrador** contra `main` y no se
+0.2.0rc1) `1dfb528` (la interfaz no cuenta la operación en curso como desconocida; Monitor en CI), `61842fd` (rutas de los guiones) y el commit de documentación final con este informe y los resultados. Lista exacta en el manifiesto (§15). El PR se abre en **borrador** contra `main` y no se
 fusiona.
 
 ## 7. Resultados completos de pruebas
@@ -141,6 +141,13 @@ fusiona.
 
 - Omitida 1: contrato antiguo de Monitor `9e7f88d` (no había copia local; en CI sí se descarga).
 - Omitida 2: prueba de permisos POSIX (el contenedor corre como root); la variante simulada sí pasa.
+
+**[Prueba] GitHub Actions** (run `46105215519`, commit `61842fd`, todo en verde): `ubuntu-latest` **191 superadas** (allí sí
+se descarga el contrato antiguo de Monitor) y la jornada corta de 6 expedientes; `windows-latest` **189 superadas, 2
+omitidas** (SIGSTOP y permisos POSIX, que no existen en Windows). En Windows se ejecutaron las pruebas contra Network
+Engine real, incluida la credencial **cifrada con DPAPI**, y el código de Monitor. Es el Windows Server del runner,
+**no** Windows 11 físico. La ejecución anterior (`46104462286`) falló solo en el paso de jornada por una ruta relativa
+del guion (§12, D11).
 
 Network Engine RC3 en su propio repositorio: **346 superadas, 5 omitidas** (el brief citaba 323 en E8; `f93dd58` tiene más).
 
@@ -177,7 +184,15 @@ comprueba que la marca queda por entregar y que el motor pide revisión por sí 
 **[Medición]** `scripts/jornada_laboratorio.py --expedientes 6 10 20 50` (Forms, portal y Network Engine como procesos
 reales; fallos deliberados; confirmación humana simulada). Archivo: `evidence/rc3/jornadas/jornadas.json`.
 
-JORNADAS_TABLA
+| Jornada | Fallos provocados | Recibidos por el portal | POST vistos | Duplicados | Confirmadas al momento | Inciertas al momento | Rechazadas (capacidad) | Bloqueos correctos (409) |
+|---|---|---|---|---|---|---|---|---|
+| 6 expedientes | cortar_despues, cortar_antes, ne_apagado, doble_clic, forms_reiniciado | 5 | 8 | **0** | 4 | 2 | 0 | 3 |
+| 10 expedientes | cortar_despues, cortar_antes, ne_apagado, red_caida, doble_clic | 9 | 12 | **0** | 9 | 1 | 0 | 2 |
+| 20 expedientes | cortar_despues, cortar_antes, ne_apagado, red_caida, doble_clic, portal_lento, forms_reiniciado, capacidad, navegador_cerrado | 19 | 23 | **0** | 15 | 4 | 1 | 5 |
+| 50 expedientes | cortar_despues, cortar_antes, ne_apagado, red_caida, doble_clic, portal_lento, forms_reiniciado, capacidad, navegador_cerrado | 49 | 53 | **0** | 45 | 4 | 1 | 5 |
+
+Verificación final con «Comprobar acuse» (acumulada sobre el mismo registro): 6: 1 pasaron a confirmada, 1 siguen inciertas; 10: 0 pasaron a confirmada, 2 siguen inciertas; 20: 3 pasaron a confirmada, 3 siguen inciertas; 50: 3 pasaron a confirmada, 4 siguen inciertas.
+Duración total 11.8 min · commit de Forms 61842fd · Network Engine f93dd58.
 
 Lectura de la tabla:
 
@@ -195,16 +210,71 @@ revisa una persona) **[Prueba]** `test_portal_ajeno_sin_acuse_nunca_se_da_por_re
 
 ## 9. Métricas de rendimiento
 
-PROLONGADA_TEXTO
+**[Medición]** Prueba prolongada `--duracion-min 60` (jornadas de 10 expedientes con fallos, repetidas sin parar),
+muestras cada 15 s. Archivo: `evidence/rc3/prolongada/jornadas.json` y `muestras.json`. Entorno: contenedor Linux en la
+nube compartido; **no** es un PC con Windows 11, y las cifras absolutas de RAM y CPU no se trasladan tal cual.
+
+Duración real: **61.8 min**, 33 jornadas, 330 expedientes, **0 duplicados**.
+Estados: confirmada 297, incierta 33.
+
+| Componente | PSS MB media / máx | PSS primer → último tercio | RSS MB media / máx | CPU % media / máx | Procesos máx |
+|---|---|---|---|---|---|
+| Forms (incluye Chromium) | 542.3 / 569.5 | 524.2 → 556.1 | 1031.3 / 1068.7 | 12.0 / 29.5 | 10 |
+| Network Engine | 15.9 / 16.3 | 16.0 → 16.0 | 24.4 / 24.7 | 0.1 / 0.3 | 1 |
+| Portal ficticio | 12.5 / 13.1 | 12.4 → 12.6 | 20.7 / 20.8 | 0.1 / 0.3 | 1 |
+
+Chromium dentro de Forms: hasta 819.3 MB de RSS (el RSS cuenta varias veces la memoria compartida
+entre procesos de Chromium; el PSS es la cifra realista).
+
+| Acción | n | media s | p95 s | máx s |
+|---|---|---|---|---|
+| analizar | 363 | 1.05 | 1.071 | 1.661 |
+| rellenar | 363 | 2.451 | 2.519 | 2.555 |
+| enviar | 396 | 3.216 | 15.634 | 16.151 |
+| diagnostico | 99 | 0.004 | 0.006 | 0.009 |
+
+El p95 de «enviar» lo marcan los fallos deliberados (cortes de conexión, tras los que Forms espera el acuse hasta 15 s); un envío normal
+tarda unos 2 s, de los que la mayoría es la espera del acuse.
+
+Crecimiento de archivos en 62 min: auditoría de Forms 1044 KB, registro de operaciones
+154 KB, auditoría de Network Engine 281 KB, estado de sesiones del motor
+0.6 KB. **Riesgo:** `operaciones.json` crece con cada envío y se reescribe entero en cada cambio; con
+miles de operaciones conviene archivar las cerradas (pendiente, no implementado).
+
+Tendencia de memoria de Forms (PSS, MB) cada 6 min aprox.: 515, 524, 547, 548, 540, 544, 564, 568, 561, 550. Sube en
+los primeros 20 min y luego oscila sin crecer de forma sostenida; con una hora no se puede descartar una fuga lenta
+(haría falta una jornada de 8 h en el equipo real). Network Engine y el portal quedan planos (16 y 12,5 MB).
+
+El contador `avisos_no_entregados` sube 2 por jornada: corresponde al fallo «Network Engine apagado» (los avisos de inicio
+y fin de esa operación no pueden llegar). Es lo esperado: el envío no se retiene más de 3 s por ello.
+Código ejecutado en la prueba prolongada: commit `367ed54` (los commits posteriores solo tocan la interfaz,
+los guiones y la documentación).
+
+Recuperación de fallos: Network Engine apagado y vuelto a arrancar, red caída y recuperada, Forms matado con `kill -9` y
+rearrancado, navegador cerrado: en todos los casos el puesto siguió trabajando y lo dudoso quedó `incierta` (§8).
+Las jornadas 6/10/20/50 (§8) dan las mismas conclusiones con más tipos de fallo por jornada.
+
 
 ## 10. Capturas de pantalla
 
 **[Medición]** `scripts/capturas_rc3.py`, Chromium real (headless) sobre la interfaz real de Forms, escala 2×.
 Carpeta: `evidence/rc3/capturas/` (índice en `capturas.json`).
 
-CAPTURAS_TABLA
+| Captura | Indicadores | Qué demuestra |
+|---|---|---|
+| `01_ne_no_configurado.png` | Network Engine no configurado · Sin diagnóstico de red · Sesión: sin datos del motor · Operación: ninguna pendiente | Sin Network Engine: Forms funciona y dice «sin diagnóstico de red» (no «sin internet»). |
+| `02_ne_conectado_verificada.png` | Network Engine conectado · Conectividad verificada · Sesión activa · Operación: ninguna pendiente | Motor conectado, conectividad verificada, sesión activa. |
+| `03_operacion_en_curso.png` | Network Engine conectado · Conectividad verificada · Sesión activa · Operación en curso | Envío lento en curso: «Operación en curso», sin alerta. |
+| `04_confirmada.png` | Network Engine conectado · Conectividad verificada · Sesión activa · Operación: ninguna pendiente | Confirmada por el acuse verificado; sin alertas. |
+| `05_resultado_desconocido.png` | Network Engine conectado · Conectividad verificada · Sesión: revisión humana necesaria · Resultado desconocido: 1 | Corte antes de registrar: resultado desconocido; una sola alerta con dos motivos (Forms y motor). |
+| `06_conectividad_perdida.png` | Network Engine conectado · Conectividad perdida · Sesión: revisión humana necesaria · Resultado desconocido: 1 | Red simulada caída: «Conectividad perdida»; la revisión sigue. |
+| `07_recuperada_con_revision.png` | Network Engine conectado · Conectividad verificada · Sesión: revisión humana necesaria · Resultado desconocido: 1 | La red vuelve: conectividad verificada, pero lo incierto sigue pidiendo revisión. |
+| `08_conectividad_desactualizada.png` | Network Engine no disponible · Sin diagnóstico de red · Sesión: sin datos del motor · Resultado desconocido: 1 | Motor congelado (SIGSTOP 26 s): Forms muestra «no disponible · sin diagnóstico». El estado «desactualizada» solo aparece si el motor deja de contestar sin error, lo que con un motor congelado no ocurre (el latido vence a los 5 s). |
+| `09_ne_no_disponible.png` | Network Engine no disponible · Sin diagnóstico de red · Sesión: sin datos del motor · Resultado desconocido: 1 | Motor apagado: «no disponible · sin diagnóstico», NO «sin internet»; la alerta local sigue. |
+| `10_ne_vuelve.png` | Network Engine conectado · Conectividad verificada · Sesión: revisión humana necesaria · Resultado desconocido: 1 | El motor vuelve: la revisión pendiente sigue (no se borra al reconectar). |
+| `11_revisado_por_operador.png` | Network Engine conectado · Conectividad verificada · Sesión recuperada · Operación: ninguna pendiente | Tras resolver el operador en el motor y en Forms: sin alertas. |
 
-Las capturas descubrieron un defecto real (ver §12, D6): antes de corregirlo, la captura «confirmada» mostraba
+Las capturas descubrieron dos defectos reales (ver §12, D6 y D12): antes de corregirlo, la captura «confirmada» mostraba
 «Sesión: revisión humana necesaria» tras un envío lento confirmado. Repetidas con el código final, ya no.
 
 ## 11. Auditoría de seguridad
@@ -213,7 +283,7 @@ Las capturas descubrieron un defecto real (ver §12, D6): antes de corregirlo, l
 |---|---|---|
 | Solo credencial `session` | Cumple: con `admin`, `read` o `review` el motor responde 403 y Forms lo muestra | [Prueba] `test_18_403_…` |
 | Forms no resuelve marcas | Cumple: el cliente copiado no tiene `/resolve` ni rutas administrativas; con `session` el motor da 403 | [Prueba] `test_forms_no_puede_resolver_marcas`, `test_la_copia_no_tiene_rutas_administrativas` |
-| Credencial protegida | DPAPI en Windows / archivo 0600 en Linux, creada por la orden oficial | [Prueba] `test_credencial_protegida_con_el_mecanismo_del_sistema` (en Linux: 0600; DPAPI solo en el runner Windows de CI) |
+| Credencial protegida | DPAPI en Windows / archivo 0600 en Linux, creada por la orden oficial | [Prueba] `test_credencial_protegida_con_el_mecanismo_del_sistema` (Linux: 0600 aquí; DPAPI: pasó en el runner `windows-latest` del CI) |
 | Ningún secreto en archivos de Forms | Cumple | [Prueba] `test_ningun_secreto_en_los_archivos_de_forms` |
 | Sin datos personales en el registro | Cumple: huella HMAC, notas saneadas | [Prueba] `test_el_archivo_no_guarda_datos_personales`, `test_huella_no_contiene_datos…` |
 | Errores del motor no llegan a registros | Cumple: solo estado HTTP y código | [Inferencia] `CauceAPIError` descarta el mensaje |
@@ -240,6 +310,8 @@ Windows queda con los permisos heredados del perfil **[No verificado]**.
 | D7 | `operaciones listar` durante un envío convertía la operación viva en incierta | Media (dirección segura, pero un envío bueno quedaba dudoso) | `operaciones.vivo`: candado sostenido por el Forms que envía | `test_la_orden_de_operador_no_convierte…` (falla sin la corrección) |
 | D8 | El medidor daba CPU 0 % siempre | Baja (métrica) | Mismo objeto de proceso entre muestras | prueba prolongada (§9) |
 | D9 | Un fallo del portal pasaba al expediente siguiente en las jornadas | Baja (laboratorio) | `/_lab/limpiar_fallos` tras cada expediente | jornadas (§8) |
+| D11 | Los guiones de laboratorio fallaban con una ruta de salida relativa (el motor arranca en otra carpeta) | Baja (CI) | Rutas absolutas | paso de jornada del CI |
+| D12 | **La interfaz contaba la operación en curso como «resultado desconocido»** (alerta roja durante un envío normal lento) | Media (alarma innecesaria) | `/api/diagnostico` separa `operacion_viva` de `operaciones_inciertas` | `test_doble_clic_en_la_interfaz_envia_una_sola_vez` (comprueba el diagnóstico a mitad del envío) |
 | D10 | La huella fijada del cliente fallaría en Windows (CRLF al descargar) | Baja (CI) | Comparación normalizada a LF | `test_los_archivos_de_origen_coinciden_con_el_pin` |
 
 ## 13. Solicitudes para el otro agente (Network Engine y Monitor)
@@ -286,7 +358,8 @@ recuerde que el puesto también puede tener una revisión local. Solo texto; no 
 | Monitor | `7b92446` | Lectura de red y centro de revisiones compatibles | [Prueba] `test_compat_monitor.py` (servicio `monitoreo/red_lectura`; **no** la aplicación web completa con usuarios) |
 | Centro de revisiones pendientes | `7b92446` | Ve y resuelve la marca que deja Forms; confirmación exacta | [Prueba] ídem |
 | Chromium real | Playwright 1.65 (headless) | Compatible | [Prueba] |
-| Windows 11 | — | **No verificado aquí**. CI incluye `windows-latest` (Windows Server, no Windows 11): DPAPI real y rutas | [No verificado] hasta ver el resultado del CI y probar en el equipo de Ronaldo |
+| Windows (runner de CI) | `windows-latest` | 189 superadas, incluida DPAPI real y Network Engine real | [Prueba] CI |
+| Windows 11 físico | — | **No verificado** | [No verificado] probar en el equipo de Ronaldo |
 | Instalaciones independientes | — | Forms no importa paquetes de NE ni de Monitor | [Inferencia] + [Prueba] del pin |
 | Paso 09b | `f93dd58` | Mismo contrato con Forms nativo | [Prueba] `test_paso_09b_con_forms_nativo_mismo_contrato` |
 | Network Engine RC2 / consumidor antiguo | — | No usado | — |
