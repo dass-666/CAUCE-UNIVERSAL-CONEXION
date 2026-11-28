@@ -163,7 +163,11 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         e = ws.diag.estado()
         abiertas = ws.registro.abiertas()
         e.update({"configurado": ws.diag_info["configurado"], "proteccion_credencial": ws.diag_info["proteccion_credencial"],
-                  "operaciones_abiertas": len(abiertas), "revision_general": ws.registro.general,
+                  "operaciones_abiertas": len(abiertas),
+                  # la operación viva NO es un resultado desconocido (antes la alerta la contaba como tal)
+                  "operaciones_inciertas": sum(1 for o in abiertas if o["estado"] == "incierta"),
+                  "operacion_viva": any(o["estado"] == "en_curso" for o in abiertas),
+                  "revision_general": ws.registro.general,
                   "registro": ws.registro.estado_carga,
                   "envio_bloqueado": ws.registro.general is not None})
         return e

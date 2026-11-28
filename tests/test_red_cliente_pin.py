@@ -21,7 +21,8 @@ def test_pin_declara_rc3():
 @pytest.mark.skipif(not NE_REPO, reason="CAUCE_NE_REPO no definido")
 def test_los_archivos_de_origen_coinciden_con_el_pin():
     for ruta, sha in re.findall(r"^sha256 (\S+): ([0-9a-f]{64})$", PIN, re.M):
-        real = hashlib.sha256((Path(NE_REPO) / ruta).read_bytes()).hexdigest()
+        # Windows (autocrlf) convierte a CRLF al descargar: la huella fijada es la del contenido con LF
+        real = hashlib.sha256((Path(NE_REPO) / ruta).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
         assert real == sha, f"{ruta} cambió en Network Engine: revisar la copia de Forms antes de actualizar el PIN"
 
 

@@ -261,7 +261,11 @@ def test_doble_clic_en_la_interfaz_envia_una_sola_vez(portal, tmp_path, monkeypa
             res.append(httpx.post(base + "/api/submit", json={"phrase": "ENVIAR"}, timeout=60))
         ts = [threading.Thread(target=pulsar) for _ in range(2)]
         [t.start() for t in ts]
+        time.sleep(1.0)                                   # el portal tarda 2 s: el envío está en el aire
+        durante = httpx.get(base + "/api/diagnostico").json()
         [t.join() for t in ts]
+        # Regresión (capturas E): la operación viva no se presenta como «resultado desconocido»
+        assert durante["operacion_viva"] is True and durante["operaciones_inciertas"] == 0, durante
         codigos = sorted(r.status_code for r in res)
         assert codigos[0] == 200 and codigos[1] in (403, 409), [r.json() for r in res]
         ok = next(r for r in res if r.status_code == 200).json()

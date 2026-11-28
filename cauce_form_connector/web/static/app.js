@@ -208,14 +208,15 @@ async function refrescarEstado() {
     : d.fase === "iniciada" ? "neutro" : d.fase === "requiere_intervencion" || d.fase === "interrumpida" ? "error" : "aviso"]
     : ["Sesión: sin datos del motor", "neutro"];
   ind($("#ind-sesion"), fase);
-  ind($("#ind-op"), d.operacion === "in_progress" ? ["Operación en curso", "aviso"]
-    : d.operaciones_abiertas ? [`Resultado desconocido: ${d.operaciones_abiertas}`, "error"] : ["Operación: ninguna pendiente", "neutro"]);
+  const inciertas = d.operaciones_inciertas ?? d.operaciones_abiertas;
+  ind($("#ind-op"), d.operacion === "in_progress" || d.operacion_viva ? ["Operación en curso", "aviso"]
+    : inciertas ? [`Resultado desconocido: ${inciertas}`, "error"] : ["Operación: ninguna pendiente", "neutro"]);
   $("#estado-texto").textContent = d.motor_texto + (d.etiqueta ? ` Puesto: ${d.etiqueta}.` : "") +
     (d.ultima_respuesta_s != null && d.motor === "conectado" ? ` Última respuesta hace ${Math.round(d.ultima_respuesta_s)} s.` : "");
   // Una sola alerta de revisión, con sus motivos (sin alarmas repetidas ni contradictorias)
   const motivos = [];
   if (d.revision_general) motivos.push(`El registro de operaciones necesita revisión de un operador (${d.revision_general.motivo}). No se envía nada hasta entonces.`);
-  if (d.operaciones_abiertas) motivos.push(`${d.operaciones_abiertas} operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.`);
+  if (inciertas) motivos.push(`${inciertas} operación(es) con resultado desconocido en este puesto: compruebe el acuse o pida la revisión.`);
   if (d.requiere_persona) motivos.push(`Network Engine pide revisión humana: ${TXT_MOTIVO[d.motivo] || d.motivo || "motivo no indicado"}. La resuelve un operador autorizado (centro de revisiones), no este puesto.`);
   const rv = $("#revision");
   rv.hidden = !motivos.length;

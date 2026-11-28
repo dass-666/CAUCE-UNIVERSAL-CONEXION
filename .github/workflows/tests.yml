@@ -23,6 +23,12 @@ jobs:
           repository: dass-666/cauce-network-engine
           ref: f93dd58eeddc1cc3032711bb0b6e378708063d41
           path: ne-rc3
+      # Cauce Monitor 7b92446 de SOLO LECTURA: su lectura de red y su centro de revisiones (tests/test_compat_monitor.py)
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/Cauce-monitor-engine
+          ref: 7b92446e884239b52c1253d57ee97d244fe4067b
+          path: monitor-rc3
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -36,6 +42,7 @@ jobs:
           CAUCE_EVIDENCE_DIR: evidence/out
           MONITOR_REPO: ${{ github.workspace }}/monitor-contrato
           CAUCE_NE_REPO: ${{ github.workspace }}/ne-rc3
+          CAUCE_MONITOR_REPO: ${{ github.workspace }}/monitor-rc3
       - run: python scripts/demo_lab.py
       - run: python scripts/ejemplo_cauce_monitor.py --no-interactivo
       - run: python scripts/recorrido_ui.py --headless
