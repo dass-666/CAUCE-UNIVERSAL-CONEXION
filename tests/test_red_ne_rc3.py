@@ -50,7 +50,7 @@ def forms(ne: MotorNE, tmp: Path, nombre: str = "forms-puesto-1", registro=None,
     cli = Espia(read_secret(str(ruta)), port=ne.port)
     reg = registro
     d = DiagnosticoRed(cli, puesto, conexion="sim-a", intervalo_s=intervalo, latido_max_s=kw.pop("latido_max_s", 30),
-                       hay_inciertas=reg.hay_abiertas if reg else None,
+                       hay_inciertas=reg.pide_revision if reg else None,
                        al_ver_marca=reg.marca_vista_en if reg else None,
                        al_resolver=reg.resuelta_por_operador_ne if reg else None, **kw)
     return d, tid, ruta, puesto
@@ -149,6 +149,31 @@ def test_06_reinicio_simultaneo_de_motor_y_forms_hereda_la_marca(ne, tmp_path):
     assert e["requiere_persona"] is True              # la nueva sesión HEREDA la marca de la restaurada
     resumen = ne.resumen()
     assert any(c.get("reason") == "replaced_after_restart" for c in resumen["closed"])
+
+
+def test_operacion_larga_en_curso_no_pide_revision_por_si_sola(ne, tmp_path):
+    """Regresión (capturas E): un envío lento (portal que tarda) duraba varios latidos; la operación «en_curso» del
+    PROPIO proceso se contaba como «sin revisar» y Forms enviaba una marca: Network Engine pedía revisión humana
+    aunque el envío acabó confirmado por acuse. Una operación viva no es una incierta."""
+    from cauce_form_connector.operaciones import CONFIRMADA
+    reg = RegistroOperaciones(tmp_path / "ops")
+    d, *_ = forms(ne, tmp_path, registro=reg)
+    assert fase(d, "activa")
+    sid = d.c.session_id
+    op = reg.iniciar("h_lento", "x", None, sid)
+    assert d.operacion_inicio()
+    for _ in range(5):                                   # el portal tarda: varios latidos con la operación en curso
+        time.sleep(0.6)
+        assert d.latir(obligatorio=True)
+    v = ne.sesion(sid)
+    assert v["operation"] == "in_progress" and v["requires_human"] is False, v
+    assert d.estado()["requiere_persona"] is False
+    reg.cerrar(op["id"], CONFIRMADA, "acuse_verificado", "LAB-00001-ABCD")
+    assert d.operacion_fin(resultado_seguro=True)
+    time.sleep(0.6)
+    assert d.latir(obligatorio=True)
+    v = ne.sesion(sid)
+    assert v["operation"] == "idle" and v["requires_human"] is False, v
 
 
 def test_07_credencial_revocada_durante_la_operacion_no_borra_alertas(ne, tmp_path):

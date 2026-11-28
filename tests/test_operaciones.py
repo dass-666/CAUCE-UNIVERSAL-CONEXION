@@ -196,3 +196,39 @@ def test_revision_del_operador_desde_otro_proceso_no_se_pierde(tmp_path):
                         "otra vez", "--confirmar", "op_mal"], env=env, capture_output=True, text=True,
                        cwd=str(Path(__file__).resolve().parents[1]))
     assert r.returncode == 1 and "No se revisó nada" in r.stderr
+
+
+def test_pide_revision_no_cuenta_la_operacion_viva_pero_si_la_de_un_forms_anterior(tmp_path):
+    r = _reg(tmp_path)
+    op = r.iniciar(r.huella(FILA), "x", None, None)
+    assert r.hay_abiertas() and not r.pide_revision()         # en curso ahora: aún no hay nada que revisar
+    assert _reg(tmp_path).pide_revision()                     # otro arranque la ve como incierta
+    r2 = _reg(tmp_path)
+    assert r2.get(op["id"])["estado"] == INCIERTA and r2.pide_revision()
+
+
+def test_la_orden_de_operador_no_convierte_en_incierta_la_operacion_viva_de_forms(tmp_path):
+    """Regresión: «operaciones listar» durante un envío cargaba el registro y pasaba la operación VIVA a incierta;
+    el envío ya no podía cerrarse como confirmado. Con Forms vivo (dueño), el operador la ve «en curso»."""
+    import subprocess
+    forms = RegistroOperaciones(tmp_path / "datos", dueno=True)
+    op = forms.iniciar(forms.huella(FILA), "x", None, None)
+    env = dict(os.environ, CAUCE_FORMS_DATA_DIR=str(tmp_path / "datos"), CAUCE_AUDIT_PATH=str(tmp_path / "audit.jsonl"))
+    r = subprocess.run([sys.executable, "-m", "cauce_form_connector", "operaciones", "listar"], env=env,
+                       capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[1]))
+    assert r.returncode == 0, r.stderr
+    assert forms.get(op["id"])["estado"] == EN_CURSO
+    forms.cerrar(op["id"], CONFIRMADA, "acuse_verificado", "LAB-00001-ABCD")      # el envío termina bien
+    assert forms.get(op["id"])["estado"] == CONFIRMADA
+    # Forms se cae con otra a medias (no suelta el candado: lo suelta el sistema al morir; aquí, soltar())
+    op2 = forms.iniciar(forms.huella(dict(FILA, expediente="EXP-0002")), "x", None, None)
+    forms.soltar()
+    assert _reg(tmp_path).get(op2["id"])["estado"] == INCIERTA
+
+
+def test_dos_forms_dueños_del_mismo_registro_se_detecta(tmp_path):
+    a = RegistroOperaciones(tmp_path / "datos", dueno=True)
+    b = RegistroOperaciones(tmp_path / "datos", dueno=True)
+    assert not a.otro_forms_en_marcha and b.otro_forms_en_marcha
+    assert {"event": "operaciones_otro_forms_en_marcha"} in b.eventos
+    a.soltar()

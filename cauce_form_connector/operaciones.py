@@ -83,9 +83,53 @@ def _limpia(o: Any) -> Optional[dict]:
     return dict(o)
 
 
+VIVO = "operaciones.vivo"
+
+
+def _candado_exclusivo(ruta: Path):
+    """Candado exclusivo SIN espera sobre ``ruta``. Devuelve el archivo abierto (mantenerlo abierto lo sostiene) o None."""
+    fh = open(ruta, "a+b")
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fh
+    except OSError:
+        fh.close()
+        return None
+
+
+def _otro_forms_vivo(ruta: Path) -> bool:
+    if not ruta.exists():
+        return False
+    fh = _candado_exclusivo(ruta)
+    if fh is None:
+        return True
+    try:
+        if sys.platform == "win32":
+            import msvcrt
+            fh.seek(0)
+            msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+    finally:
+        fh.close()
+    return False
+
+
 class RegistroOperaciones:
-    def __init__(self, data_dir: str | Path):
+    def __init__(self, data_dir: str | Path, dueno: bool = False):
+        """``dueno=True`` solo para el Forms que envía (la interfaz web): mientras viva, sostiene ``operaciones.vivo``.
+        Así otro proceso (la orden de operador) sabe que una operación ``en_curso`` está VIVA y no la convierte en
+        incierta por su cuenta; solo lo hace si nadie sostiene ese candado (Forms se cerró o se cayó)."""
         self.dir = Path(data_dir)
+        self._vivo_fh = None
+        if dueno:
+            self.dir.mkdir(parents=True, exist_ok=True)
+            self._vivo_fh = _candado_exclusivo(self.dir / VIVO)
+        self.otro_forms_en_marcha = dueno and self._vivo_fh is None
         self.path = self.dir / ARCHIVO
         self.bak = self.dir / (ARCHIVO + ".bak")
         self._lock = threading.RLock()
@@ -96,8 +140,22 @@ class RegistroOperaciones:
         self._sha_conocido: Optional[str] = None # resumen de lo último leído o escrito por ESTE proceso
         self._profundidad = 0
         self._clave = self._leer_clave()
+        if self.otro_forms_en_marcha:
+            self.eventos.append({"event": "operaciones_otro_forms_en_marcha"})
         with self._candado():
             self._cargar()
+
+    def soltar(self) -> None:
+        """Forms se cierra de forma ordenada: deja de sostener ``operaciones.vivo``."""
+        fh, self._vivo_fh = self._vivo_fh, None
+        if fh is not None:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    fh.seek(0)
+                    msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+            finally:
+                fh.close()
 
     # ------------------------------------------------------------------ clave de huella
     def _leer_clave(self) -> bytes:
@@ -167,8 +225,9 @@ class RegistroOperaciones:
         self.ops, self.general = doc["operaciones"], doc["general"]
         self._sha_conocido = doc["sha256"]
         cambio = False
+        hay_forms_vivo = self._vivo_fh is None and _otro_forms_vivo(self.dir / VIVO)
         for o in self.ops:
-            if o["estado"] == EN_CURSO:
+            if o["estado"] == EN_CURSO and not hay_forms_vivo:
                 # Forms se cerró con un envío a medias: nunca se da por bueno ni se repite.
                 o.update(estado=INCIERTA, motivo="forms_reiniciado_durante_operacion", actualizada=_ahora())
                 self.eventos.append({"event": "operacion_incierta", "estado": INCIERTA,
@@ -270,6 +329,16 @@ class RegistroOperaciones:
         with self._candado():
             self._recargar()
             return self.general is not None or any(o["estado"] in ABIERTOS for o in self.ops)
+
+    def pide_revision(self) -> bool:
+        """¿Hay algo que una PERSONA debe revisar? Inciertas o revisión general.
+
+        No cuenta la operación ``en_curso`` de este mismo proceso: es la que se está ejecutando ahora (un portal lento
+        puede tardar varios latidos) y todavía no es incierta. Una ``en_curso`` que venga de un Forms anterior ya se
+        convirtió en ``incierta`` al cargar el registro, así que no se pierde."""
+        with self._candado():
+            self._recargar()
+            return self.general is not None or any(o["estado"] == INCIERTA for o in self.ops)
 
     def lista(self, limite: int = 50) -> list[dict]:
         with self._candado():

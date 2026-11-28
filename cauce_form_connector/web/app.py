@@ -79,14 +79,14 @@ class Workspace:
         self.fila_rellenada: Optional[int] = None   # fila del último relleno (para la huella del expediente)
         self.lock = threading.Lock()
         # Bloque C: registro durable de operaciones confirmadas (antes del clic, en disco)
-        self.registro = RegistroOperaciones(settings.data_dir)
+        self.registro = RegistroOperaciones(settings.data_dir, dueno=True)
         for ev in self.registro.eventos:
             self.audit.log(ev["event"], estado=ev.get("estado"), codigo=ev.get("codigo"))
         # Bloque B: diagnóstico de red con Network Engine (opcional)
         self.diag, self.diag_info = crear_diagnostico(
-            settings, hay_inciertas=self.registro.hay_abiertas, al_ver_marca=self.registro.marca_vista_en,
+            settings, hay_inciertas=self.registro.pide_revision, al_ver_marca=self.registro.marca_vista_en,
             al_resolver=self._resuelta_en_ne, al_cambiar=self._diag_cambio)
-        if self.registro.hay_abiertas():
+        if self.registro.pide_revision():
             self.diag.exigir_marca()                 # tras un reinicio, el motor debe volver a saberlo
         self.diag.iniciar()
 
@@ -127,8 +127,9 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         ws.close(cerrar_sesion_ne=False)
         ws.diag.detener(cerrar=False)
         ws.worker.shutdown()
+        ws.registro.soltar()
 
-    app = FastAPI(title="Cauce Universal Form Connector", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Cauce Universal Form Connector", version="0.2.0rc1", lifespan=lifespan)
     app.state.ws = ws
 
     @app.middleware("http")

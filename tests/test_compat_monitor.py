@@ -105,6 +105,10 @@ def test_centro_de_revisiones_de_monitor_y_marca_de_forms_sin_sesion(ne, monitor
     assert esperar(lambda: (d2.latir(obligatorio=True) or True) and d2.estado()["requiere_persona"], 10)
     rc, v = monitor("leer")
     assert _mi_fila(v, puesto.etiqueta)["requiere_persona"] is True
+    # Ya entregada la marca, Forms vuelve a latir «ok / sin operación». Si el operador resolviera ANTES de ese latido
+    # (último informe: error con operación en curso), Network Engine volvería a marcarla: hay que resolver otra vez
+    # (dirección segura). Un operador real llega minutos después; aquí se espera a ese latido.
+    assert esperar(lambda: (d2.latir(obligatorio=True) or True) and ne.sesion(d2.c.session_id)["operation"] == "idle", 10)
     # Revisión local del operador (orden de Forms) + resolución en el motor: todo queda limpio en los tres
     reg.revisar(op["id"], "Comprobado en el portal de laboratorio", op["id"])
     ne.resolver(d2.c.session_id)

@@ -147,6 +147,9 @@ class Medidor(threading.Thread):
                 chromium_rss = 0.0
                 n_chromium = 0
                 for x in arbol:
+                    # El MISMO objeto entre muestras: cpu_percent(None) mide desde la llamada anterior (con un objeto
+                    # nuevo cada vez devuelve siempre 0,0; así salía en la primera medición de jornadas).
+                    x = self._cpu_prev.setdefault(x.pid, x)
                     try:
                         r = x.memory_info().rss
                         c = x.cpu_percent(None)
