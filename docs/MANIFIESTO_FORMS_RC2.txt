@@ -1,12 +1,14 @@
 Manifiesto de la candidata consolidada Cauce Forms 0.2.0rc2
-Manifiesto DEFINITIVO para integrar en E10 (sustituye al anterior de bd5c066)
-Generado: 2026-11-28T07:32:31Z
+Manifiesto DEFINITIVO para integrar en E10 (código e9f6672; sustituye a los de bd5c066 y 08eeaa3)
+Generado: 2026-11-28T08:53:45Z
 Rama: claude/candidata-consolidada
 Base: main @ aa1bb0295b32c17ba0435490678adf1ee54c55a0
 Incluye: PR #5 @ d3b230a9677137aa3321f5f18d9329b8b1f47e9b (contiene #4 @ ff117da71140e263d1a2cf29436ff63b21ad13ce y #3 @ 16d3e874dcd8364b52e11f4fe9b25c5f441ae6de)
          PR #6 @ cd340700fecc65763ef3ad0a8d418c81b7d53bf7 (último commit de código fdd099aeb1dc6ad0d65c29794a83110324f239be)
-Código fijado en: 08eeaa326b46c731f66fc069b2c136809c8054d7  (el commit que añade este manifiesto solo cambia documentación)
+Código fijado en: e9f6672960b4369568221d74b74848357df9d4ad  (el commit que añade este manifiesto solo cambia documentación)
 Commits sobre main:
+  e9f6672 Entrega final rc2: identidad común de expedientes (interfaz y preparar), A5, A6, A7 de E10 y respaldo sin tocar la carpeta elegida
+  fb1171e Manifiesto definitivo (código en 08eeaa3), A1 y contrato E10 documentados
   08eeaa3 A1 de E10: una revisión de red solo anota (nunca cambia ni desbloquea una incierta); contrato E10: local_review, reviews y retry_after_s
   933fe89 Candidata consolidada 0.2.0rc2: informe, matriz, validación, jornadas y manifiesto
   bd5c066 Consolidación 0.2.0rc2: registro de todo envío de la persona, revisiones con resultado, una sola interfaz enviando, respaldo y restauración
@@ -53,7 +55,7 @@ Dependencias externas fijadas (solo lectura):
 
 SHA-256 de cada archivo versionado (salvo documentación y evidencias):
   13d7728d8d732aa25826e93513a2feacf9a83122f37b51d263466cf41948dd31  .gitattributes
-  2c0dda0a49f975be95e153137601a97be63e9f2dbc10c4c14d9edae28bb9d47c  .github/workflows/tests.yml
+  843f828d0b43636abf61f59b4523277fd403b9f79d28771218d0da0da4c34f43  .github/workflows/tests.yml
   5f7baa3d407a269f8f57540c989b9f186a57689b56de5b60374eb17eb6f11872  .gitignore
   1e175b35b013d19d83e144b05e39f6431c65bc8dfb9199e0806d4b7e8c70e854  README.md
   e056c2f59cac2d3436a0b1bfaa656469fb565b786be2350f57fb1bd147b5a1e6  abrir_cauce_forms.bat
@@ -73,33 +75,33 @@ SHA-256 de cada archivo versionado (salvo documentación y evidencias):
   753d23a6c45d29e5e07af4c9491f4847be4466cf5202634404bc1b004e8f78b7  cauce_form_connector/detector.js
   374f847269563313b0c6d3f755d31ce769faf49abdbed6edad4d61d50b1c1dd1  cauce_form_connector/diagnostico_controles.py
   de9d0ec5f86c2474ce052b5af178d1d0e0fe27bbb36f5d7d1b17b074a8880641  cauce_form_connector/engine.py
-  147f5e60f7ef7d19315537d7324449064fceff1f5b967b5f8857aa123107e095  cauce_form_connector/envio.py
+  3ac673efa7c666f4fda6c399783ebbf36b5556bdea0bd89f42d2b554b3bf32d5  cauce_form_connector/envio.py
   bb8e0bd0a9aa3acf3bd0503e9f0be367f545907c726f92ca0a55c7e61dd58a77  cauce_form_connector/esquema_monitor.py
   af5b53213fe3fdfb2dcceccfbebf71cb317aaa98c5e30e66a469acb549dadc10  cauce_form_connector/form_detector.py
   dab12195c51c34d7ada0e5241a2d337049282e635992addc5e45b7830dff0af0  cauce_form_connector/html_analyzer.py
   531616bdb6a8ca3e51357f37a320143abb6b6db913462fb392a0466cdf9d8d57  cauce_form_connector/instrumentation.py
-  64388e6a911ce36099ad5348da0ac4ff4c217160d98dd5421f375088086407c0  cauce_form_connector/integracion.py
+  2b33790e8ab2ba446cfc7914f2c31eff506bd70d6641abbd10a8f6fb4857c693  cauce_form_connector/integracion.py
   0c4d52c4edaeff500f115166521dd7e6d7ee0e552a1ef1995027b224e3ea0b20  cauce_form_connector/lanzador.py
   ed16b74792daabc0b34f7385860b12884fe18f0698b6cca93652a2e43d40c043  cauce_form_connector/listas.py
   1768f4c49f43d06434220daa12094ab9fc45daf63f3fbd5ea3a17c843695a040  cauce_form_connector/matcher.py
   9192265ed3bf8fb97ae5a981dfef769a6e39f9bff8f2b18c8b46f4b4489b6a0c  cauce_form_connector/models.py
-  f1911f90f887be6b6f666f44a3a983330de7ce9df1a98d7baac6fe3551535f21  cauce_form_connector/operaciones.py
+  4cacd04ac58e482bde1f38ed89dc6a7c92fa28c0ab6615ebfeca980d3e201257  cauce_form_connector/operaciones.py
   8c6c8d2f0e628f0caa944dcb8ac0c9f0e8fde952128c93078648962c28a60fe5  cauce_form_connector/page_inspector.py
   b4ad8113dfab582131d981f29ae3345efbfd9b7625b8b0ba6636d925d126eca0  cauce_form_connector/puente_monitor.py
   31b4c45259ca819149ca9ce4e3a803ca4f0234d92de4bbb7fd7e91e39394b9a5  cauce_form_connector/red/PIN.txt
   b4d99c1b022a8c9c37bf890cad1bc5ed3f7178f83f2ef2ea9e622ee9c77dda5c  cauce_form_connector/red/__init__.py
   e348ef594b281646892317a17023250e10018999d02c94146cbebdd1c9af69a8  cauce_form_connector/red/cliente_ne.py
-  93ea6cbd47af42db1b9b725e7fba703ffc3511875a6ea6abce836af675104dc5  cauce_form_connector/red/diagnostico.py
+  36dbc2d9264910f443e296570677eb1267418acc91b5d50089747907b7508cf4  cauce_form_connector/red/diagnostico.py
   85132a6ccd754327c60dd2c0cfe83144869ba2fdf5bc80446bfc95b91b913a88  cauce_form_connector/red/identidad.py
   d163d26b068830c265ebc95bd65956cc6cae7c1a7415227cfe8c15b09cde2ecd  cauce_form_connector/red/montaje.py
-  8c25d56b2f0ddce4b72e7ba52fc9d3bb3f5e17f9cfddb26ec0d839fdc7581fbd  cauce_form_connector/respaldo.py
+  96f3e8de37ba0e040ebbed8492135e61cad19aa0fc8c4c174a3b01c3da615e64  cauce_form_connector/respaldo.py
   99bbbe15f6793874818ec61741dd74572ec30a02048de6958e645f02e875548d  cauce_form_connector/sequential_typer.py
   19959bc04ce63d544b8ae71a897c03713e733e61552432bbc8a4f50fb63452f4  cauce_form_connector/settings.py
   808ee0af10a2a1d5efd710a81331f8ed4b9e0836c896c346bec43fd2c92dd776  cauce_form_connector/signature.py
   25d48c0e1532a3d93628a1668c4421a33bd2b00edfd1e081cdfaf0635d940583  cauce_form_connector/url_policy.py
   71124f445958191c1f1c82cec470018f27b5581967c3b183097a6bfb6aa62980  cauce_form_connector/validator.py
   e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  cauce_form_connector/web/__init__.py
-  cb8f1957499c64b84469d0ca0c04f609d0e4ab42e5d303086372aa13c7feb226  cauce_form_connector/web/app.py
+  636388c76e4499424b5735f1441f99bade7b242e55b520daba65764c5e4a1ab5  cauce_form_connector/web/app.py
   c97735f8cfadc84c1f8cb05b74d5aa1d56fe85c34624fd0eb845ee475682b6e1  cauce_form_connector/web/static/app.js
   b5fffdab25bcf15cbabd8b30414625088b02dde0be6e974e724d604a92bcff93  cauce_form_connector/web/static/index.html
   9bbf402ceb3d4b6d57c047e101d8c992f48d81c44484212e577f4cf381273be1  cauce_form_connector/web/static/styles.css
@@ -140,7 +142,7 @@ SHA-256 de cada archivo versionado (salvo documentación y evidencias):
   65ea0afb64b9f8e5553218463edaae1dfcb4654618a587c2d600aac53926e153  scripts/capturas_rc3.py
   37ea24d46fc68b2c40718de58748632f97f79c9ffa8beb35828e24e980b0dfaf  scripts/demo_lab.py
   9cc53ce513a0cbe0129d5d50fa1acbdb45980cdc7423bac732b3696c4be86cc8  scripts/ejemplo_cauce_monitor.py
-  fb6f1d514dd50f96a27ca909195481dd760bded8e3733240442d8338ced805c6  scripts/jornada_laboratorio.py
+  e1e1798f362a1d08352afb96d14610c1e93f457bc43307e036f032a5d3e6539a  scripts/jornada_laboratorio.py
   fbc5b9c32a1beafc41dfa68870bbc0b3214697ec08b7ae8cc85ea3da6e6e7e32  scripts/paso_09b_nativo.py
   22eacb02f54a183948a61c37682918d155527d9c5da99c30d1ca7c7ceaafd3cf  scripts/preparar_lab_extjs.py
   46f1cddb3b5fd2f23b9fffb4644d101482daed3f4bfa24a19e07b4f541a4b1a7  scripts/recorrido_monitor.py
@@ -163,7 +165,9 @@ SHA-256 de cada archivo versionado (salvo documentación y evidencias):
   2cd0dc4f0a15ec2b361a35e3daeee4668df29a968205c151e4a0d00ca70e53b3  tests/test_envio_protegido.py
   84bec301f8950901510d13cebb1543f85a55b8c6ad094f60fc1454cb6f7f62f9  tests/test_equivalencias.py
   b062e0f548791e0970bf8424a57a2fd49d851f066d60d9d8e5e285af06eaebb3  tests/test_extjs_ocho_campos.py
+  33ce1263cc837501cf470bfb87a5418a8615c17695e201bf7c2f181e298cb924  tests/test_hallazgos_e10.py
   84a710c4cbc5ebd25b831679ade6156f6da504861ac3d0f1176bc23722db0c45  tests/test_html_analyzer.py
+  dc5bf197f48591e9cd405aa80d56c206e8ff37cd3b3f5d55fbaa3a6d0814f0df  tests/test_identidad_comun.py
   cfe4917c7f0faf998d27cf17610937e7409316ec9562f8ecea939cf899434f2d  tests/test_integracion_contrato.py
   bff637d1e3fb36b9930a3809c79d011b17bf8b42f5391b1ffe8d7f54d65cbdf1  tests/test_lab_forms_e2e.py
   ddb7db5c5036ba8824af3cc70d8e17c264f50b650b28281b5669de207e7a0242  tests/test_lanzador_rutas.py
@@ -174,10 +178,11 @@ SHA-256 de cada archivo versionado (salvo documentación y evidencias):
   03b172487a4815b2e239422e88d4eac758e4043e56f6d868fa2f96b4b833c5cf  tests/test_operaciones.py
   01e8f5b9b4ec0a50bf7970bf6e3aa6c83c98ed679e5d6484a201d39b117a4c08  tests/test_puente_monitor.py
   f9955e0760f4c14ea259ea978884ba8fecf39e8e9d6c2201f67733647950dbd1  tests/test_red_cliente_pin.py
-  32f5d6be4372e54d27ceeae0dada7b98a314692a82ea8cbb817daf2c9c9b06cd  tests/test_red_ne_e10.py
+  c7f8dcf813f4f771e458ddb4301905da59293f7f8dfbfbd7143b2faf88a1ccc4  tests/test_red_ne_e10.py
   896733ec9813178ac50f4a6ab4b083a5f18a80472fd145631060139ccfa14541  tests/test_red_ne_rc3.py
   279a24a23edacea4d7ce4140125618793bc715275a71956c3872e9d6767cc208  tests/test_resultado_inequivoco.py
   806fb95e649a7751817ea976ed49f46ffe9be309e23cfd12cf1a25b928b70f54  tests/test_security.py
+  6845086c0795c8e5744541ea8398f4f0685abe801fcd59da5c1f9dcae1ee763e  tests/test_seguridad_final.py
   4015a99fc8cadec50a6be977ecc6fd715aa49a8c7f34c04d38bd0612dcf2b49a  tests/test_sequential_typing.py
   dc2f3e1fd59f1d593f0ca0c34d2744d4658b4ae3d212e62306e66844a8c05908  tests/test_textos_con_lista.py
   fa9aeb33212cfffb40f8a3b84d720607433c1d74316586288277663ae00911e8  tests/test_transformaciones.py

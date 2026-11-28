@@ -1,0 +1,11 @@
+SKIPPED [1] tests/test_extjs_ocho_campos.py:105: falta Ext JS: ejecute python scripts/preparar_lab_extjs.py
+SKIPPED [1] tests/test_extjs_ocho_campos.py:125: falta Ext JS: ejecute python scripts/preparar_lab_extjs.py
+SKIPPED [1] tests/test_extjs_ocho_campos.py:134: falta Ext JS: ejecute python scripts/preparar_lab_extjs.py
+SKIPPED [1] tests/test_extjs_ocho_campos.py:146: falta Ext JS: ejecute python scripts/preparar_lab_extjs.py
+SKIPPED [1] tests/test_extjs_ocho_campos.py:159: falta Ext JS: ejecute python scripts/preparar_lab_extjs.py
+SKIPPED [1] tests/test_extjs_ocho_campos.py:170: falta Ext JS: ejecute python scripts/preparar_lab_extjs.py
+SKIPPED [1] tests/test_operaciones.py:156: permisos POSIX (root ignora 0500)
+SKIPPED [1] tests/test_operaciones.py:289: ACL de Windows
+SKIPPED [1] tests/test_seguridad_final.py:110: ACL de Windows
+SKIPPED [1] tests/test_seguridad_final.py:125: ACL de Windows
+336 passed, 10 skipped in 924.66s (0:15:24)

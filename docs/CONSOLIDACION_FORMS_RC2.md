@@ -1,6 +1,6 @@
 # Candidata consolidada · Cauce Forms 0.2.0rc2
 
-Fecha: 2026-11-28 · Rama `claude/candidata-consolidada` · **commit estable de código `08eeaa3`** · PR #7 en **borrador**, sin fusionar. Nada se fusionó en `main`.
+Fecha: 2026-11-28 · Rama `claude/candidata-consolidada` · **commit DEFINITIVO de código `e9f6672`** (aprobado antes: `08eeaa3`) · PR #7 en **borrador**, sin fusionar. Nada se fusionó en `main`.
 Todo se probó con el portal propio de laboratorio (`lab_portal/`, 127.0.0.1) y datos ficticios. Network Engine y
 Monitor no se modificaron (solo se leen, en commits fijados). Esto **no** es una validación en Windows 11 físico.
 
@@ -186,12 +186,12 @@ Solicitudes (no implementadas en los otros motores):
    portal así Forms sería poco usable. Escrituras a **otros** sitios no se cuentan (un envío a otro dominio no se ve).
 3. **Envíos que no pasan por la red del navegador** (p. ej. `navigator.sendBeacon` puede no pasar por el interceptor;
    WebSocket) no se detectan.
-4. **`preparar` y la interfaz usan huellas distintas** (campos lógicos + formulario frente a columnas de la fila): el
-   mismo expediente enviado por las dos vías no se cruza automáticamente.
-5. **Respaldos sin cifrar** (contienen `huella.key`): medio cifrado obligatorio.
+4. ~~`preparar` y la interfaz usan huellas distintas~~ **Resuelto en la entrega final (§15):** las dos anotan además la
+   identidad común `destino`. Queda un límite: ver §15, «Lo que no cubre».
+5. **Respaldos sin cifrar** (contienen `huella.key`): medio cifrado **obligatorio**. Ver §16.
 6. **Windows 11 físico sin probar:** ACL, DPAPI y lanzadores solo en el runner de GitHub.
 7. **Escala:** > ~50.000 confirmadas, migrar el registro a SQLite.
-8. **PR #8 de Network Engine:** pendiente de la conformidad final de Ronaldo.
+8. ~~PR #8 de Network Engine~~ cerrado con la conformidad de Ronaldo.
 
 ## 10. Evidencia de seguridad
 
@@ -252,5 +252,110 @@ tras el resolve el expediente sigue bloqueado y Forms vuelve a entregar la marca
 | S1 `retry_after_s` | En `409 credential_has_session` Forms espera lo indicado; después la nueva sesión sustituye a la callada y hereda la marca | `test_s1_forms_pierde_su_id_y_recupera_la_sesion_heredando_la_marca` |
 | Cliente | `heartbeat(local_review)` y `reviews()` copiados de `client.py` E10, con huellas en `red/PIN.txt` (`e10-sha256`) | `test_pin_e10_coincide_con_el_motor` |
 
-**Hallazgos A2–A8:** el documento `SOLICITUDES_RONALDO_E10.md` no está en el repositorio de Network Engine ni en la
-carpeta de este proyecto; no se pudieron comprobar uno por uno. Ver el aviso a E10.
+Los hallazgos A2–A7 y D1 se comprobaron uno por uno en §14.
+
+## 14. Matriz A1–A8 de la auditoría E10 (`SOLICITUDES_RONALDO_E10.md`, revisada sobre `e55a45d`)
+
+El documento trae A1–A7 y D1; **no existe un A8**. Cada fila dice si el defecto seguía presente en la candidata
+aprobada (`08eeaa3`), con qué prueba se comprobó y qué se hizo. «Ya resuelto» significa que no se tocó el código.
+
+| Punto | Gravedad | ¿Presente en `08eeaa3`? | Qué se hizo | Prueba |
+|---|---|---|---|---|
+| A1 resolver en NE desbloquea | Alta | No (corregido en `08eeaa3`) | Nada nuevo; se añadió una prueba con revisiones que dicen «confirmado», repetidas y de otra sesión | `test_ninguna_revision_de_red_cambia_ni_desbloquea_una_incierta` (5 variantes), E10 real en `test_red_ne_e10.py` |
+| A2 límite de 500 olvida confirmadas | Alta | No (corregido en rc1: archivo de huellas) | Nada; prueba con el límite real de 500 | `test_a2_tras_501_confirmadas_la_primera_sigue_bloqueando` |
+| A3 envíos fuera del registro | Media | No: en rc2 todo envío de la persona (botón, Intro, JavaScript) queda `incierta` antes de salir | Nada; dos pruebas nuevas | `test_a3_solo_las_pruebas_importan_el_envio_sin_registro`, `test_a3_pagina_que_pide_enviar_desde_el_navegador_y_la_persona_envia_queda_incierta` |
+| A4 regla de etiquetas `\d{7,}` | Baja | Sí, pero no es un defecto | Documentada en §17 (no se pidió cambio) | — |
+| A5 403 `not_session_owner` detiene Forms | Media | **Sí** (la prueba falla con el código de `08eeaa3`: `credencial_incorrecta`) | Se olvida el id de la sesión ajena y se registra una propia, como tras un 404; si el 403 llega con la sesión recién registrada, sí se detiene (sin bucle) | `test_a5_credencial_rotada_con_la_sesion_vieja_viva_no_detiene_forms_y_la_marca_sigue` (E10 real), `test_a5_un_403_con_la_sesion_recien_registrada_si_detiene` |
+| A6 candado sin tope en Windows | Baja | **Sí** (y también en Linux: `flock` bloqueante sin tope) | Espera máxima de 30 s en las dos plataformas; al agotarse, `OSError` y no se envía | `test_a6_si_otro_proceso_retiene_el_candado_no_se_cuelga_y_no_se_envia` (Linux y CI Windows) |
+| A7 jornada no corre en Windows | Baja | **Sí** (`os.killpg`, `SIGKILL`) | `taskkill /T [/F]` en Windows; la jornada corta de la CI se ejecuta ahora también en Windows | `test_a7_la_jornada_termina_el_arbol_de_procesos_en_esta_plataforma` + paso de jornada en la CI de Windows |
+| D1 reintento interno de Chromium | — | Límite conocido, no corregible desde Forms | Nada; la protección es el token del portal | `test_chromium_reintenta_…_el_token_evita_el_duplicado`, `test_limite_portal_sin_idempotencia_…_duplica` |
+
+Que A5 seguía presente se comprobó ejecutando la prueba nueva con el `diagnostico.py` de `08eeaa3`. A6 se dedujo
+leyendo el código; no se dejó colgada una prueba para demostrarlo.
+
+## 15. Identidad común de expedientes (interfaz ↔ `preparar`)
+
+**Riesgo confirmado (alto).** Con el comportamiento de `08eeaa3`, la persona envía un expediente ficticio desde la
+ventana de `preparar` (queda `incierta`), lo carga después en la interfaz con su CSV y pulsa ENVIAR: **Forms lo
+envía (HTTP 200) y el portal lo recibe dos veces**. En la otra dirección, un expediente confirmado con ENVIAR se
+volvía a preparar (se abría el navegador). Causa: cada modalidad tenía su propia huella (fila completa del CSV con
+sus nombres de columna frente a nombres lógicos del perfil de Monitor) y no compartían ningún dato.
+
+**Corrección.** Las dos modalidades anotan además `destino`, que se calcula igual en ambas:
+- formulario de destino: esquema, servidor, puerto y ruta, sin la consulta;
+- por cada campo que se escribe, un HMAC (con `huella.key`) de la **clave del campo en la página** (la que da el
+  detector, la misma en las dos modalidades porque el perfil aprobado se hizo sobre la misma estructura) y su valor.
+
+Dos operaciones son del mismo expediente si van al mismo formulario y los campos escritos por una están todos, con
+el mismo valor, en la otra (una contiene a la otra). Así, si una modalidad escribe campos de más, sigue casando.
+`comprobar` bloquea si casa la huella propia **o** el `destino`; las huellas anteriores se siguen comprobando.
+
+**No guarda datos personales:** solo HMAC truncados de 16 hexadecimales, sin valores, sin nombres de columna ni de
+campo, sin la ruta del formulario en claro. Una prueba busca cada valor y nombre ficticio en `operaciones.json`.
+
+| Comprobación | Resultado | Prueba (`tests/test_identidad_comun.py`) |
+|---|---|---|
+| Interfaz (ENVIAR, confirmada) → `preparar` | Bloqueado sin abrir el navegador, también pidiendo solo una parte de los campos | `test_enviado_con_enviar_en_la_interfaz_preparar_no_lo_vuelve_a_preparar` |
+| Envío directo de la persona en la interfaz → `preparar` | Bloqueado | `test_envio_directo_de_la_persona_en_la_interfaz_bloquea_preparar` |
+| Envío de la persona en `preparar` → interfaz | ENVIAR responde 409 y el portal sigue con 1 recepción | `test_enviado_por_la_persona_en_preparar_la_interfaz_no_lo_vuelve_a_enviar` |
+| Otro expediente ficticio | Sí se prepara / se envía | en las mismas pruebas |
+| Operación archivada (501 cerradas después) | Sigue bloqueando, también tras reiniciar | `test_la_identidad_sobrevive_al_archivo_de_las_cerradas_y_al_reinicio` |
+| Reinicio (otro proceso abre el registro) | Sigue bloqueando por las dos vías | idem y prueba de extremo a extremo |
+| Respaldo → pérdida de la carpeta → restauración | Marca GENERAL; revisada esta, la archivada y la incierta siguen bloqueando | `test_la_identidad_sobrevive_a_respaldar_y_restaurar` |
+| Sin datos personales | Ningún valor ni nombre en el registro | `test_el_registro_no_contiene_datos_personales` |
+
+Con el comportamiento anterior (identidad desactivada), las tres pruebas de extremo a extremo fallan: `preparar`
+abrió el navegador en dos casos y la interfaz envió el duplicado en el tercero.
+
+**Lo que no cubre (riesgo residual, bajo):**
+- Si las dos modalidades escriben conjuntos de campos que no se contienen (cada una tiene un campo que la otra no
+  escribe), no casan.
+- Los valores se comparan literalmente. Si el CSV dice `Alta` y Monitor manda `alta`, o un teléfono va con y sin
+  espacios, no casan. Normalizar valores sería una funcionalidad nueva y podría confundir expedientes distintos.
+- Las operaciones anotadas antes de este cambio no tienen `destino`: solo las protege su huella propia. No hay
+  instalaciones operativas de rc2, así que en la práctica no aplica.
+- Riesgo inverso (conservador): un formulario con un solo campo podría bloquear expedientes distintos que comparten
+  ese valor. Se resuelve con la revisión del operador.
+
+## 16. Seguridad (entrega final)
+
+- **Ninguna resolución administrativa de red desbloquea una incierta.** Las únicas salidas de `incierta` son el acuse
+  del portal propio (`confirmar_por_acuse`, solo contra 127.0.0.1/localhost) y la orden del operador en el puesto
+  (`operaciones revisar --resultado`). Una prueba recorre el código y comprueba que solo `cli.py` llama a `revisar`,
+  solo `envio.py` a `confirmar_por_acuse` y que el paquete `red/` no llama a ninguna transición. Otra prueba manda
+  revisiones que dicen `confirms_receipt: true`, `evidence: portal_receipt`, repetidas y de otra sesión: la operación
+  sigue `incierta` y bloqueando.
+- **Permisos efectivos de Windows** (comprobados con `icacls` en la CI de Windows, que es una máquina virtual):
+  carpeta de estado y carpeta restaurada solo con el usuario y SYSTEM, y el usuario puede seguir usándolas. **Cambio:**
+  antes, `respaldar` quitaba la herencia de la carpeta de destino que elige la persona (podía ser la raíz de una
+  unidad). Ahora protege solo el archivo del respaldo y la carpeta queda como estaba; hay una prueba para ello.
+- **Recuperación de respaldos:** recuperación completa tras perder la carpeta de estado, en Linux y en Windows.
+- **Los respaldos contienen `huella.key` y requieren almacenamiento cifrado.** `estado respaldar` lo dice en la
+  salida (`aviso`) y por la salida de errores. Use BitLocker, BitLocker To Go o equivalente y acceso restringido. Con
+  esa clave y el registro, quien tenga el respaldo puede comprobar si un expediente concreto se envió, adivinando sus
+  valores. No puede leerlos, porque no están guardados.
+
+## 17. Cambios de contrato
+
+- **`cauce.conector.v1` (Monitor): ninguno.** La identidad común se calcula con lo que ya trae la solicitud y el
+  perfil aprobado (clave de campo de la página → valor). No hace falta ningún campo nuevo.
+- **Registro local de Forms** (`operaciones.json`, interno): nuevo campo `destino` en cada operación, y el archivo
+  de huellas acepta también claves `d_…`. Un Forms anterior a esta versión consideraría dañado un registro con esos
+  campos y entraría en revisión general. Ese es el lado seguro, y no hay instalaciones de rc2 que migrar.
+- **Network Engine:** sin cambios. Forms aplica el contrato E10 y, con A5, trata `403 not_session_owner` igual que
+  `404 unknown_session`.
+- **Regla de etiquetas del puesto (A4), queda documentada:** `^[a-z0-9][a-z0-9_-]{1,31}$`. Se rechazan las que
+  contengan `@` o 7 o más dígitos seguidos, porque podrían ser un correo o un teléfono.
+- **Opcional, no necesario ahora:** si Monitor mandara una referencia opaca del expediente (`expediente_ref`), la
+  identidad podría ser exacta y no depender de los campos escritos. Sería una funcionalidad nueva de las dos partes,
+  y no se implementó.
+
+## 18. Validación de la entrega final (`e9f6672`)
+
+- Suite local completa: **336 superadas, 10 omitidas** (las de Windows, permisos POSIX como root y Ext JS, que no
+  está descargado en este equipo). Resumen en `evidence/rc2/pytest_local_final.txt`.
+- CI 46126119331 en `e9f6672`: **Linux 343 superadas y Windows 343 superadas** (3 omitidas en cada una, las de la
+  otra plataforma). En Windows se ejecutaron las pruebas de ACL y la jornada corta de laboratorio (6 expedientes,
+  `"ok": true`), que antes no podía ejecutarse allí. El instalador `.bat` también pasó.
+- Es una máquina virtual de GitHub, no un Windows 11 físico. La prueba de 1 h no se repitió.
+
