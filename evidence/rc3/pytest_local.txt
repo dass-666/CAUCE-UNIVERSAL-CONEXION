@@ -1,0 +1,7 @@
+........................................................................ [ 37%]
+....................s..................................s................ [ 75%]
+...............................................                          [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/test_integracion_contrato.py:380: defina MONITOR_REPO con una copia de Cauce-monitor-engine en el commit 9e7f88d
+SKIPPED [1] tests/test_operaciones.py:155: permisos POSIX (root ignora 0500)
+189 passed, 2 skipped in 414.67s (0:06:54)
