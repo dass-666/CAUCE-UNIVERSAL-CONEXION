@@ -1,6 +1,6 @@
 # Candidata consolidada · Cauce Forms 0.2.0rc2
 
-Fecha: 2026-11-28 · Rama `claude/candidata-consolidada` · PR en **borrador**, sin fusionar. Nada se fusionó en `main`.
+Fecha: 2026-11-28 · Rama `claude/candidata-consolidada` · **commit estable de código `08eeaa3`** · PR #7 en **borrador**, sin fusionar. Nada se fusionó en `main`.
 Todo se probó con el portal propio de laboratorio (`lab_portal/`, 127.0.0.1) y datos ficticios. Network Engine y
 Monitor no se modificaron (solo se leen, en commits fijados). Esto **no** es una validación en Windows 11 físico.
 
@@ -71,7 +71,7 @@ Las revisiones antiguas sin resultado se tratan como `sin_determinar` (siguen bl
 |---|---|---|
 | Confirmadas | Bloquean siempre | `test_confirmada_tambien_bloquea…` |
 | Archivadas (> 500 cerradas) | Siguen bloqueando; ahora también las revisadas que bloquean | `test_confirmadas_que_salen_de_la_lista_siguen_bloqueando`, `test_revisada_que_bloquea_tambien_se_archiva` |
-| Inciertas | Bloquean hasta revisión con resultado | `test_reinicio_convierte_en_curso_en_incierta…`, §3 |
+| Inciertas | Bloquean hasta revisión **en el puesto** con resultado; una revisión de red solo se anota (§13) | `test_reinicio_convierte_en_curso_en_incierta…`, §3 |
 | Pérdida de `huella.key` | Revisión `GENERAL`, nada se envía | `test_perder_huella_key_no_desactiva_en_silencio_la_proteccion` |
 | Corrupción de archivos | `.bak` + revisión `GENERAL`; los dos dañados: todo bloqueado | `test_archivo_danado…`, `test_archivo_y_respaldo_danados…`, `test_editar_el_archivo_a_mano…` |
 | Restauración desde respaldos | Lo posterior al respaldo sigue bloqueando; siempre `GENERAL` | §5 |
@@ -130,6 +130,8 @@ Pruebas: `test_respaldo_contiene_lo_necesario_sin_secretos_y_se_verifica`, `test
 
 | Ejecución | Dónde | Resultado |
 |---|---|---|
+| **Commit estable definitivo `08eeaa3`** (incluye A1 y E10): suite completa | contenedor Linux, con RC3 y E10 reales | **318 superadas**, 2 omitidas |
+| **CI run `46120201645` sobre `08eeaa3`** · `ubuntu-latest` / `windows-latest` / `windows-bat` | GitHub | **319 superadas** (1 omitida) / **317 superadas** (3 omitidas) / verde; jornada corta `ok` |
 | Suite completa sobre el merge (#5 + #6, sin cambios nuevos) | contenedor Linux | **289 superadas**, 2 omitidas |
 | Suite completa de la candidata (`bd5c066`), incluye las 23 pruebas nuevas | contenedor Linux | **312 superadas**, 2 omitidas (permisos POSIX como root; ACL de Windows) · `evidence/rc2/pytest_local.txt` |
 | CI run `46116869232` sobre `bd5c066` · `ubuntu-latest` | GitHub | **313 superadas**, 1 omitida (ACL de Windows); jornada corta `ok` |
@@ -139,7 +141,7 @@ Pruebas: `test_respaldo_contiene_lo_necesario_sin_secretos_y_se_verifica`, `test
 | Compatibilidad con Monitor `7b92446` (su código real de lectura y revisiones) y contrato `9e7f88d` | Linux y CI | `test_compat_monitor.py` y `test_respuestas_aceptadas_por_el_registro_de_monitor` en verde |
 | Navegador real | Chromium de Playwright, sin ventana, contra el portal propio | Todas las pruebas `browser` (envío protegido, envíos de la persona, `preparar`, Ext JS) |
 
-Jornadas simuladas sobre `bd5c066` (`evidence/rc2/jornadas/`, 11,9 min, procesos reales: Forms, Network Engine RC3 y
+Jornadas simuladas sobre `bd5c066` (los cambios de `08eeaa3` no alteran lo que se envía a RC3; en `08eeaa3` solo se repitió la jornada corta del CI) (`evidence/rc2/jornadas/`, 11,9 min, procesos reales: Forms, Network Engine RC3 y
 portal ficticio; red simulada):
 
 | Jornada | Fallos provocados | Recibidos | POST vistos | **Duplicados** | Confirmadas | Inciertas | Rechazadas | Bloqueos correctos (409) |
@@ -166,7 +168,8 @@ Cambios de comportamiento que debe conocer:
    cuando el expediente tiene una operación que bloquea en Forms (stderr: `OPERACION_PREVIA <codigo>`).
 2. `preparar` escribe en la carpeta de datos de Forms (`CAUCE_FORMS_DATA_DIR`, por defecto `state`) solo huella HMAC e
    ids opacos; stderr añade `OPERACION_REGISTRADA op_…` o `OPERACION_NO_REGISTRADA`.
-3. Network Engine: resolver la marca quita la alerta de Forms pero no desbloquea el expediente.
+3. Network Engine: resolver la marca **solo se anota** en Forms (`revision_red`); la operación sigue incierta, sigue
+   bloqueando y la alerta no se quita hasta la revisión en el puesto (§13, A1).
 
 Solicitudes (no implementadas en los otros motores):
 
@@ -222,3 +225,32 @@ revoca en Network Engine).
 
 `docs/MANIFIESTO_FORMS_RC2.txt`: commits sobre `main`, dependencias fijadas y SHA-256 de cada archivo de código,
 laboratorio, pruebas y CI.
+
+## 13. A1 de E10 y contrato de sesiones E10 (Network Engine PR #16, `4f223a7`)
+
+**A1 (gravedad alta): «resolver una marca de red en Network Engine convierte una operación incierta en revisada y
+permite repetirla».**
+
+| Versión de Forms | Resultado de la misma comprobación (incierta → marca vista → resolve en NE → ¿se puede enviar?) |
+|---|---|
+| `e55a45d` | **Presente**: pasa a `revisada` y el expediente se puede volver a enviar |
+| `bd5c066` (0.2.0rc2 inicial) | Ya no permitía reenviar (`expediente_revisada`), pero aún cambiaba el estado a `revisada` y quitaba la alerta: el puesto habría declarado «nada pendiente» al motor |
+| `08eeaa3` (definitiva) | **Resuelto del todo**: la revisión de red solo añade `revision_red` (id `rv_…`, huella de la nota, `confirma_recepcion: false`). La operación sigue `incierta`, sigue pidiendo revisión y bloqueando. Solo la revisión en el puesto (`operaciones revisar --resultado`) o un acuse verificable la cierran |
+
+Pruebas: `test_a1_resolver_la_marca_en_network_engine_solo_anota` (registro, incluso si el motor dijera
+`confirms_receipt: true`), `test_operador_resuelve_en_ne_y_forms_lo_ve_en_la_misma_sesion` (Network Engine RC3 real:
+tras el resolve el expediente sigue bloqueado y Forms vuelve a entregar la marca) y
+`test_a1_con_e10_ni_siquiera_un_resolve_aceptado_desbloquea` (E10 real).
+
+**Contrato E10 integrado** (sin debilitar la protección local; con RC3 todo sigue igual):
+
+| E10 | En Forms | Prueba (motor E10 real) |
+|---|---|---|
+| Latido con `local_review` | `pending` si el registro tiene inciertas o revisión general; `none` si no. Solo se envía si la vista de la sesión trae `local_review` (RC3 rechaza campos desconocidos con 400; comprobado que a RC3 no se le envía) | `test_forms_declara_local_review_pendiente_y_el_motor_no_deja_cerrar_la_marca` |
+| `409 condition_persists` al resolver | Consecuencia: el operador no puede cerrar la marca mientras el puesto tenga inciertas | idem |
+| `GET /sessions/{id}/reviews` | Se consulta al ver una resolución, solo para anotarla; se guarda id y huella de la nota, nunca la nota | `test_revision_en_el_puesto_y_despues_en_el_motor_queda_limpio_y_la_revision_de_red_no_confirma` |
+| S1 `retry_after_s` | En `409 credential_has_session` Forms espera lo indicado; después la nueva sesión sustituye a la callada y hereda la marca | `test_s1_forms_pierde_su_id_y_recupera_la_sesion_heredando_la_marca` |
+| Cliente | `heartbeat(local_review)` y `reviews()` copiados de `client.py` E10, con huellas en `red/PIN.txt` (`e10-sha256`) | `test_pin_e10_coincide_con_el_motor` |
+
+**Hallazgos A2–A8:** el documento `SOLICITUDES_RONALDO_E10.md` no está en el repositorio de Network Engine ni en la
+carpeta de este proyecto; no se pudieron comprobar uno por uno. Ver el aviso a E10.
