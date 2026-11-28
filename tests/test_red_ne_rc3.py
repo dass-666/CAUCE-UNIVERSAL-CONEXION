@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from cauce_form_connector.operaciones import INCIERTA, REVISADA, RegistroOperaciones
+from cauce_form_connector.operaciones import INCIERTA, REVISADA, OperacionBloqueada, RegistroOperaciones
 from cauce_form_connector.red import diagnostico as D
 from cauce_form_connector.red.cliente_ne import CauceSessionClient, read_secret
 from cauce_form_connector.red.diagnostico import DiagnosticoRed
@@ -228,10 +228,23 @@ def test_operador_resuelve_en_ne_y_forms_lo_ve_en_la_misma_sesion(ne, tmp_path):
     d.operacion_fin(resultado_seguro=False)
     assert esperar(lambda: (d.latir(obligatorio=True) or True) and d.estado()["requiere_persona"], 10)
     assert reg.get(op["id"])["marca_ne"] == d.c.session_id
+    assert esperar(lambda: (d.latir(obligatorio=True) or True) and ne.sesion(d.c.session_id)["operation"] == "idle", 10)
     ne.resolver(d.c.session_id)                        # el OPERADOR, con su credencial administrativa
+    assert esperar(lambda: (d.latir(obligatorio=True) or True) and reg.get(op["id"]).get("revision_red"), 10)
+    # A1 (E10): la resolución de red solo se ANOTA. La operación sigue incierta y bloqueando, y Forms vuelve a
+    # entregar la marca al motor: la alerta no desaparece hasta la revisión en el puesto.
+    o = reg.get(op["id"])
+    assert o["estado"] == INCIERTA and o["revision_red"]["por"] == "operador_network_engine"
+    with pytest.raises(OperacionBloqueada):
+        reg.comprobar("h_r")
+    assert esperar(lambda: (d.latir(obligatorio=True) or True) and ne.sesion(d.c.session_id)["requires_human"], 10)
+    assert d.e10 is False and all("local_review" not in (b or {}) for _, _, b in d.c.enviados)   # RC3: no se envía
+    reg.revisar(op["id"], "comprobado en el portal: no llegó", op["id"], resultado="no_recibido")
+    assert esperar(lambda: (d.latir(obligatorio=True) or True) and ne.sesion(d.c.session_id)["operation"] == "idle", 10)
+    ne.resolver(d.c.session_id)
     assert esperar(lambda: (d.latir(obligatorio=True) or True) and not d.estado()["requiere_persona"], 10)
-    assert reg.get(op["id"])["estado"] == REVISADA
-    assert reg.get(op["id"])["revision"]["por"] == "operador_network_engine"
+    time.sleep(2.5)
+    assert d.latir(obligatorio=True) and not d.estado()["requiere_persona"]      # ya no se vuelve a marcar
 
 
 def test_forms_no_puede_resolver_marcas(ne, tmp_path):

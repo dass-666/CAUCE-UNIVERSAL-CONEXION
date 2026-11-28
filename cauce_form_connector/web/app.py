@@ -96,8 +96,9 @@ class Workspace:
         if self.session is not None and self.session.loaded:
             self.session.bombear()
 
-    def _resuelta_en_ne(self, sid: str) -> None:
-        ids = self.registro.resuelta_por_operador_ne(sid)
+    def _resuelta_en_ne(self, sid: str, revision: Optional[dict] = None) -> None:
+        # Solo se anota: las operaciones siguen inciertas y bloqueadas hasta la revisión en el puesto (A1 de E10)
+        ids = self.registro.resuelta_por_operador_ne(sid, revision)
         self.audit.log("ne_marca_resuelta_por_operador", count=len(ids))
 
     def _diag_cambio(self, e: dict) -> None:

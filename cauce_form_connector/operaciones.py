@@ -7,8 +7,10 @@ Reglas (todas con pruebas en ``tests/test_operaciones.py`` y ``tests/test_envio_
 2. Nada se reenvía solo. Ningún código de Forms vuelve a pulsar por su cuenta.
 3. Resultado desconocido → ``incierta``. Solo dejan de estar abiertas por EVIDENCIA o por una PERSONA:
    - ``confirmada``: el portal propio de laboratorio confirmó por su API el acuse (folio) de ESE envío;
-   - ``revisada``: un operador la revisó (``cauce-forms operaciones revisar`` con nota y confirmación escrita), o
-     Forms observó, en la MISMA sesión de Network Engine, que el operador resolvió la marca (``resolve``).
+   - ``revisada``: un operador la revisó EN EL PUESTO (``cauce-forms operaciones revisar`` con nota, resultado y
+     confirmación escrita).
+   Una revisión de red en Network Engine (``resolve`` de la marca o ``GET /sessions/{id}/reviews`` de E10) solo AÑADE
+   información (``revision_red``): nunca cambia el estado ni desbloquea (defecto A1 de E10).
    Recuperar internet, reiniciar, cerrar la sesión, revocar la credencial o que el motor «olvide» la marca NO cuentan.
 4. Un reinicio de Forms convierte toda operación ``en_curso`` en ``incierta`` (``forms_reiniciado_durante_operacion``).
 5. Archivo dañado: se usa la copia ``.bak`` y TODO lo abierto pasa a revisión; si tampoco vale, se aparta el archivo
@@ -57,7 +59,7 @@ MAX_CERRADAS = 500                                    # las abiertas nunca se de
 
 CAMPOS = {"id", "creada", "actualizada", "estado", "motivo", "huella", "origen", "token_portal", "folio",
           "sesion_ne", "marca_ne", "revision", "aviso_en_curso", "envio_observado", "api_acuse",
-          "posts_vistos", "ref_solicitud"}
+          "posts_vistos", "ref_solicitud", "revision_red"}
 RESULTADOS_REVISION = ("recibido", "no_recibido", "sin_determinar")
 _SOL_RE = re.compile(r"^sol_[0-9a-f]{16,32}$")
 _ID_RE = re.compile(r"^op_[0-9a-f]{12}$")
@@ -584,16 +586,24 @@ class RegistroOperaciones:
             if cambio:
                 self._guardar_sin_lanzar()
 
-    def resuelta_por_operador_ne(self, sid: str) -> list[str]:
-        """El operador resolvió la marca de la sesión ``sid`` en Network Engine (señal POSITIVA, misma sesión)."""
+    def resuelta_por_operador_ne(self, sid: str, revision: Optional[dict] = None) -> list[str]:
+        """El operador resolvió la marca de la sesión ``sid`` en Network Engine.
+
+        SOLO se anota (``revision_red``). La operación sigue ``incierta`` y bloqueando: una revisión de red no es un
+        acuse del portal (contrato E10: ``confirms_receipt: false``). Antes (e55a45d) pasaba a ``revisada`` y el
+        expediente se podía reenviar: duplicado reproducido por E10 (A1). Solo la revisión en el puesto la cierra."""
+        info = {"en": _ahora(), "por": "operador_network_engine", "confirma_recepcion": False}
+        if isinstance(revision, dict):
+            if re.fullmatch(r"rv_[0-9a-f]{12}", str(revision.get("id", ""))):
+                info["id"] = revision["id"]
+            if re.fullmatch(r"[0-9a-f]{16}", str(revision.get("note_sha256") or "")):
+                info["nota_sha256"] = revision["note_sha256"]
         out = []
         with self._candado():
             self._recargar()
             for o in self.ops:
-                if o["estado"] == INCIERTA and o.get("marca_ne") == sid:
-                    o.update(estado=REVISADA, actualizada=_ahora(),
-                             revision={"por": "operador_network_engine", "nota": "marca resuelta en Network Engine",
-                                       "en": _ahora(), "resultado": "sin_determinar"})
+                if o["estado"] == INCIERTA and o.get("marca_ne") == sid and o.get("revision_red") is None:
+                    o.update(revision_red=dict(info), actualizada=_ahora())
                     out.append(o["id"])
             if out:
                 self._guardar_sin_lanzar()

@@ -12,7 +12,12 @@ diferencias, todas cubiertas por pruebas:
    (el motor marca ``requires_human``) hasta que el motor confirme la marca, aunque esté apagado horas.
 5. ``puesto.json`` recuerda el id de sesión: tras reiniciar Forms se sigue con el mismo id (si no, 409).
 6. La marca «revisar a mano» vista una vez no se olvida en pantalla por un 401, 403, 429, motor apagado o cierre.
-7. Forms NUNCA llama a ``resolve``: solo observa, en la MISMA sesión, que el operador la resolvió.
+7. Forms NUNCA llama a ``resolve``: solo observa, en la MISMA sesión, que el operador la resolvió. Esa resolución
+   solo se ANOTA en el registro local (``revision_red``); nunca cierra ni desbloquea una operación (A1 de E10).
+8. Con Network Engine E10 (la vista de la sesión trae ``local_review``), cada latido declara ``local_review``:
+   ``pending`` si el registro local tiene algo sin revisar, ``none`` si no. Así el motor no deja cerrar la marca
+   mientras el puesto tenga operaciones inciertas (``409 condition_persists``). Con RC3 no se envía (lo rechazaría).
+   Al ver una resolución se consultan las revisiones (``GET /sessions/{id}/reviews``) solo para anotarlas.
 
 Estados del motor que ve la persona (``motor``):
 ``no_configurado`` · ``conectado`` · ``no_disponible`` (sin diagnóstico; NO significa sin internet) ·
@@ -89,6 +94,9 @@ class DiagnosticoRed:
         self._marca_por_entregar = False
         self._navegador_ok, self._navegador_codigo = True, None
         self._rh_visto_en: Optional[str] = None  # id de sesión en la que se vio requires_human
+        self.e10: Optional[bool] = None          # el motor admite local_review y reviews (E10); None = aún no se sabe
+        self.local_review_enviado: Optional[str] = None
+        self.ultima_revision_red: Optional[dict] = None
         self.avisos_no_entregados = 0
         self.latidos = 0
         self.ultima_respuesta: Optional[float] = None
@@ -261,7 +269,14 @@ class DiagnosticoRed:
                 time.sleep(INTERVALO_MIN_S)
                 self._ultimo_envio = self.reloj()
                 ok, codigo, op = self._cuerpo()
-            v = self.c.heartbeat(ok, codigo, op, timeout=timeout)
+                if isinstance(v, dict) and self.e10 is None:
+                    self.e10 = "local_review" in v
+            lr = self._local_review() if self.e10 else None
+            if lr is None:
+                v = self.c.heartbeat(ok, codigo, op, timeout=timeout)
+            else:
+                v = self.c.heartbeat(ok, codigo, op, timeout=timeout, local_review=lr)
+            self.local_review_enviado = lr
         except CauceAPIError as e:
             return self._error_api(e, timeout)
         except (OSError, ValueError) as e:      # motor apagado, rechazo, tiempo agotado, JSON ilegible
@@ -271,7 +286,32 @@ class DiagnosticoRed:
         self._desde_vista(v, op)
         return True
 
+    def _local_review(self) -> str:
+        if self.hay_inciertas is None:
+            return "none"
+        try:
+            return "pending" if self.hay_inciertas() else "none"
+        except Exception:  # noqa: BLE001
+            return "pending"                     # si no se puede leer el registro, se declara pendiente
+
+    def _revision_de(self, sid: str) -> Optional[dict]:
+        """E10: la revisión administrativa más reciente de la sesión ``sid``. Solo información (nunca un acuse)."""
+        if not self.e10:
+            return None
+        try:
+            out = self.c.reviews(timeout=AVISO_MAX_S)
+        except Exception:  # noqa: BLE001
+            return None
+        for r in (out or {}).get("reviews") or []:
+            if isinstance(r, dict) and r.get("session_id") == sid:
+                r = {k: r.get(k) for k in ("id", "kind", "reason", "note_sha256", "confirms_receipt", "evidence")}
+                self.ultima_revision_red = r
+                return r
+        return None
+
     def _desde_vista(self, v: dict, op_enviada: str) -> None:
+        if self.e10 is None:
+            self.e10 = "local_review" in v
         rh = bool(v.get("requires_human"))
         sid = v.get("id")
         if rh:
@@ -294,8 +334,12 @@ class DiagnosticoRed:
         if resuelta:
             self._rh_visto_en = None
             if self.al_resolver:
+                rev = self._revision_de(sid) if sid else None
                 try:
-                    self.al_resolver(sid)
+                    if rev is None:
+                        self.al_resolver(sid)
+                    else:
+                        self.al_resolver(sid, rev)
                 except Exception:  # noqa: BLE001
                     pass
         # Si el motor no tiene la marca (nueva sesión tras 404, reinicio sin persistencia, o nunca recibió «en curso»)
@@ -326,6 +370,10 @@ class DiagnosticoRed:
             self._espera_hasta = self.reloj() + PAUSA_429_S
             self._fijar(motor=MOTOR_LIMITADO, codigo=e.code)
         elif e.status == 409 and e.code == "credential_has_session":
+            # E10 S1: si la sesión anterior (la que perdió su id) calla todo su plazo, el motor deja que esta la
+            # sustituya y hereda la marca. Se espera lo que indique el motor, sin insistir antes.
+            if getattr(e, "retry_after_s", None) is not None:
+                self._espera_hasta = self.reloj() + min(60.0, float(e.retry_after_s) + 0.5)
             self._fijar(motor=MOTOR_SESION_OCUPADA, codigo=e.code)
         else:                                    # 5xx (p. ej. 503 credentials_locked) u otro: sin información
             self._fijar(motor=MOTOR_NO_DISPONIBLE, codigo=e.code)

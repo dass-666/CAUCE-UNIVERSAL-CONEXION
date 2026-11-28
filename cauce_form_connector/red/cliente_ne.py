@@ -33,9 +33,11 @@ _MAGIC_PLAIN = b"CAUCE-PLAIN1\n"
 
 
 class CauceAPIError(Exception):
-    def __init__(self, status: int, code: str, message: str = ""):
+    def __init__(self, status: int, code: str, message: str = "", retry_after_s: Optional[float] = None):
         super().__init__(f"{status} {code}")
         self.status, self.code = status, code
+        # E10 S1: en 409 credential_has_session el motor dice cuánto esperar (solo el número; nada más se guarda)
+        self.retry_after_s = retry_after_s
         # El mensaje del motor no se guarda: podría acabar en un registro de Forms. Basta con estado y código.
         self.message = ""
 
@@ -111,7 +113,10 @@ class _Local:
                 err = json.loads(e.read().decode("utf-8")).get("error", {})
             except Exception:  # noqa: BLE001
                 err = {}
-            raise CauceAPIError(e.code, str(err.get("code", "http_error"))[:64]) from None
+            det = err.get("details") if isinstance(err.get("details"), dict) else {}
+            ra = det.get("retry_after_s")
+            ra = float(ra) if isinstance(ra, (int, float)) and not isinstance(ra, bool) and 0 <= ra <= 3600 else None
+            raise CauceAPIError(e.code, str(err.get("code", "http_error"))[:64], retry_after_s=ra) from None
 
 
 class CauceSessionClient:
@@ -145,13 +150,20 @@ class CauceSessionClient:
         return self.session_id
 
     def heartbeat(self, ok: bool = True, error_code: Optional[str] = None, operation: Optional[str] = None,
-                  timeout: Optional[float] = None) -> dict:
+                  timeout: Optional[float] = None, local_review: Optional[str] = None) -> dict:
         body: dict[str, Any] = {"status": "ok" if ok else "error"}
         if not ok:
             body["error_code"] = error_code or "other"
         if operation is not None:
             body["operation"] = operation          # "idle" | "in_progress"
+        if local_review is not None:
+            body["local_review"] = local_review    # E10: "none" | "pending" (operaciones locales sin revisar)
         return self._c.call("POST", f"/sessions/{self._sid()}/heartbeat", body, timeout=timeout)
+
+    def reviews(self, timeout: Optional[float] = None) -> dict:
+        """E10 S3: revisiones administrativas de las marcas de esta credencial/etiqueta. Solo informativo:
+        ``confirms_receipt`` es siempre False; nunca desbloquea ni confirma una operación local."""
+        return self._c.call("GET", f"/sessions/{self._sid()}/reviews", timeout=timeout)
 
     def get(self) -> dict:
         return self._c.call("GET", f"/sessions/{self._sid()}")

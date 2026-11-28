@@ -51,14 +51,24 @@ def test_revisar_como_recibido_bloquea_para_siempre(tmp_path):
         reg.revisar(op["id"], "cambio de opinión", op["id"], resultado="no_recibido")
 
 
-def test_resolver_la_marca_en_network_engine_no_desbloquea_el_expediente(tmp_path):
+def test_a1_resolver_la_marca_en_network_engine_solo_anota(tmp_path):
+    """A1 (E10): en e55a45d resolver la marca de red convertía la incierta en revisada y el expediente se podía
+    reenviar (duplicado reproducido). Ahora la revisión de red solo AÑADE información: sigue incierta, sigue pidiendo
+    revisión en el puesto y sigue bloqueando."""
     reg = RegistroOperaciones(tmp_path)
     op = reg.registrar_envio_humano(H1, "lab")
     reg.marca_vista_en("bs_" + "a" * 12)
-    assert reg.resuelta_por_operador_ne("bs_" + "a" * 12) == [op["id"]]
-    assert not reg.pide_revision()
-    with pytest.raises(OperacionBloqueada):
+    rev = {"id": "rv_" + "b" * 12, "note_sha256": "c" * 16, "confirms_receipt": True}   # aunque dijera que sí
+    assert reg.resuelta_por_operador_ne("bs_" + "a" * 12, rev) == [op["id"]]
+    o = reg.get(op["id"])
+    assert o["estado"] == INCIERTA and reg.pide_revision()
+    assert o["revision_red"]["id"] == rev["id"] and o["revision_red"]["confirma_recepcion"] is False
+    with pytest.raises(OperacionBloqueada) as e:
         reg.comprobar(H1)
+    assert e.value.codigo == "expediente_incierta"
+    assert reg.resuelta_por_operador_ne("bs_" + "a" * 12) == []      # una segunda resolución no cambia nada
+    reg.revisar(op["id"], "comprobado en el portal: no llegó", op["id"], resultado="no_recibido")
+    reg.comprobar(H1)                                                  # solo la revisión en el puesto desbloquea
 
 
 def test_revision_antigua_sin_resultado_sigue_bloqueando(tmp_path):

@@ -23,6 +23,9 @@ import pytest
 from cauce_form_connector.red.cliente_ne import read_secret
 
 NE_REPO = os.environ.get("CAUCE_NE_REPO", "")
+# Network Engine E10 (PR #16, laboratorio): opcional, solo para las pruebas del contrato E10 (local_review, reviews)
+NE_E10_REPO = os.environ.get("CAUCE_NE_E10_REPO", "")
+E10 = "4f223a7d366a362fbdd64db4ae9a94bf2b63e414"
 RC3 = "f93dd58eeddc1cc3032711bb0b6e378708063d41"
 necesita_ne = pytest.mark.skipif(not (NE_REPO and Path(NE_REPO, "cauce", "sessions.py").exists()),
                                  reason="CAUCE_NE_REPO no apunta a una copia de Network Engine RC3")
@@ -43,7 +46,8 @@ def commit_ne() -> str:
 
 
 class MotorNE:
-    def __init__(self, carpeta: Path, port: Optional[int] = None, persist: bool = True):
+    def __init__(self, carpeta: Path, port: Optional[int] = None, persist: bool = True, repo: Optional[str] = None):
+        self.repo = repo or NE_REPO
         self.dir = Path(carpeta)
         self.data = self.dir / "datos-ne"
         self.port = port or puerto_libre()
@@ -64,7 +68,7 @@ class MotorNE:
         if tok.exists():
             tok.unlink()                       # el motor lo reescribe al estar listo
         self.proc = subprocess.Popen([sys.executable, "-m", "cauce", "--config", str(self.cfg), "sim", "--port",
-                                      str(self.port)], cwd=NE_REPO, stdout=open(self.log, "a"),
+                                      str(self.port)], cwd=self.repo, stdout=open(self.log, "a"),
                                      stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                      env={k: v for k, v in os.environ.items() if not k.startswith("CAUCE_")}
                                      | {"PYTHONUNBUFFERED": "1"})
@@ -124,7 +128,7 @@ class MotorNE:
         """Crea una credencial con la orden OFICIAL y la guarda en un archivo protegido. Devuelve (id, ruta)."""
         ruta = self.dir / f"{nombre}.token"
         r = subprocess.run([sys.executable, "-m", "cauce", "--config", str(self.cfg), "token", "create", "--name", nombre,
-                            "--scope", ambito, "--out", str(ruta)], cwd=NE_REPO, capture_output=True, text=True,
+                            "--scope", ambito, "--out", str(ruta)], cwd=self.repo, capture_output=True, text=True,
                            env={k: v for k, v in os.environ.items() if not k.startswith("CAUCE_")})
         assert r.returncode == 0, r.stderr + r.stdout
         tid = r.stdout.split("Credencial ")[1].split(" ")[0]
@@ -144,9 +148,9 @@ class MotorNE:
     def resumen(self) -> dict:
         return self.llamar("GET", "/status/sessions")[1] or {}
 
-    def resolver(self, sid: str) -> dict:
-        st, v = self.llamar("POST", f"/sessions/{sid}/resolve", {})
-        assert st == 200, (st, v)
+    def resolver(self, sid: str, esperado: int = 200, nota: Optional[str] = None) -> dict:
+        st, v = self.llamar("POST", f"/sessions/{sid}/resolve", {"note": nota} if nota else {})
+        assert st == esperado, (st, v)
         return v
 
 

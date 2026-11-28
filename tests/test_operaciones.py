@@ -149,7 +149,8 @@ def test_resolucion_en_ne_solo_con_senal_positiva_de_la_misma_sesion(tmp_path):
     r.marca_vista_en("bs_0123456789ab")
     assert r.resuelta_por_operador_ne("bs_ffffffffffff") == []      # otra sesión no la resuelve
     assert r.resuelta_por_operador_ne("bs_0123456789ab") == [op["id"]]
-    assert r.get(op["id"])["estado"] == REVISADA
+    o = r.get(op["id"])                                              # A1 (E10): solo se anota, no cambia de estado
+    assert o["estado"] == INCIERTA and o["revision_red"]["confirma_recepcion"] is False
 
 
 @pytest.mark.skipif(sys.platform == "win32" or os.geteuid() == 0, reason="permisos POSIX (root ignora 0500)")

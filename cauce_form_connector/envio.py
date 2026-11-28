@@ -256,7 +256,7 @@ def _publica(o: dict) -> dict:
     """Vista de una operación para la interfaz (sin huella ni token)."""
     return {k: o.get(k) for k in ("id", "creada", "actualizada", "estado", "motivo", "origen", "folio", "sesion_ne",
                                   "aviso_en_curso", "envio_observado", "posts_vistos", "revision",
-                                  "ref_solicitud")} | \
+                                  "ref_solicitud", "revision_red")} | \
            {"verificable": bool(o.get("token_portal"))}
 
 

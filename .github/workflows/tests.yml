@@ -23,6 +23,12 @@ jobs:
           repository: dass-666/cauce-network-engine
           ref: f93dd58eeddc1cc3032711bb0b6e378708063d41
           path: ne-rc3
+      # Network Engine E10 (PR #16, laboratorio) de SOLO LECTURA: contrato local_review y revisiones (tests/test_red_ne_e10.py)
+      - uses: actions/checkout@v4
+        with:
+          repository: dass-666/cauce-network-engine
+          ref: 4f223a7d366a362fbdd64db4ae9a94bf2b63e414
+          path: ne-e10
       # Cauce Monitor 7b92446 de SOLO LECTURA: su lectura de red y su centro de revisiones (tests/test_compat_monitor.py)
       - uses: actions/checkout@v4
         with:
@@ -44,6 +50,7 @@ jobs:
           CAUCE_EVIDENCE_DIR: evidence/out
           MONITOR_REPO: ${{ github.workspace }}/monitor-contrato
           CAUCE_NE_REPO: ${{ github.workspace }}/ne-rc3
+          CAUCE_NE_E10_REPO: ${{ github.workspace }}/ne-e10
           CAUCE_MONITOR_REPO: ${{ github.workspace }}/monitor-rc3
       - run: python scripts/demo_lab.py
       - run: python scripts/ejemplo_cauce_monitor.py --no-interactivo
