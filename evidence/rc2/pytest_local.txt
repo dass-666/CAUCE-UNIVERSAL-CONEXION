@@ -1,0 +1,3 @@
+SKIPPED [1] tests/test_operaciones.py:155: permisos POSIX (root ignora 0500)
+SKIPPED [1] tests/test_operaciones.py:288: ACL de Windows
+312 passed, 2 skipped in 947.56s (0:15:47)

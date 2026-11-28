@@ -1,0 +1,180 @@
+Manifiesto de la candidata consolidada Cauce Forms 0.2.0rc2
+Generado: 2026-11-28T06:58:20Z
+Rama: claude/candidata-consolidada
+Base: main @ aa1bb0295b32c17ba0435490678adf1ee54c55a0
+Incluye: PR #5 @ d3b230a9677137aa3321f5f18d9329b8b1f47e9b (contiene #4 @ ff117da71140e263d1a2cf29436ff63b21ad13ce y #3 @ 16d3e874dcd8364b52e11f4fe9b25c5f441ae6de)
+         PR #6 @ cd340700fecc65763ef3ad0a8d418c81b7d53bf7 (último commit de código fdd099aeb1dc6ad0d65c29794a83110324f239be)
+Código fijado en: bd5c066a5c4a45934ae6e87b363fd615b1ed7fd6  (el commit que añade este manifiesto solo cambia documentación)
+Commits sobre main:
+  bd5c066 Consolidación 0.2.0rc2: registro de todo envío de la persona, revisiones con resultado, una sola interfaz enviando, respaldo y restauración
+  080c2c5 Consolidación: PR #6 (Forms nativo RC3) sobre #5/#4/#3; conflictos de page_inspector.py y tests.yml resueltos conservando ambos lados
+  030142a Consolidación: PR #5 (incluye #3 y #4)
+  cd34070 Revisión final: CI definitiva (fdd099a verde en Linux y Windows), informe y manifiesto actualizados
+  fdd099a Windows: ACL solo en la carpeta de estado y una sola vez (con /T los archivos quedaban sin permisos: Permission denied en el CI)
+  23928de Prueba del límite de reintentos de Chromium: comprobar lo invariable (el reintento depende de que la conexión se reutilice); revisión final documentada
+  13baee4 Revisión final: envío directo de la persona registrado, confirmadas archivadas sin perder el bloqueo, clave de huella verificada y ACL en Windows; límite de reintentos de Chromium documentado
+  e2fe2fe Manifiesto de la candidata Forms 0.2.0rc1
+  e55a45d Evidencia RC3 (capturas, jornadas, prueba prolongada) e informe de integración nativa
+  61842fd Guiones de laboratorio: rutas de salida absolutas (la jornada de CI fallaba con ruta relativa); CI lista las omitidas
+  1dfb528 Interfaz: la operación en curso no se cuenta como resultado desconocido; Monitor 7b92446 en CI; huella del pin independiente de CRLF
+  367ed54 Corregir falsa alarma en envíos lentos y la orden de operador durante un envío; guía de integración; 0.2.0rc1
+  423e34a Integración nativa RC3: compatibilidad con Monitor, paso 09b nativo, pin del cliente y jornadas
+  f53c1c6 Forms RC3 (WIP): diagnóstico nativo con Network Engine, registro durable de operaciones y envío protegido
+  d3b230a La persona termina en la misma ventana: un envío humano ya no cierra la revisión
+  ff117da Resultado inequívoco del autorrellenado y laboratorio integral con Ext JS real
+  a657536 Autorrellenado 8/8: listas con valor previo, búsquedas con retardo y demostración de ocho campos
+  c4e2bb1 Análisis no destructivo, anonimización por lista blanca y fechas con evidencia
+  d0dc37a Cuadros de texto que abren listas: sondeo, relleno verificado y diagnóstico
+  00f3fc3 Desplegables JavaScript generales, diagnóstico de controles y fechas
+  6e9679d Rutas de Python de Microsoft Store: compatibles también con Linux
+  3477967 Lanzador: usar la carpeta real de datos con Python de Microsoft Store
+  4c39ddb Autorrellenado integral: listas sin ARIA, fechas detectadas, fuente de identificadores y perfil reutilizable
+  115ea6f Autorrellenado completo: listas JavaScript, fechas con formato y captura manual
+  06b31e4 Con CAMPO_NO_VERIFICADO la ventana sigue abierta para revisar
+  e0ace6d Ventana simplificada: sin casilla de autorización ni campos aut_/rev_
+  7adfaff Ventana de Cauce Forms para Windows: doble clic en abrir_cauce_forms.bat
+  b161c5a autorrellenar con sitios externos: autorización real en cada ejecución y mensajes útiles
+  b698add recorrido_monitor_windows.bat: fija PLAYWRIGHT_BROWSERS_PATH; CI lo usa para el recorrido con tablas
+  483165c Tablas de equivalencias aprobadas y perfiles con campos planos de Monitor
+  730c094 CI windows-bat: dir no admite comodines en carpetas intermedias
+  065eff6 Analizador: usar el modelo real (plano) del Expediente de Monitor e instalador sin «py»
+  f8ac5b6 Analizador de formularios externos: informe técnico, perfil borrador y vista previa (solo lectura)
+  16d3e87 Puente Monitor -> conector: autorrellenar desde expediente con perfil de formulario configurable
+
+Dependencias externas fijadas (solo lectura):
+  Network Engine RC3: f93dd58eeddc1cc3032711bb0b6e378708063d41 (cliente copiado: cauce_form_connector/red/PIN.txt)
+  Cauce Monitor: 7b92446e884239b52c1253d57ee97d244fe4067b (compatibilidad) y 9e7f88dd19f3e3bbf5c0c1e4476afbd2ca3bf76a (contrato v1)
+  Ext JS 6.2.0 GPL (solo laboratorio 13, descargado con huella por scripts/preparar_lab_extjs.py; no está en el repositorio)
+  Python de pruebas: Python 3.13.18; Playwright 1.65.2
+
+SHA-256 de cada archivo versionado (salvo documentación y evidencias):
+  13d7728d8d732aa25826e93513a2feacf9a83122f37b51d263466cf41948dd31  .gitattributes
+  a87b6b5d72186a4ec4037de9a82319987ecf83540d5ce3fd53e29cbf67543a81  .github/workflows/tests.yml
+  5f7baa3d407a269f8f57540c989b9f186a57689b56de5b60374eb17eb6f11872  .gitignore
+  1e175b35b013d19d83e144b05e39f6431c65bc8dfb9199e0806d4b7e8c70e854  README.md
+  e056c2f59cac2d3436a0b1bfaa656469fb565b786be2350f57fb1bd147b5a1e6  abrir_cauce_forms.bat
+  b188a69803b0071c563c1c8bc608d70537bcd4fe93886452815dc407ff03f4fe  analizar_formulario_windows.bat
+  58cbe142633d1e4cde5e08929d9f97fc1ad819881aae406500124f959978e1dc  cauce_form_connector/__init__.py
+  935a1c1166b0c1ea35a82256345000bf2c73ded718d77773bc27a71ecce28f7d  cauce_form_connector/__main__.py
+  afb518cbf70df1107ba2a02b85513be1ec328a5c4d41e675dc7ed59bbd8eb482  cauce_form_connector/analizador_formularios.py
+  0f63fc836cf5032b4506af4aed0f1046868643d7120f00f0e336f17c6ee9fa3b  cauce_form_connector/audit.py
+  18fc410aacadabbb3fba31d21cf1a1452f76412cb5c05b7782e63325143b609b  cauce_form_connector/cli.py
+  2329e574d4d036de943253287d163ee8d63fbcf5091d172901f8e3952ced0c2a  cauce_form_connector/config_store.py
+  e0da18e2b54803c1794b497f25785ffa6b402f02cbcf2ada4fbace894bb45a65  cauce_form_connector/contrato_v1/PIN.txt
+  075d8ed6ad0a5f767842249f59b73d72944bb963c49a3e57f7cdb4f4008055c9  cauce_form_connector/contrato_v1/__init__.py
+  8d94731f7eb42a6677cae8c216660e391d9d2a6414d625b267e13482b07be9c2  cauce_form_connector/contrato_v1/_esquema.py
+  6af7137f4555b950f3d731e68436c7adccd26b06408cf35b223d1b69fcc7a9ef  cauce_form_connector/contrato_v1/respuesta.schema.json
+  4a7921cce21cf882ab71063345d89d2c0156b1b3b42d425966fe7f0676ed3775  cauce_form_connector/contrato_v1/solicitud.schema.json
+  e9063af8068d39b036d630be25d3f3b6dd59cabb15b16b844bdc180e9bd80273  cauce_form_connector/data_adapter.py
+  753d23a6c45d29e5e07af4c9491f4847be4466cf5202634404bc1b004e8f78b7  cauce_form_connector/detector.js
+  374f847269563313b0c6d3f755d31ce769faf49abdbed6edad4d61d50b1c1dd1  cauce_form_connector/diagnostico_controles.py
+  de9d0ec5f86c2474ce052b5af178d1d0e0fe27bbb36f5d7d1b17b074a8880641  cauce_form_connector/engine.py
+  639883f1fc8bdbf9d1132a716eb345654f665d879c49ff59370520efa87cfbff  cauce_form_connector/envio.py
+  bb8e0bd0a9aa3acf3bd0503e9f0be367f545907c726f92ca0a55c7e61dd58a77  cauce_form_connector/esquema_monitor.py
+  af5b53213fe3fdfb2dcceccfbebf71cb317aaa98c5e30e66a469acb549dadc10  cauce_form_connector/form_detector.py
+  dab12195c51c34d7ada0e5241a2d337049282e635992addc5e45b7830dff0af0  cauce_form_connector/html_analyzer.py
+  531616bdb6a8ca3e51357f37a320143abb6b6db913462fb392a0466cdf9d8d57  cauce_form_connector/instrumentation.py
+  64388e6a911ce36099ad5348da0ac4ff4c217160d98dd5421f375088086407c0  cauce_form_connector/integracion.py
+  0c4d52c4edaeff500f115166521dd7e6d7ee0e552a1ef1995027b224e3ea0b20  cauce_form_connector/lanzador.py
+  ed16b74792daabc0b34f7385860b12884fe18f0698b6cca93652a2e43d40c043  cauce_form_connector/listas.py
+  1768f4c49f43d06434220daa12094ab9fc45daf63f3fbd5ea3a17c843695a040  cauce_form_connector/matcher.py
+  9192265ed3bf8fb97ae5a981dfef769a6e39f9bff8f2b18c8b46f4b4489b6a0c  cauce_form_connector/models.py
+  3aacd7ae5886d560d9f3839474f4ea76f130a256f35f3de3f24a1e6809f2d410  cauce_form_connector/operaciones.py
+  8c6c8d2f0e628f0caa944dcb8ac0c9f0e8fde952128c93078648962c28a60fe5  cauce_form_connector/page_inspector.py
+  b4ad8113dfab582131d981f29ae3345efbfd9b7625b8b0ba6636d925d126eca0  cauce_form_connector/puente_monitor.py
+  60ec1de46c2aec6b6876e636c536f4aaec0f1f7665b056b920d077f5cb0e6b86  cauce_form_connector/red/PIN.txt
+  b4d99c1b022a8c9c37bf890cad1bc5ed3f7178f83f2ef2ea9e622ee9c77dda5c  cauce_form_connector/red/__init__.py
+  d1024059fd48370381ce1e59870eda5ef4e9e75365497a31c234c50dbd160a00  cauce_form_connector/red/cliente_ne.py
+  f5344b040999c79cf934ebcce1d56adfdee6b8a8a171277cc013eef87c9fb1a9  cauce_form_connector/red/diagnostico.py
+  85132a6ccd754327c60dd2c0cfe83144869ba2fdf5bc80446bfc95b91b913a88  cauce_form_connector/red/identidad.py
+  d163d26b068830c265ebc95bd65956cc6cae7c1a7415227cfe8c15b09cde2ecd  cauce_form_connector/red/montaje.py
+  8c25d56b2f0ddce4b72e7ba52fc9d3bb3f5e17f9cfddb26ec0d839fdc7581fbd  cauce_form_connector/respaldo.py
+  99bbbe15f6793874818ec61741dd74572ec30a02048de6958e645f02e875548d  cauce_form_connector/sequential_typer.py
+  19959bc04ce63d544b8ae71a897c03713e733e61552432bbc8a4f50fb63452f4  cauce_form_connector/settings.py
+  808ee0af10a2a1d5efd710a81331f8ed4b9e0836c896c346bec43fd2c92dd776  cauce_form_connector/signature.py
+  25d48c0e1532a3d93628a1668c4421a33bd2b00edfd1e081cdfaf0635d940583  cauce_form_connector/url_policy.py
+  71124f445958191c1f1c82cec470018f27b5581967c3b183097a6bfb6aa62980  cauce_form_connector/validator.py
+  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  cauce_form_connector/web/__init__.py
+  a9a268322d1d28ef1cdac23352133b1d66d0a3c2ce47b7d4e34bf44375340569  cauce_form_connector/web/app.py
+  c97735f8cfadc84c1f8cb05b74d5aa1d56fe85c34624fd0eb845ee475682b6e1  cauce_form_connector/web/static/app.js
+  b5fffdab25bcf15cbabd8b30414625088b02dde0be6e974e724d604a92bcff93  cauce_form_connector/web/static/index.html
+  9bbf402ceb3d4b6d57c047e101d8c992f48d81c44484212e577f4cf381273be1  cauce_form_connector/web/static/styles.css
+  7bb2fc526a06b1dd0fe029ad3754b5a3d146c87f0eede8ec24cb45a74d215573  config/allowed_hosts.json
+  7a809feed33c7b2c8c2955d5aa187a22e9518a0362c3d5c86c1d4ea54675a6bd  config/formularios/lab_cita_monitor.json
+  3f12bd4562896fdceead3fbfdf345e11a9fc1ee91355166aedb8097a2de68258  config/formularios/lab_demo_ocho_campos.json
+  0d2841e5323a3c26d282c64e72516fc6da666e22add79380a65b36955481ad80  config/formularios/lab_extjs_ocho_campos.json
+  d519f53782d72b3ec0de0ff7e9cbd8d7e94cf9b727eaca844917b7d0e80482c9  config/formularios/lab_listas_personalizadas.json
+  60482e1f5fc076715416737b6e6f82635a2446fd7b1ad6a6b0815adf69f054fd  config/formularios/lab_validaciones.json
+  2f4c3af632826af775ae3428c345bbbda080345cf09747a5ddd8618b39a7f83c  iniciar_windows.bat
+  00bf35b7fd5acc3ffec9dce9f685361bb89410accf8c32e75ac25cca4e9570a0  instalar_windows.bat
+  0a0a442a393a84e9af983bdbc984f505663e591b51a948d916a4e56e21b6c947  lab_forms/01_tradicional.html
+  d9690caaba141318e0c567d1b74cd46f28eb94442f4c15e5d748da3f3f93ca63  lab_forms/02_dinamico.html
+  46af43372ec6180968a35c3376bee9af7d19932a94d415ca75820f57db0a3761  lab_forms/03_validaciones.html
+  2a1cb60be7cc61d6f91ec44fbe640b56c9df65198164a9aa664f656982345837  lab_forms/04_captcha_simulado.html
+  cab820348354d84257afa923f20398cc353f4c3002457111de3cfa6a487722f7  lab_forms/05_reserva_externa.html
+  4303b70a26a91698a94714fcf3bad9ed419a0dfdcef94d3e06b62bed4e1cee61  lab_forms/06_cita_monitor.html
+  f2ffdcfc5ab5b8812410720a3274086368253a02622cc0edcb6cbc72a4dc8c08  lab_forms/07_listas_personalizadas.html
+  9ab950e439a3c887f5dc6ec3f7c65f2e994fb9077b38568e40d86ed149aee272  lab_forms/08_listas_sin_aria.html
+  07638b08b9be0285c0b4b6d875f5d5d3589858e9d806a4262d98f247a9a73fd0  lab_forms/09_listas_de_libreria.html
+  83575105b6a191cd7591264d52c5f937196f7766e8d7ad47be4d536be9857c86  lab_forms/10_textos_con_lista.html
+  0f1e96cff2122c67b66cbf7e8b9e5297bd1ea9da78c97c005b0abe97adacdd37  lab_forms/11_analisis_no_destructivo.html
+  e533234157fdf760d727ebdb5e35020046c9dae9068af58698994883110cddfe  lab_forms/12_demo_ocho_campos.html
+  cdfba8302ff5073971b78f7b2cdd039a6883d8ad356c8e7bcffaec1da52c949e  lab_forms/13_extjs_ocho_campos.html
+  5bca812ad6731fee6e17e19111aba7acc6133958ccc7ec9043a8a33800e710fb  lab_forms/lab.css
+  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  lab_portal/__init__.py
+  b5bfd4283e834ee80e8fa4cd308f3953c455f28d4dd8e1a4349af89832fb1cb9  lab_portal/servidor.py
+  c75e15394975aeb22345d16807ebc06d7ce9d9b3facdc9f52b291c83376a4252  probar_windows.bat
+  f32faeaab87a1e7e214d02000031c6c517aeb14e055fd778fd6912abb2ba81c2  pyproject.toml
+  b3c02dd36472c5f1ac1367f483185c4dbf16584e84486b2b2415bfc9d33a6b78  recorrido_monitor_windows.bat
+  2ff0ecb4b968ff33529db3fc1414d836986d262fe8e425f6293a59513f015398  requirements-dev.txt
+  1c06fe8bfa7c069cfcf269df5c349e5e31665fe779346efbaca28cc34dceaff6  requirements.txt
+  f463ba93a017e68f5b54319e0d8ec68e6a031fc92f360307a4822943f206cc6d  sample_data/expediente_monitor_sintetico.json
+  d6c65944fe0a12a3298f4e320e4bcbab8bd5cbe3291b6bf931f2ea60463e9031  sample_data/fuente_identificadores_sintetica.json
+  2d9fed9d449b52d7e479fa8ef416f8d992d98f3b98c5558d54140da285644fb8  sample_data/personas_ficticias.csv
+  ec250cc3fcfcfe5299026e58b05b6da90a57e82364a5ecb5263585313d048f81  sample_data/personas_ficticias.json
+  766755ab3c7dd44117221b2ac7f5ab9646af1ca753d71e0768570476b03f3a6f  sample_data/personas_ficticias.xlsx
+  65ea0afb64b9f8e5553218463edaae1dfcb4654618a587c2d600aac53926e153  scripts/capturas_rc3.py
+  37ea24d46fc68b2c40718de58748632f97f79c9ffa8beb35828e24e980b0dfaf  scripts/demo_lab.py
+  9cc53ce513a0cbe0129d5d50fa1acbdb45980cdc7423bac732b3696c4be86cc8  scripts/ejemplo_cauce_monitor.py
+  fb6f1d514dd50f96a27ca909195481dd760bded8e3733240442d8338ced805c6  scripts/jornada_laboratorio.py
+  fbc5b9c32a1beafc41dfa68870bbc0b3214697ec08b7ae8cc85ea3da6e6e7e32  scripts/paso_09b_nativo.py
+  22eacb02f54a183948a61c37682918d155527d9c5da99c30d1ca7c7ceaafd3cf  scripts/preparar_lab_extjs.py
+  46f1cddb3b5fd2f23b9fffb4644d101482daed3f4bfa24a19e07b4f541a4b1a7  scripts/recorrido_monitor.py
+  a65518637281bbc3a6345a2673b0d20c09040c07bd57edc84d651b35d16435a7  scripts/recorrido_ui.py
+  10a2d2935d188f0b2d2e27902a3032cd9ab3fb1a4ceb1328e0a7c85173429f4e  tests/conftest.py
+  76e14438170b42820e7534fedef807e0f73c34c1383f5bcdc6200c0f350c2b85  tests/integ_helpers.py
+  714c1534a1171d39a94bc3154034b3f3bb2e7042d0137338cbda73c05a54cf9d  tests/monitor_lectura.py
+  0f372ad771c9eb52d066518ea0d5282bab0e61728f292c8ac20fe82c7b2cb236  tests/ne_proceso.py
+  f98c5f859e9cbfb41f6390fde7c9f5d22f9317e596f718513fb3be5c8acfdf22  tests/servidor_app.py
+  e609d0a236abc43c9a137f278d0dc0800a4a26c5f1f2f585dba0ad246cf5c6cf  tests/test_analisis_no_destructivo.py
+  ad5defb88ea28cbd5123503c575b414d57c2d7633f82fdedba7346649e0dd3da  tests/test_analizador_formularios.py
+  609beecd4b6953e4b2acf3b2e0f964706e4b4cf4948eb76fc3a6d96b952b28b9  tests/test_cli_h2_h3.py
+  245f42ed8ab4da7f6e64694a07ce2bf3820c32baf39d9edc75966f65142eff5a  tests/test_cli_sitio_externo.py
+  dd2c36f3bcc9ec2396b6afdd3c49bc4a88865febe787afe742ffe0663c4a4642  tests/test_compat_monitor.py
+  0f8c042ca1ad66898573c2aeb2acb2c282323ff1b27159b1a82aaf2152f30f5c  tests/test_consolidacion.py
+  3f75bfed1589d90ca2ab9ecd44dc6a6f1b76483c7616b22ce0afd152033296c7  tests/test_correcciones_h1_h4.py
+  7f4d4e38e9085444fa9775ca0857b1fc04a06058cd034c04270fca0a18f62552  tests/test_data_adapter.py
+  5f7c8efff0edd3a44358342faacf1f56ea0292acc9ffd9820b5143598fd1b442  tests/test_demo_ocho_campos.py
+  2f1ca9eb0428fd52660ff4d12303b81be5b1caab70f97f302c79c2d8a47cb4a0  tests/test_ejemplo_cauce_monitor.py
+  2cd0dc4f0a15ec2b361a35e3daeee4668df29a968205c151e4a0d00ca70e53b3  tests/test_envio_protegido.py
+  84bec301f8950901510d13cebb1543f85a55b8c6ad094f60fc1454cb6f7f62f9  tests/test_equivalencias.py
+  b062e0f548791e0970bf8424a57a2fd49d851f066d60d9d8e5e285af06eaebb3  tests/test_extjs_ocho_campos.py
+  84a710c4cbc5ebd25b831679ade6156f6da504861ac3d0f1176bc23722db0c45  tests/test_html_analyzer.py
+  cfe4917c7f0faf998d27cf17610937e7409316ec9562f8ecea939cf899434f2d  tests/test_integracion_contrato.py
+  bff637d1e3fb36b9930a3809c79d011b17bf8b42f5391b1ffe8d7f54d65cbdf1  tests/test_lab_forms_e2e.py
+  ddb7db5c5036ba8824af3cc70d8e17c264f50b650b28281b5669de207e7a0242  tests/test_lanzador_rutas.py
+  6ae2d023c0a4047eb490d0efe5d078cb27502f61c097764599291d58d020daf1  tests/test_listas_de_libreria.py
+  36bd68a4de11dcb9b7a7c6325dac85c687688e12056bcb4552bf99c6ad82a693  tests/test_listas_personalizadas.py
+  a81423b56643294c82ed5f5a175c89c919a7246694f0ac3915112436fa645bca  tests/test_listas_sin_aria.py
+  1eccb30155a7c3789b8d9ecc314afa9df39e10063514f332ac043870b83fda5f  tests/test_matcher.py
+  33c9f6ec00b2a422ce292df1eaac5bec08a55fb68f06c860571a909fcdd5b122  tests/test_operaciones.py
+  01e8f5b9b4ec0a50bf7970bf6e3aa6c83c98ed679e5d6484a201d39b117a4c08  tests/test_puente_monitor.py
+  f9955e0760f4c14ea259ea978884ba8fecf39e8e9d6c2201f67733647950dbd1  tests/test_red_cliente_pin.py
+  6be94647f8b7bdb8efa3fc5740f36cf82e558cc89885925447869a131aeb9841  tests/test_red_ne_rc3.py
+  279a24a23edacea4d7ce4140125618793bc715275a71956c3872e9d6767cc208  tests/test_resultado_inequivoco.py
+  806fb95e649a7751817ea976ed49f46ffe9be309e23cfd12cf1a25b928b70f54  tests/test_security.py
+  4015a99fc8cadec50a6be977ecc6fd715aa49a8c7f34c04d38bd0612dcf2b49a  tests/test_sequential_typing.py
+  dc2f3e1fd59f1d593f0ca0c34d2744d4658b4ae3d212e62306e66844a8c05908  tests/test_textos_con_lista.py
+  fa9aeb33212cfffb40f8a3b84d720607433c1d74316586288277663ae00911e8  tests/test_transformaciones.py
+  3db48eaf598a2a679bdab7e26cab7c819e6122a2ab3ffcf3efa135575b254727  tests/test_url_policy_audit_profiles.py
+  888b5b5d44682047e265f2eb44c65039c094cbf2e5eef799c19da272a44b6477  tests/test_web_app.py
